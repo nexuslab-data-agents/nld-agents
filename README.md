@@ -18,7 +18,7 @@ Then ask Claude *"how do I make this flow incremental?"* and it routes to the ri
 
 **When to install:** you are writing code against the `nld-core` library and want Claude to understand its architecture (flow lifecycle, incremental processing, structures, connections) without you pasting docs into the chat.
 
-**Example trigger:** *"I want to add a new SQL flow that pulls daily orders from a REST API — what's the right incremental strategy?"* → Claude invokes `determine-incremental-strategy`, then `guide-flows` for the implementation pattern.
+**Example trigger:** *"I want to add a new SQL flow that pulls daily orders from a REST API — what's the right incremental strategy?"* → Claude invokes `how-to-determine-incremental-strategy`, then `guide-flows` for the implementation pattern.
 
 | Skill | What it does |
 |---|---|
@@ -31,7 +31,7 @@ Then ask Claude *"how do I make this flow incremental?"* and it routes to the ri
 | `how-to-get-execution-info` | Retrieving flow execution metadata from state backends |
 | `how-to-get-incremental-info` | Retrieving incremental state from state backends |
 | `how-to-use-business-dictionary` | `nld business dict find` CLI usage |
-| `determine-incremental-strategy` | Decision walkthrough for picking `by_key` vs `by_source_tst` vs `no_increment` |
+| `how-to-determine-incremental-strategy` | Decision walkthrough for picking `by_key` vs `by_source_tst` vs `no_increment` |
 
 ### `nld-data-conventions`
 
@@ -52,7 +52,7 @@ Then ask Claude *"how do I make this flow incremental?"* and it routes to the ri
 You     › I'm writing a new flow that pulls daily orders from a REST API.
           What incremental strategy should I use?
 
-Claude  › [invokes determine-incremental-strategy]
+Claude  › [invokes how-to-determine-incremental-strategy]
           For a REST API exposing recently-modified orders, by_source_tst is
           the right fit — it tracks the last successful pull timestamp and
           only requests data updated since then. See guide-incremental for
@@ -72,10 +72,6 @@ To make the marketplace available for everyone on a project, add it to your proj
   ]
 }
 ```
-
-## Related
-
-- [`nexuslab-data-agents/nld-agents-private`](https://github.com/nexuslab-data-agents/nld-agents-private) — internal counterpart marketplace hosting `autonomous-dev` and other private tooling. Install if you contribute to `nld-core` itself.
 
 ## License
 
