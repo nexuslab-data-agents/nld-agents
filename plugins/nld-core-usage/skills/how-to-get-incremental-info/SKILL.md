@@ -280,4 +280,4 @@ miss the post-processing state entirely. See `guide-incremental` §4.4
 - For execution state (separate from incremental state):
   `how-to-get-execution-info`.
 - For choosing or configuring an incremental type for a *new* flow:
-  `determine-incremental-strategy`.
+  `how-to-determine-incremental-strategy`.
