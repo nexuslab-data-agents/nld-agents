@@ -161,7 +161,8 @@ Produce a short report with these sections, in this order:
 2. **Key facts collected** — bulleted list of the answers from Step 2.
 3. **Recommended incremental type** — one of `no_increment`,
    `by_source_tst`, `by_key`, with a one-sentence justification tied to
-   the facts.
+   the facts. Also name the matching `FlowIncrementalType` enum value
+   for `FlowConfig.incremental_type` (see Appendix).
 4. **Recommended loading strategy** — default + any backfill flags the
    operator should know about.
 5. **Recommended `IncrementalConfig` YAML snippet** — copy-pasteable.
@@ -173,3 +174,40 @@ Produce a short report with these sections, in this order:
 
 Keep the report focused on decisions and their justification. Do not
 restate the architecture doc.
+
+## Appendix: `FlowIncrementalType` enum reference
+
+The `IncrementalParams` subclass chosen by Step 3 controls runtime
+behavior, but flows also declare a `FlowConfig.incremental_type` metadata
+field (`FLOW_INCREMENTAL_TYPE_LITERAL`). It documents *which* scenario
+the flow falls into and is used by catalog / lineage tooling and to
+validate flow configuration.
+
+The seven `FlowIncrementalType` enum values map onto the three
+categories from Step 3 as follows. When recommending in Step 7, also
+name the enum value the user should set on `FlowConfig.incremental_type`.
+
+| Enum value | Category | When to pick it |
+|------------|----------|-----------------|
+| `FULL` | `no_increment` | Full reload every run; no state tracked. Lookup tables, small reference datasets, full-refresh materializations. |
+| `ON_SOURCE_TECHNICAL_TST` | `by_source_tst` | Standard source-timestamp delta. Pulls `[last_pull_to_timestamp, now)` on each run. |
+| `ON_SOURCE_TECHNICAL_TST_FIXED_SELECTION_RANGE` | `by_source_tst` | Fixed-width sliding window (e.g. always "last 7 days"). Selection range does not move with previous state — uses `delta_period_range_from` / `delta_period_range_to` on `FlowConfig`. |
+| `ON_TARGET_FUNCTIONAL_KEY` | `by_key` | Enumerable keys (tenant IDs, file batches, S3 prefixes) with per-key retry, no source timestamp involved. |
+| `ON_TARGET_FUNCTIONAL_KEY_BASED_ON_SOURCE_TST` | `by_key` | Per-key processing where the key set is derived from a source timestamp window. Combines key-level retry with timestamp-bounded discovery. |
+| `ON_TARGET_FUNCTIONAL_DATE_RANGE_BASED_ON_SOURCE_TST` | `by_key` | Target partitioned by date; each date partition is a key. Use `delta_period_range_from_type=DAYS` and let the framework enumerate dates from the source timestamp window. |
+| `ON_TARGET_FUNCTIONAL_MONTH_RANGE_BASED_ON_SOURCE_TST` | `by_key` | Same as the date-range variant but partitioning is monthly. Use `delta_period_range_from_type=MONTHS`. |
+
+Related `FlowConfig` fields that must be set consistently with the
+chosen enum value:
+
+| Enum value | Required `FlowConfig` fields |
+|------------|------------------------------|
+| `ON_SOURCE_TECHNICAL_TST*` | `pull_field_name`, `pull_field_format`, `target_field_name_for_source_extraction_tst` |
+| `ON_SOURCE_TECHNICAL_TST_FIXED_SELECTION_RANGE` | Also `delta_period_range_from_type`, `delta_period_range_from`, `delta_period_range_to_type`, `delta_period_range_to` |
+| `ON_TARGET_FUNCTIONAL_*_BASED_ON_SOURCE_TST` | Same source-timestamp fields as above plus the range fields for date/month variants |
+| `ON_TARGET_FUNCTIONAL_KEY` | No timestamp fields required; key enumeration is owned by the flow implementation |
+| `FULL` | None of the timestamp / range fields apply |
+
+Definitions live in
+`nld/flow/incremental/core/referential.py` (`FlowIncrementalType`) and
+`nld/flow/config/flow_config.py` (`FlowConfig`).
