@@ -77,7 +77,7 @@ class BySourceTstWithDaysFromStateManager(
             BySourceTstWithDaysFromProcessingState,
         ]
         | None = None,
-        flow_parameters: dict[str, Any] | None = None,
+        parameters: dict[str, Any] | None = None,
     ):
         super().__init__(
             incremental_parameters=incremental_parameters,
@@ -85,7 +85,7 @@ class BySourceTstWithDaysFromStateManager(
             secondary_incremental_state_backend_manager=(
                 secondary_incremental_state_backend_manager
             ),
-            flow_parameters=flow_parameters,
+            parameters=parameters,
         )
         self.processing_state: BySourceTstWithDaysFromProcessingState
 

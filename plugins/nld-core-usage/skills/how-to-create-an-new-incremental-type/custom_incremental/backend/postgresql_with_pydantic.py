@@ -96,24 +96,21 @@ class PostgreSQLBySourceTstWithDaysFromStateBackendManager(
     PostgreSQLBackendMixin,
     BySourceTstWithDaysFromStateBackendManager[Psycopg2SQLConnector],
 ):
-    backend_param_definitions = []
-    flow_param_definitions = []
+    param_definitions = []
 
     def __init__(
         self,
         backend_connector: Psycopg2SQLConnector,
         flow_namespace: str,
         flow_name: str,
-        backend_parameters: dict[str, Any] | None = None,
-        flow_parameters: dict[str, Any] | None = None,
+        parameters: dict[str, Any] | None = None,
         **kwargs: Any,
     ):
         super().__init__(
             backend_connector=backend_connector,
             flow_namespace=flow_namespace,
             flow_name=flow_name,
-            backend_parameters=backend_parameters,
-            flow_parameters=flow_parameters,
+            parameters=parameters,
             **kwargs,
         )
         self.pydantic_manager = self.backend_connector.get_model_manager()
