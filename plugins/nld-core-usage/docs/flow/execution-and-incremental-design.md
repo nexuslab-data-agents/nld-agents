@@ -712,22 +712,37 @@ When both a project default and a flow value declare
 flow `connector` wins per side, and `params` merge field-by-field with
 flow params overriding project params.
 
-The S3 base also derives `s3_root_path` at backend construction time via
-`ExecutionBackendStateManager.derive_parameters_from_context`, reading
-the composed `S3Structure.s3_root_path` (`s3_root_prefix` +
-`s3_folder_path`, defaulting to the structure name) instead of relying
-on the surrounding task to hand-roll the path.
+The S3 base derives `s3_root_path` at backend construction time via
+`determine_parameters_for_flow_definition` (declared on
+`S3BackendMixin` and inherited by both the execution and incremental S3
+state backends), reading the composed `S3Structure.s3_root_path`
+(`s3_root_prefix` + `s3_folder_path`, defaulting to the structure name)
+instead of relying on the surrounding task to hand-roll the path.
 
-**Wiring.** `FlowStateManagerFactory.create_flow_state_manager` resolves
-both connectors and passes them to:
+**Wiring.** `FlowStateManagerFactory.create_flow_state_manager` takes a
+`state_backend_connector_wrapper: StateBackendConnectorWrapper | None`
+and a `data_flow_definition: DataFlowDefinition | None`, then passes
+them to:
 
 - `ExecutionStateManagerFactory.create_execution_state_manager(
-  backend_connector, secondary_backend_connector)` — builds two
-  `ExecutionBackendStateManager` instances and attaches the secondary as
+  state_backend_connector_wrapper, data_flow_definition, engine)` —
+  builds the primary `ExecutionBackendStateManager` and, when
+  `secondary` is set on the wrapper, a second one attached as
   `secondary_execution_state_backend_manager` on `ExecutionStateManager`.
 - `IncrementalStateManagerFactory.create_incremental_state_manager(
-  backend_connector, secondary_backend_connector)` — same pattern,
-  exposed as `secondary_incremental_state_backend_manager`.
+  state_backend_connector_wrapper, data_flow_definition, engine,
+  flow_namespace, flow_name, flow_uid)` — same pattern, exposed as
+  `secondary_incremental_state_backend_manager`.
+
+Each side of the wrapper builds independently. Backend parameter
+precedence per side is **derived < `state_backend_connector.config.params`
+< explicit kwargs**: parameters returned by the backend class's
+`determine_parameters_for_flow_definition` are seeded first, then
+overridden by the YAML `params` declared on that side of the wrapper,
+then by any explicit keyword arguments. The primary and secondary
+sides do not share `params`; an S3 secondary mirroring a PostgreSQL
+primary derives `s3_root_path` from the typed structure and merges its
+own `params` (e.g. `file_format`) on top.
 
 **Read/write semantics.**
 
@@ -763,16 +778,18 @@ execution_info = FlowExecutionInfo(
 
 # Create state manager via factory (default pydantic engine)
 state_manager = FlowStateManagerFactory().create_flow_state_manager(
-    incremental_name="by_key",
+    incremental_type="by_key",
     flow_execution_info=execution_info,
-    backend_connector=s3_connector,
+    state_backend_connector_wrapper=state_backend_connector_wrapper,
+    data_flow_definition=data_flow_definition,
 )
 
 # Or with DuckDB engine for optimized queries
 state_manager = FlowStateManagerFactory().create_flow_state_manager(
-    incremental_name="by_key",
+    incremental_type="by_key",
     flow_execution_info=execution_info,
-    backend_connector=s3_connector,
+    state_backend_connector_wrapper=state_backend_connector_wrapper,
+    data_flow_definition=data_flow_definition,
     engine="duckdb",
 )
 ```
@@ -877,23 +894,25 @@ class DataFlowTask(BaseTask, abc.ABC):
     # ``incremental`` config (e.g. SQLFlowTask).
     _INCREMENTAL_LOGIC: ClassVar[FlowIncrementalLogic[Any] | None] = None
 
-    def __init__(
-        self,
-        flow_execution_info,
-        execution_backend_connector,
-        incremental_backend_connector,
-        strategy,
-        **kwargs
-    ):
-        # Initialize state manager with separate backends
-        self.state_manager = self.init_state_manager(
-            current_execution_info=flow_execution_info,
-            execution_backend_connector=execution_backend_connector,
-            incremental_backend_connector=incremental_backend_connector,
-            strategy=strategy,
-            **kwargs
+    def init_state_manager(self) -> FlowStateManager[Any, Any, Any]:
+        return FlowStateManagerFactory().create_flow_state_manager(
+            incremental_type=self.incremental_logic.definition.category.lower(),
+            flow_execution_info=self.flow_execution_info,
+            state_backend_connector_wrapper=self._state_backend_connector_wrapper,
+            data_flow_definition=self.data_flow_definition,
+            **self._incremental_init_params,
         )
 ```
+
+State-manager parameters come from two sources: values derived from the
+typed flow context via the backend class's
+`determine_parameters_for_flow_definition`, and per-side YAML under
+`state_backend_connector.<side>.params`. Task subclasses do not inject
+backend parameter overrides — `_incremental_init_params` carries
+incremental-logic params only (e.g. `pull_field_name`,
+`delta_period_*`, CLI flags), and the factory filters them against
+each backend's declared `backend_param_definitions` /
+`flow_param_definitions`.
 
 The single source of truth for "which incremental logic does this task
 use at runtime" is the ``incremental_logic`` instance property, which

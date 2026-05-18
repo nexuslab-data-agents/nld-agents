@@ -106,9 +106,13 @@ self.backend_parameters.get("s3_root_path", "/default/path")
 
 For S3 backends the parameter is `s3_root_path`. Local backends keep
 their own keys. `s3_root_path` is derived by
-`ExecutionBackendStateManager.derive_parameters_from_context` from
+`determine_parameters_for_flow_definition` on `S3BackendMixin` from
 `S3Structure.s3_root_path` (composed `s3_root_prefix` +
-`s3_folder_path`, defaulting to the structure name).
+`s3_folder_path`, defaulting to the structure name); the same override
+is inherited by execution and `by_key` incremental S3 state backends.
+The derived value is merged with per-side YAML
+`state_backend_connector.<side>.params` and explicit kwargs in that
+precedence (**derived < `config.params` < kwargs**).
 
 For per-side state-backend params (e.g. `file_format` on an S3
 secondary), see `state_backend_connector` in §8.3 of

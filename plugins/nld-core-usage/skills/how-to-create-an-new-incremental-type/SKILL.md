@@ -89,7 +89,13 @@ deployment needs the others.
    supported pair. Each concrete subclass overrides
    `retrieve_current_state`, `get_processing_state`,
    `get_post_processing_state`, `write_processing_state`, and
-   `write_post_processing_state`.
+   `write_post_processing_state`. Backend subclasses may also override
+   the classmethod `determine_parameters_for_flow_definition(
+   data_flow_definition)` to derive backend parameters from the typed
+   flow context (target structure, predecessors, …); the default
+   returns `{}`. The S3 mixin uses this hook to derive `s3_root_path`
+   from `S3Structure`, and the override is shared by execution and
+   incremental S3 backends.
 
 4. **Register in `nld_project.yml`.**
 
