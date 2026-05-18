@@ -881,18 +881,26 @@ wins on each side, and `params` are merged field-by-field with flow params
 overriding project params (so a project-wide `file_format` default still
 applies unless the flow overrides it).
 
-**Derivation from typed structures.** `ExecutionBackendStateManager
-.derive_parameters_from_context` lets each backend class own its typed-context
-derivation; for example the S3 base resolves `s3_root_path` from
-`S3Structure.s3_root_path` (composed `s3_root_prefix` + `s3_folder_path`,
-defaulting to the structure name). This is the path the read-only
-`nld flow state` CLI uses to construct a backend manager without going through
-the full executor.
+**Derivation from typed structures.**
+`determine_parameters_for_flow_definition` is declared on the execution
+and incremental backend base classes and overridden by each backend
+class that needs typed-context derivation. The S3 mixin
+(`S3BackendMixin`) resolves `s3_root_path` from `S3Structure.s3_root_path`
+(composed `s3_root_prefix` + `s3_folder_path`, defaulting to the
+structure name), and the override is inherited by both the execution
+and `by_key` incremental S3 state backends. Derived values are merged
+with per-side YAML `params` and explicit kwargs in that precedence:
+**derived < `config.params` < explicit kwargs**. The read-only
+`nld flow state` CLI uses the same code path to construct a backend
+manager without going through the full executor, so values like
+`s3_root_path` do not need to be repeated under `params:` when the
+flow's target is an `S3Structure`.
 
-When `secondary` is set, both backends are resolved and exposed as init params
-(`state_backend` and `secondary_state_backend`), each with their own
-`backend_params`, and the corresponding connection names are returned by
-`get_connector_connection_names`.
+When `secondary` is set, each side is built independently: each
+resolves its own backend class, derives its own parameters from the
+typed context, and merges its own `params`. The two sides do not share
+`params`, so an S3 secondary can declare its own `file_format` next to
+a PostgreSQL primary without polluting the shared model.
 
 ---
 

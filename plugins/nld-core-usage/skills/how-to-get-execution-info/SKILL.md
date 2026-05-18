@@ -209,9 +209,10 @@ limit 10;
 The S3 backend implements `get_latest_execution_info` and
 `get_execution_history`, so `get-state` and `get-history` work directly
 against an S3 state backend (and via the dual-state primary when an S3
-backend is declared as primary). State lives as JSON artifacts on the
-connector's `s3_root_path` (composed from `S3Structure.s3_root_prefix`
-+ `s3_folder_path`):
+backend is declared as primary). State lives as JSON artifacts under
+the backend's `s3_root_path`, derived from the flow's `S3Structure`
+target by `determine_parameters_for_flow_definition` (composed
+`s3_root_prefix` + `s3_folder_path`):
 
 - per-execution info: `<s3_root_path>/state/execution_info/<flow_uid>.json`
 - consolidated history: `<s3_root_path>/state/execution_history.json`

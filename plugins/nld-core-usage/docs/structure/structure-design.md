@@ -125,9 +125,10 @@ also consumed by the S3 state backend (e.g. as `params.file_format` on
 
 The S3 state backend manager composes `s3_root_path` from
 `s3_root_prefix` plus an `s3_folder_path` (defaulting to the structure
-name) inside
-`ExecutionBackendStateManager.derive_parameters_from_context` — task
-code no longer hand-rolls that path.
+name) inside `determine_parameters_for_flow_definition` on
+`S3BackendMixin`. The same override is inherited by the execution and
+`by_key` incremental S3 state backends, so `s3_root_path` is derived
+from the typed structure on both sides.
 
 **Example YAML:**
 

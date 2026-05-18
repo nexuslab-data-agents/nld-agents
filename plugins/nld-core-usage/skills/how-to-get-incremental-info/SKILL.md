@@ -222,8 +222,9 @@ native CLI against the same table names until that work lands.
 ### S3 blob / local file
 
 State lives as JSON artifacts on the connector's root path (for S3,
-`<root>` is the backend's `s3_root_path` — composed from
-`S3Structure.s3_root_prefix` + `s3_folder_path`):
+`<root>` is the backend's `s3_root_path`, derived from the flow's
+`S3Structure` target by `determine_parameters_for_flow_definition` —
+composed `s3_root_prefix` + `s3_folder_path`):
 
 - processing state:
   `<root>/state/<flow_uid>/processed_state.json`
