@@ -92,16 +92,16 @@ project-local path. If not found, read the bundled copy.
 
 ### Parameter Dictionaries in Flow Classes
 
-In all incremental and execution classes, `backend_parameters` and `flow_parameters`
-are read-only dictionaries. Their values must be accessed directly from the dictionary
+In all incremental and execution classes, `parameters` is a read-only
+dictionary. Values must be accessed directly from the dictionary
 without using default values.
 
 ```python
 # Good - direct access without default
-self.backend_parameters["s3_root_path"]
+self.parameters["s3_root_path"]
 
 # Bad - using default value
-self.backend_parameters.get("s3_root_path", "/default/path")
+self.parameters.get("s3_root_path", "/default/path")
 ```
 
 For S3 backends the parameter is `s3_root_path`. Local backends keep

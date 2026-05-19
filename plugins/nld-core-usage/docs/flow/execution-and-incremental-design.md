@@ -532,8 +532,7 @@ Results are cached using key `{backend_type}_{engine}` to avoid repeated imports
 
 ```python
 class MyBackendStateManager(IncrementalBackendStateManager):
-    backend_param_definitions = [...]
-    flow_param_definitions = [...]
+    param_definitions = [...]
 
     def retrieve_current_state(self) -> FlowState:
         pass
@@ -911,8 +910,7 @@ typed flow context via the backend class's
 backend parameter overrides — `_incremental_init_params` carries
 incremental-logic params only (e.g. `pull_field_name`,
 `delta_period_*`, CLI flags), and the factory filters them against
-each backend's declared `backend_param_definitions` /
-`flow_param_definitions`.
+each backend's declared `param_definitions`.
 
 The single source of truth for "which incremental logic does this task
 use at runtime" is the ``incremental_logic`` instance property, which
