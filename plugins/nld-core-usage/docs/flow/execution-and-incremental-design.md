@@ -429,7 +429,7 @@ def update_processing_state(self):
 
 **CLI parameters:** `--full`, `--with-delta`, `--pull-from`, `--pull-to`. These
 are declared in `BY_SOURCE_TST_INCREMENTAL_DEFINITION.param_definitions`
-(`nld/flow/incremental/by_source_tst/logic.py`); the executor merges them into
+(`nld/flow/incremental/impl/by_source_tst/logic.py`); the executor merges them into
 the task's init params via `DataFlowDefinition.get_init_params_keys()`. A flag
 not listed in `param_definitions` will not reach `BySourceTstFlowIncrementalParams`
 and `resolve_strategy()` will fall back to `DELTA`.
@@ -460,15 +460,27 @@ The flags are checked in `DataFlowTask.pre_processing_for_state()` and
 ```python
 def pre_processing_for_state(self) -> None:
     definition = self.incremental_definition
-    if definition.tracks_state:
-        self.retrieve_latest_incremental_state()
+    if not definition.tracks_state:
+        return
+
+    self.retrieve_latest_incremental_state()
+    self._save_last_step_to_backend()
+
+    self.retrieve_source_state()
+    self._save_last_step_to_backend()
+
+    if definition.tracks_logical_deletion:
+        self.determine_logically_deleted_entries()
         self._save_last_step_to_backend()
-        self.retrieve_source_state()
-        self._save_last_step_to_backend()
-        if definition.tracks_logical_deletion:
-            self.determine_logically_deleted_entries()
-            self._save_last_step_to_backend()
-        self.determine_processing_state()
+
+    self.determine_processing_state()
+    self._save_last_step_to_backend()
+
+    if (
+        self.incremental_config is not None
+        and self.incremental_config.persist_initial_processing_state
+    ):
+        self.persist_initial_processing_state()
         self._save_last_step_to_backend()
 
 def post_processing(self) -> None:
@@ -480,6 +492,15 @@ def post_processing(self) -> None:
     self.post_processing_for_execution()
     self.post_processing_at_end()
 ```
+
+`determine_processing_state` is a pure computation step: it calls
+`state_manager.init_processing_state()` followed by
+`state_manager.update_processing_state()` to build the processing state
+in memory. Persistence to the live processing-state slot is handled by
+the separate `persist_initial_processing_state` step, which runs only
+when `IncrementalConfig.persist_initial_processing_state` is `True`.
+Splitting computation and persistence lets callers reuse the
+computation without writing to the live slot.
 
 ### 2.6 Factory Pattern
 
@@ -507,22 +528,27 @@ Results are cached using key `{backend_type}_{engine}` to avoid repeated imports
 |------------------|---------|----------|--------|
 | by_key | s3_blob_storage | ✅ | ✅ |
 | by_key | postgresql | ✅ | ❌ |
+| by_key | bigquery | ✅ | ❌ |
+| by_key | duckdb | ✅ | ❌ |
 | by_key | local | ✅ | ✅ |
 | by_source_tst | postgresql | ✅ | ❌ |
+| by_source_tst | bigquery | ✅ | ❌ |
+| by_source_tst | snowflake | ✅ | ❌ |
+| by_source_tst | duckdb | ✅ | ❌ |
 | by_source_tst | local | ✅ | ❌ |
 | no_increment | base (pass-through) | ✅ | ✅ |
 
 **File naming pattern for backends:**
 
 ```
-{incremental_type}/backend/{backend_type}_with_{engine}.py
+impl/{incremental_type}/backend/{backend_type}_with_{engine}.py
 ```
 
 **Examples:**
-- `by_key/backend/s3_blob_storage_with_pydantic.py`
-- `by_key/backend/s3_blob_storage_with_duckdb.py`
-- `by_key/backend/postgresql_with_pydantic.py`
-- `by_key/backend/local_with_pydantic.py`
+- `impl/by_key/backend/s3_blob_storage_with_pydantic.py`
+- `impl/by_key/backend/s3_blob_storage_with_duckdb.py`
+- `impl/by_key/backend/postgresql_with_pydantic.py`
+- `impl/by_key/backend/local_with_pydantic.py`
 
 **Adding a New Incremental Backend:**
 
@@ -632,7 +658,18 @@ are unaffected.
 |---------|----------|--------|
 | s3_blob_storage | ✅ | ✅ |
 | postgresql | ✅ | ❌ |
+| bigquery | ✅ | ❌ |
+| snowflake | ✅ | ❌ |
+| duckdb | ✅ | ❌ |
 | local | ✅ | ✅ |
+
+The read-only accessors `get_latest_execution_info` and
+`get_execution_history` have default implementations on
+`ExecutionBackendStateManager` derived from
+`retrieve_latest_execution_state`, so every backend supports the read
+API used by the `nld flow state` CLI out of the box. Row-based backends
+(PostgreSQL, BigQuery, Snowflake, DuckDB) override these with optimised
+variants that join step-history rows in a dedicated query.
 
 ---
 
@@ -961,57 +998,87 @@ class MyDataFlowTask(DataFlowTask):
 
 ### 7.1 Incremental Module
 
+The module is organised under `core/nld/flow/incremental/` into four
+subpackages: `base/` (abstract contracts), `models/` (Pydantic models
+shared across types), `services/` (factory + registry), and `impl/`
+(built-in types).
+
 | File | Purpose |
 |------|---------|
-| `incremental_config.py` | IncrementalConfig model with `strategy`, `persist_initial_processing_state`, and `immediate_step_persistence` settings |
-| `core/logic.py` | Base classes for incremental parameters, definitions (with step activation flags), and logic |
-| `core/state.py` | Base state classes (FlowState, FlowSourceState, FlowProcessingState) |
-| `core/manager.py` | IncrementalStateManager and IncrementalBackendStateManager |
-| `core/factory.py` | IncrementalStateManagerFactory with engine resolution |
-| `core/referential.py` | Enums for states, selections, granularities |
-| `by_key/logic.py` | ByKey parameter definitions |
-| `by_key/manager.py` | ByKeyStateManager with strategy-based logic |
-| `by_key/state.py` | ByKeyState, ByKeySourceState, ByKeyProcessingState |
-| `by_key/backend/base_with_pydantic.py` | Base pydantic engine for by_key |
-| `by_key/backend/base_with_duckdb.py` | Base DuckDB engine for by_key |
-| `by_key/backend/s3_blob_storage_with_pydantic.py` | S3 backend with pydantic engine |
-| `by_key/backend/s3_blob_storage_with_duckdb.py` | S3 backend with DuckDB engine |
-| `by_key/backend/postgresql_with_pydantic.py` | PostgreSQL backend with pydantic engine |
-| `by_key/backend/local_with_pydantic.py` | Local filesystem backend with pydantic engine |
-| `by_key/backend/local_with_duckdb.py` | Local filesystem backend with DuckDB engine |
-| `by_source_tst/logic.py` | BySourceTst parameter definitions |
-| `by_source_tst/manager.py` | BySourceTstStateManager with timestamp-based logic |
-| `by_source_tst/state.py` | BySourceTstState, BySourceTstSourceState, BySourceTstProcessingState |
-| `by_source_tst/backend/base_with_pydantic.py` | Base pydantic engine for by_source_tst |
-| `by_source_tst/backend/postgresql_with_pydantic.py` | PostgreSQL backend with pydantic engine |
-| `by_source_tst/backend/local_with_pydantic.py` | Local filesystem backend with pydantic engine |
-| `no_increment/logic.py` | NoIncrement parameter definitions |
-| `no_increment/manager.py` | NoIncrementStateManager (no-op) |
-| `no_increment/state.py` | Empty state classes |
-| `no_increment/backend/base_with_pydantic.py` | Base pydantic engine (pass-through) |
-| `no_increment/backend/base_with_duckdb.py` | Base DuckDB engine (inherits from pydantic) |
+| `base/logic.py` | Abstract `FlowIncrementalLogic`, `FlowIncrementalDefinition` (with step activation flags), and `FlowIncrementalParamDefinition` |
+| `base/manager.py` | Abstract `IncrementalStateManager` and `IncrementalBackendStateManager` |
+| `base/state.py` | Base state classes (`FlowState`, `FlowSourceState`, `FlowProcessingState`) |
+| `base/sql_filter_manager.py` | Abstract SQL filter contract for incremental WHERE-clause injection |
+| `models/config.py` | `IncrementalConfig` with `strategy`, `persist_initial_processing_state`, `immediate_step_persistence` |
+| `models/manifest.py` | `FlowIncrementalTypeManifest` describing a registered incremental type |
+| `models/referential.py` | Enums for states, selections, granularities |
+| `models/events.py`, `models/request.py`, `models/constants.py` | Shared events, request, and constant models |
+| `services/factory.py` | `IncrementalStateManagerFactory` — resolves logic/manager/backend through the registry with engine resolution |
+| `services/registry.py` | `FlowIncrementalTypeRegistry` — single lookup boundary for built-in and external types, seeded from `additional_incremental_types` in `nld_project.yml` |
+| `impl/__init__.py` | Registers built-in `by_key`, `by_source_tst`, `no_increment` manifests on first import |
+| `impl/by_key/logic.py` | ByKey parameter definitions |
+| `impl/by_key/manager.py` | ByKeyStateManager with strategy-based logic |
+| `impl/by_key/state.py` | ByKeyState, ByKeySourceState, ByKeyProcessingState |
+| `impl/by_key/schema.py` | ByKey schema utilities |
+| `impl/by_key/sql_filter_manager.py` | ByKey SQL filter (key-based IN clause) |
+| `impl/by_key/backend/base_with_pydantic.py` | Base pydantic engine for by_key |
+| `impl/by_key/backend/base_with_duckdb.py` | Base DuckDB engine for by_key |
+| `impl/by_key/backend/s3_blob_storage_with_pydantic.py` | S3 backend with pydantic engine |
+| `impl/by_key/backend/s3_blob_storage_with_duckdb.py` | S3 backend with DuckDB engine |
+| `impl/by_key/backend/postgresql_with_pydantic.py` | PostgreSQL backend with pydantic engine |
+| `impl/by_key/backend/bigquery_with_pydantic.py` | BigQuery backend with pydantic engine |
+| `impl/by_key/backend/duckdb_with_pydantic.py` | DuckDB backend with pydantic engine |
+| `impl/by_key/backend/local_with_pydantic.py` | Local filesystem backend with pydantic engine |
+| `impl/by_key/backend/local_with_duckdb.py` | Local filesystem backend with DuckDB engine |
+| `impl/by_source_tst/logic.py` | BySourceTst parameter definitions |
+| `impl/by_source_tst/manager.py` | BySourceTstStateManager with timestamp-based logic |
+| `impl/by_source_tst/state.py` | BySourceTstState, BySourceTstSourceState, BySourceTstProcessingState |
+| `impl/by_source_tst/sql_filter_manager.py` | BySourceTst SQL filter (timestamp-based) |
+| `impl/by_source_tst/backend/base_with_pydantic.py` | Base pydantic engine for by_source_tst |
+| `impl/by_source_tst/backend/postgresql_with_pydantic.py` | PostgreSQL backend with pydantic engine |
+| `impl/by_source_tst/backend/bigquery_with_pydantic.py` | BigQuery backend with pydantic engine |
+| `impl/by_source_tst/backend/snowflake_with_pydantic.py` | Snowflake backend with pydantic engine |
+| `impl/by_source_tst/backend/duckdb_with_pydantic.py` | DuckDB backend with pydantic engine |
+| `impl/by_source_tst/backend/local_with_pydantic.py` | Local filesystem backend with pydantic engine |
+| `impl/no_increment/logic.py` | NoIncrement parameter definitions |
+| `impl/no_increment/manager.py` | NoIncrementStateManager (no-op) |
+| `impl/no_increment/state.py` | Empty state classes |
+| `impl/no_increment/sql_filter_manager.py` | NoIncrement SQL filter (pass-through) |
+| `impl/no_increment/backend/base_with_pydantic.py` | Base pydantic engine (pass-through) |
+| `impl/no_increment/backend/base_with_duckdb.py` | Base DuckDB engine (inherits from pydantic) |
 
 ### 7.2 Execution Module
 
 | File | Purpose |
 |------|---------|
 | `execution_info.py` | FlowExecutionInfo, FlowStepExecutionInfo, history classes |
-| `manager.py` | ExecutionStateManager and ExecutionBackendStateManager |
+| `batch_execution_info.py` | Batch execution info aggregation for multi-flow runs |
+| `manager.py` | ExecutionStateManager and ExecutionBackendStateManager (with default read accessors) |
 | `factory.py` | ExecutionStateManagerFactory with engine resolution |
 | `decorator.py` | @track_flow_step decorator |
+| `events.py` | Execution lifecycle events |
+| `schema.py` | PyArrow schema definitions for execution history artifacts |
+| `utils.py` | Execution-side helpers |
 | `backend/s3_blob_storage_base.py` | Shared S3 execution backend base |
 | `backend/s3_blob_storage_with_pydantic.py` | S3 backend with pydantic engine |
 | `backend/s3_blob_storage_with_duckdb.py` | S3 backend with DuckDB engine |
 | `backend/postgresql_with_pydantic.py` | PostgreSQL backend with pydantic engine |
+| `backend/bigquery_with_pydantic.py` | BigQuery backend with pydantic engine |
+| `backend/snowflake_with_pydantic.py` | Snowflake backend with pydantic engine |
+| `backend/duckdb_with_pydantic.py` | DuckDB backend with pydantic engine |
 | `backend/local_with_pydantic.py` | Local filesystem backend with pydantic engine |
 | `backend/local_with_duckdb.py` | Local filesystem backend with DuckDB engine |
+| `backend/migrations/s3_blob_storage_to_parquet.py` | Migration helper for S3 execution artifacts |
 
 ### 7.3 State Module
 
 | File | Purpose |
 |------|---------|
-| `manager/base.py` | FlowStateManager facade |
+| `manager/base.py` | FlowStateManager facade combining execution + incremental |
 | `manager/by_key.py` | FlowByKeyStateManager |
 | `manager/by_source_tst.py` | FlowBySourceTstStateManager |
 | `manager/no_increment.py` | FlowNoIncrementStateManager |
 | `factory.py` | FlowStateManagerFactory (orchestrator with engine pass-through) |
+| `config/state_backend_connector.py` | `StateBackendConnector` and `StateBackendConnectorConfig` models, validators, and merge helpers |
+| `state_backend_connector_resolver.py` | `StateBackendConnectorWrapper` resolving primary + optional secondary sides |
+| `events.py` | State lifecycle events |

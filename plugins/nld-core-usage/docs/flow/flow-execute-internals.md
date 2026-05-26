@@ -19,7 +19,7 @@ flow directly — instead it instantiates a `DataFlowExecutionTask`
 (`core/nld/flow/task/data_flow_exec_task.py`), which is the orchestrator
 that resolves the set of flows to run, sorts them topologically, and
 delegates each one to a `DataFlowExecutor`
-(`core/nld/flow/task/executor.py`). The executor is responsible for the
+(`core/nld/flow/task/data_flow_executor.py`). The executor is responsible for the
 per-flow lifecycle: validation, parameter assembly, task instantiation,
 state-manager wiring, and the actual `run()` invocation.
 
@@ -308,8 +308,8 @@ and post-processing incremental state writes are **never** mirrored.
 |------|------|
 | `core/nld/cli/flow/main_flow.py` | Click command registration (`flow_execute`). |
 | `core/nld/flow/task/data_flow_exec_task.py` | `DataFlowExecutionTask` — multi-flow orchestrator. |
-| `core/nld/flow/graph.py` | `DataFlowGraph` — topological sort, lineage scoping. |
-| `core/nld/flow/task/executor.py` | `DataFlowExecutor` — per-flow lifecycle, init/run param assembly, mandatory checks. |
+| `core/nld/flow/task/data_flow_dependency_graph.py` | `DataFlowDependencyGraphTask` — topological sort, lineage scoping. |
+| `core/nld/flow/task/data_flow_executor.py` | `DataFlowExecutor` — per-flow lifecycle, init/run param assembly, mandatory checks. |
 | `core/nld/flow/definition/flow_definition.py` | `DataFlowDefinition` — task module loading, `resolve_incremental_logic`, `get_init_params_keys`. |
 | `core/nld/flow/task/data_flow_task.py` | `DataFlowTask` base — `__init__`, `incremental_logic` property, `run()` orchestration, pre/post processing. |
 | `core/nld/flow/state/factory.py` | `FlowStateManagerFactory` — strategy-keyed state-manager construction. |

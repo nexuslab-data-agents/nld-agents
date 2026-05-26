@@ -471,7 +471,7 @@ its own SQL filter via this property:
 - `NoIncrementStateManager.sql_filter_manager` returns a `NoIncrementSqlFilterManager` that returns the query unchanged
 
 The SQL filter classes are defined in dedicated `sql_filter_manager.py` files within each
-incremental module (`nld/flow/incremental/by_source_tst/sql_filter_manager.py`, etc.).
+incremental module (`nld/flow/incremental/impl/by_source_tst/sql_filter_manager.py`, etc.).
 The abstract base class `IncrementalSqlFilterManager` is defined in
 `nld/flow/incremental/base/sql_filter_manager.py`.
 
@@ -506,7 +506,7 @@ mandatory-key checks before constructing the task:
 
 When adding a new CLI flag for an incremental strategy, register it in **both**:
 - the strategy's `param_definitions` list (e.g. `BY_SOURCE_TST_INCREMENTAL_DEFINITION` in
-  `nld/flow/incremental/by_source_tst/logic.py`), and
+  `nld/flow/incremental/impl/by_source_tst/logic.py`), and
 - the Click option in `nld/cli/flow/params_flow.py` plus the command decorator
   in `nld/cli/flow/main_flow.py`.
 
@@ -682,14 +682,14 @@ FlowExecutionInfo (result)
 2. **Retrieve definition:** the flow definition is fetched by name and namespace
    from the entity registry.
 
-3. **DataFlowExecutor initialization** at `nld/flow/task/executor.py:29`:
+3. **DataFlowExecutor initialization** at `nld/flow/task/data_flow_executor.py:29`:
    - Creates or reuses the `NldExecutionContext`
    - Calls `DataFlowDefinition.check_coherence()` to validate the task module
      can be loaded and parameters are valid
    - Verifies that all connectors referenced in `data_connectors` exist in
      the connection configuration
 
-4. **Task instantiation** via `DataFlowExecutor.init_data_flow()` at `nld/flow/task/executor.py:82`:
+4. **Task instantiation** via `DataFlowExecutor.init_data_flow()` at `nld/flow/task/data_flow_executor.py:82`:
    - Loads the task class (already validated)
    - Opens database connections for all referenced connectors
    - Builds init parameters by merging flow definition params with CLI params
@@ -942,17 +942,19 @@ The `FlowExecutionInfo` returned by `run()` contains the final execution status
 | `nld/flow/utils/flow_update_strategy.py` | FlowUpdateStrategies enum |
 | `nld/flow/task/data_flow_task.py` | DataFlowTask base class with lifecycle |
 | `nld/flow/task/data_flow_exec_task.py` | CLI task runner for data flows |
-| `nld/flow/task/executor.py` | DataFlowExecutor orchestration |
+| `nld/flow/task/data_flow_executor.py` | DataFlowExecutor orchestration |
 | `nld/flow/definition/flow_definition.py` | DataFlowDefinition YAML model (predecessors, incremental) |
 | `nld/flow/execution/execution_info.py` | FlowExecutionInfo and step tracking |
 | `nld/flow/config/flow_config.py` | FlowConfig runtime model |
-| `nld/flow/incremental/no_increment/logic.py` | NO_INCREMENT incremental logic |
-| `nld/flow/incremental/by_source_tst/logic.py` | BY_SOURCE_TST incremental logic (FULL, DELTA, BACKFILL) |
-| `nld/flow/incremental/by_source_tst/manager.py` | BY_SOURCE_TST state manager |
-| `nld/flow/incremental/by_source_tst/sql_filter_manager.py` | BY_SOURCE_TST SQL filter (timestamp-based) |
-| `nld/flow/incremental/by_key/logic.py` | BY_KEY incremental logic (FULL, DELTA, BACKFILL) |
-| `nld/flow/incremental/by_key/sql_filter_manager.py` | BY_KEY SQL filter (key-based IN clause) |
-| `nld/flow/incremental/no_increment/sql_filter_manager.py` | NO_INCREMENT SQL filter (no-op) |
+| `nld/flow/incremental/impl/no_increment/logic.py` | NO_INCREMENT incremental logic |
+| `nld/flow/incremental/impl/by_source_tst/logic.py` | BY_SOURCE_TST incremental logic (FULL, DELTA, BACKFILL) |
+| `nld/flow/incremental/impl/by_source_tst/manager.py` | BY_SOURCE_TST state manager |
+| `nld/flow/incremental/impl/by_source_tst/sql_filter_manager.py` | BY_SOURCE_TST SQL filter (timestamp-based) |
+| `nld/flow/incremental/impl/by_key/logic.py` | BY_KEY incremental logic (FULL, DELTA, BACKFILL) |
+| `nld/flow/incremental/impl/by_key/sql_filter_manager.py` | BY_KEY SQL filter (key-based IN clause) |
+| `nld/flow/incremental/services/factory.py` | IncrementalStateManagerFactory |
+| `nld/flow/incremental/services/registry.py` | FlowIncrementalTypeRegistry for built-in and external types |
+| `nld/flow/incremental/impl/no_increment/sql_filter_manager.py` | NO_INCREMENT SQL filter (no-op) |
 | `nld/flow/incremental/base/sql_filter_manager.py` | IncrementalSqlFilterManager abstract base class |
 | `nld/flow/incremental/services/factory.py` | IncrementalStateManagerFactory |
 | `nld/cli/flow/main_flow.py` | CLI command definitions |

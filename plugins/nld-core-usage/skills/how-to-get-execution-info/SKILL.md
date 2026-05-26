@@ -7,8 +7,9 @@ description: >
   did it fail?", or wants the step-by-step breakdown of a specific
   execution. Covers `get-state` (latest header), `get-history` (newest
   first, optionally limited), and `get-steps` (per-execution step list,
-  selected via `--latest` or `--flow-uid`). All commands emit JSON to
-  stdout by default and accept `--output` to write to a file.
+  selected via `--latest` or `--flow-uid`). Commands render a concise
+  text summary to stdout by default; pass `--format json` for the full
+  machine-readable payload, or `--output` to write JSON to a file.
 user-invocable: true
 ---
 
@@ -44,10 +45,14 @@ semantics), see the `guide-flows` and `guide-incremental` skills.
   inline on the flow YAML, or via the project-level default in
   `config/flow.yaml`). If neither is set, the CLI raises a clear
   RuntimeError.
-- The connection referenced by `state_backend_connector.primary` must
-  resolve to a backend that implements the read accessors. **PostgreSQL
-  and S3 blob storage are supported today**; BigQuery, Snowflake, and
-  DuckDB inherit a `NotImplementedError` default and need follow-up work.
+- The execution-side read accessors (`get_latest_execution_info`,
+  `get_execution_history`) have default implementations on
+  `ExecutionBackendStateManager` derived from
+  `retrieve_latest_execution_state`, so every backend that supports
+  writes also supports execution reads: PostgreSQL, BigQuery,
+  Snowflake, DuckDB, S3 blob storage, and the local file backend.
+  Row-based backends override the defaults with optimised variants
+  that join step-history rows in a dedicated query.
 - The resolver lazy-loads state-backend connectors from
   `connection_configs`, so the CLI works even when the executor has
   not yet loaded the connector for a regular run.
@@ -58,14 +63,17 @@ semantics), see the `guide-flows` and `guide-incremental` skills.
 
 ```
 nld flow state execution get-state    --name <flow> [--namespace <ns>]
+                                      [--format text|json]
                                       [--output] [--override-output-folder-path <dir>]
 
 nld flow state execution get-history  --name <flow> [--namespace <ns>]
                                       [--limit <N>]
+                                      [--format text|json]
                                       [--output] [--override-output-folder-path <dir>]
 
 nld flow state execution get-steps    --name <flow> [--namespace <ns>]
                                       (--flow-uid <UID> | --latest)
+                                      [--format text|json]
                                       [--output] [--override-output-folder-path <dir>]
 ```
 
@@ -75,7 +83,8 @@ nld flow state execution get-steps    --name <flow> [--namespace <ns>]
 |------|---------|
 | `--name <flow>` | Flow name (required). |
 | `--namespace <ns>` | Namespace of the flow. Optional — the registry resolves it from the project layout when omitted. **Use this to read historical rows persisted under a previous namespace if the flow was relocated.** |
-| `--output` | Boolean flag. Write the JSON to a fixed file under `output/<timestamp>/`. |
+| `--format text\|json` | Stdout rendering. `text` (default) prints a concise human-friendly summary; `json` prints the full machine-readable payload. |
+| `--output` | Boolean flag. Write JSON to a fixed file under `output/<timestamp>/`. File output is always JSON, independent of `--format`. |
 | `--override-output-folder-path <dir>` | Write into `<dir>` instead of the timestamped folder; implies `--output`. |
 
 ### Per-command flags
@@ -92,6 +101,8 @@ call.
 
 ### Output shapes
 
+Under `--format json` (and in every `--output` file), the payloads are:
+
 | Command | Payload |
 |---------|---------|
 | `get-state` | `FlowExecutionInfo` header (no `steps`). `{}` when no execution exists. |
@@ -99,6 +110,10 @@ call.
 | `get-steps` | `[FlowStepExecutionInfo, ...]`. `[]` when the UID is unknown or no execution exists. |
 
 `null` fields are stripped from every payload (`exclude_none=True`).
+
+Under the default `--format text`, the same data is rendered as a
+concise summary suitable for terminal reading. Pipe with `--format json`
+when feeding the output to `jq` or another consumer.
 
 ---
 
@@ -126,9 +141,12 @@ backfill?", or for surfacing the `flow_uid` of an old failed run.
 ### 3. Find the first failure in recent history
 
 ```
-nld flow state execution get-history --name daily_sales_refresh --limit 50 \
+nld flow state execution get-history --name daily_sales_refresh --limit 50 --format json \
   | jq '.executions[] | select(.execution_status == "FAILED") | {flow_uid, started_at, execution_error}'
 ```
+
+Pass `--format json` whenever piping into `jq` — without it stdout is
+the text summary, not the machine payload.
 
 ### 4. Step-by-step breakdown of the latest run
 
@@ -222,16 +240,24 @@ step list is available too.
 
 ### BigQuery / Snowflake / DuckDB
 
-The shared abstract accessors are in place but the concrete read
-implementations have not been wired yet. The CLI raises
-`NotImplementedError` for these backends. Read via the connector's
-native CLI (`bq query`, `snowsql`, `duckdb`) against the same
-`_nld_execution_*` table names until that work lands.
+The CLI reads from these row-based backends via the default
+`get_latest_execution_info` / `get_execution_history` implementations
+on `ExecutionBackendStateManager`, which call
+`retrieve_latest_execution_state` and select the latest header.
+Concrete backend classes override the defaults with optimised
+variants that join `_nld_execution_state`, `_nld_execution_history`,
+and `_nld_execution_step_history` in a dedicated query.
+
+For ad-hoc analysis, the same tables are reachable via each
+connector's native CLI (`bq query`, `snowsql`, `duckdb`).
 
 ### Local file backend
 
-Read implementations are pending. State lives as JSON artifacts on the
-connector's root path under the same `state/` layout as S3.
+The local filesystem backend serves execution reads through the same
+default read accessors. State lives as JSON or Parquet artifacts on
+the connector's root path under the `state/` layout shared with S3:
+per-execution info under `state/execution_info/<flow_uid>.json` and
+consolidated history at `state/execution_history.json`.
 
 ---
 

@@ -6,8 +6,9 @@ description: >
   asks "where did the last delta stop?", "which keys still need
   processing?", or "what watermark will the next run resume from?".
   Returns the current processing state by default; `--include-post-processing`
-  bundles in the authoritative post-processing state. Output is JSON to
-  stdout, or to a file via `--output`.
+  bundles in the authoritative post-processing state. Stdout renders a
+  concise text summary by default; pass `--format json` for the full
+  machine-readable payload, or `--output` to write JSON to a file.
 user-invocable: true
 ---
 
@@ -55,6 +56,7 @@ backend semantics), see the `guide-incremental` skill.
 ```
 nld flow state incremental get-state --name <flow> [--namespace <ns>]
                                      [--include-post-processing]
+                                     [--format text|json]
                                      [--output] [--override-output-folder-path <dir>]
 ```
 
@@ -65,7 +67,8 @@ nld flow state incremental get-state --name <flow> [--namespace <ns>]
 | `--name <flow>` | Flow name (required). |
 | `--namespace <ns>` | Namespace of the flow. Optional — the registry resolves it from the project layout when omitted. Pass explicitly when the flow was relocated and you want to read state under a previous namespace. |
 | `--include-post-processing` | Also include the authoritative post-processing state in the payload (the value the next run will read as its starting point). |
-| `--output` | Write JSON to a fixed file under `output/<timestamp>/`. |
+| `--format text\|json` | Stdout rendering. `text` (default) prints a concise human-friendly summary; `json` prints the full machine-readable payload. |
+| `--output` | Write JSON to a fixed file under `output/<timestamp>/`. File output is always JSON, independent of `--format`. |
 | `--override-output-folder-path <dir>` | Write into `<dir>` instead; implies `--output`. |
 
 ### Output shapes
@@ -114,12 +117,15 @@ the range the most recent run covered.
 ### 2. `by_key`: which keys still need processing?
 
 ```
-nld flow state incremental get-state --name customer_enrichment --include-post-processing \
+nld flow state incremental get-state --name customer_enrichment --include-post-processing --format json \
   | jq '.post_processing_state.keys
         | to_entries
         | map(select(.value.status != "SUCCEEDED"))
         | map({key: .key, status: .value.status, last_error: .value.last_process_error_message})'
 ```
+
+Pass `--format json` whenever piping into `jq` — without it stdout is
+the text summary, not the machine payload.
 
 Returns every key that hasn't reached `SUCCEEDED` — typically
 `NOT_PROCESSED`, `FAILED`, or `DELETED`. Use this before manually
@@ -139,7 +145,7 @@ moved during that run.
 ### 4. `by_key`: count of pending vs failed vs succeeded keys
 
 ```
-nld flow state incremental get-state --name customer_enrichment --include-post-processing \
+nld flow state incremental get-state --name customer_enrichment --include-post-processing --format json \
   | jq '.post_processing_state.keys
         | [.[].status]
         | group_by(.)
@@ -149,7 +155,7 @@ nld flow state incremental get-state --name customer_enrichment --include-post-p
 ### 5. `by_source_tst`: was the latest run a backfill or a delta?
 
 ```
-nld flow state incremental get-state --name daily_sales_refresh \
+nld flow state incremental get-state --name daily_sales_refresh --format json \
   | jq '{flow_uid, strategy, processing_status,
          range: [.pull_from_timestamp, .pull_to_timestamp]}'
 ```
