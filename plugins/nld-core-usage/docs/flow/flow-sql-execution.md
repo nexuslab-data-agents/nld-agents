@@ -714,10 +714,15 @@ FlowExecutionInfo (result)
 The pre-processing runs three sub-phases in order:
 
 1. **`pre_processing_at_start()`**: hook for custom initialization (no-op by default)
-2. **`pre_processing_for_execution()`**: retrieves the latest execution state from
+2. **`get_latest_execution_state()`**: retrieves the latest execution state from
    the backend
-3. **`pre_processing_for_state()`**: retrieves incremental state, source state,
-   determines logically deleted entries, and determines processing state
+3. **`compute_incremental_state()`**: when `incremental_definition.tracks_state`
+   is `True`, retrieves the latest incremental state, optionally retrieves
+   the source state (gated by `requires_source_state_retrieval`), determines
+   logically deleted entries (gated by `tracks_logical_deletion`), determines
+   the processing state, and conditionally persists the initial processing
+   state. Accepts `save_step_log_to_backend` to suppress step-history
+   writes for compute-only callers.
 
 For `SQLFlowTask` with `NO_INCREMENT` logic (default), these state operations are
 mostly no-ops since there is no incremental tracking. When `incremental` is set on the

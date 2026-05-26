@@ -263,9 +263,9 @@ defined on `DataFlowTask` itself
 flowchart TD
     R[DataFlowTask.run] --> P1[pre_processing]
     P1 --> P1a[pre_processing_at_start<br/>subclass hook]
-    P1a --> P1b[pre_processing_for_execution<br/>state_manager.get_latest_execution_state]
-    P1b --> P1c{incremental_definition<br/>.tracks_state?}
-    P1c -->|yes| P1d[retrieve_latest_incremental_state<br/>retrieve_source_state<br/>determine_logically_deleted_entries<br/>determine_processing_state]
+    P1a --> P1b[get_latest_execution_state<br/>state_manager.get_latest_execution_state]
+    P1b --> P1c{compute_incremental_state<br/>tracks_state?}
+    P1c -->|yes| P1d[retrieve_latest_incremental_state<br/>retrieve_source_state (if requires_source_state_retrieval)<br/>determine_logically_deleted_entries<br/>determine_processing_state<br/>persist_initial_processing_state (if configured)]
     P1c -->|no| P2
     P1d --> P2[state_manager.save_execution_start]
     P2 --> RF[run_flow<br/>subclass implementation]

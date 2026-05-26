@@ -140,7 +140,7 @@ sequenceDiagram
     Note over Task: ── PRE-PROCESSING ──
 
     rect rgb(230, 240, 255)
-        Note right of Task: pre_processing_for_execution()
+        Note right of Task: get_latest_execution_state()
         Task->>StateManager: get_latest_execution_state()
         StateManager->>Exec: get_latest_execution_state()
         Exec->>ExecBE: retrieve_latest_execution_state()
@@ -148,13 +148,17 @@ sequenceDiagram
     end
 
     rect rgb(230, 255, 230)
-        Note right of Task: pre_processing_for_state()<br/>Skipped entirely when<br/>tracks_state = False.
+        Note right of Task: compute_incremental_state()<br/>Skipped entirely when<br/>tracks_state = False.
 
         alt tracks_state = True
             Task->>StateManager: get_latest_incremental_state()
             StateManager->>Incr: get_latest_incremental_state()
             Incr->>IncrBE: retrieve_current_state()
             IncrBE-->>Incr: FlowState (e.g. last_pull_to_timestamp)
+
+            alt requires_source_state_retrieval = True
+                Task->>Task: retrieve_source_state()
+            end
 
             alt tracks_logical_deletion = True
                 Task->>Task: determine_logically_deleted_entries()
@@ -446,42 +450,52 @@ When a flag is `False`, the corresponding step methods are **not called** and
 no `@track_flow_step` entries are recorded, preventing dummy log entries for
 steps that have no meaningful work for a given incremental type.
 
-| Flag | Description | no_increment | by_source_tst | by_key |
-|------|-------------|:------------:|:-------------:|:------:|
-| `tracks_state` | All state steps: retrieve incremental/source state, determine/save processing state, post-processing for state | `False` | `True` | `True` |
-| `tracks_logical_deletion` | Determine logically deleted entries (only evaluated when `tracks_state` is `True`) | `False` | `False` | `True` |
+| Flag | Description | Default | no_increment | by_source_tst | by_key |
+|------|-------------|:-------:|:------------:|:-------------:|:------:|
+| `tracks_state` | All state steps: retrieve incremental state, determine/save processing state, post-processing for state | `True` | `False` | `True` | `True` |
+| `tracks_logical_deletion` | Determine logically deleted entries (only evaluated when `tracks_state` is `True`) | `True` | `False` | `False` | `True` |
+| `requires_source_state_retrieval` | Call `retrieve_source_state()` (only evaluated when `tracks_state` is `True`) | `False` | `False` | `False` | `True` |
 
-All flags default to `True`. Each incremental definition overrides only the
-flags that should be disabled.
+Each incremental definition overrides only the flags whose default does
+not match. `tracks_state` and `tracks_logical_deletion` default to
+`True`; `requires_source_state_retrieval` defaults to `False` because
+most incremental types compute their state purely from the persisted
+watermark and do not enumerate the source.
 
-The flags are checked in `DataFlowTask.pre_processing_for_state()` and
+The flags are checked in `DataFlowTask.compute_incremental_state()` and
 `DataFlowTask.post_processing()`:
 
 ```python
-def pre_processing_for_state(self) -> None:
+def compute_incremental_state(self, save_step_log_to_backend: bool = True) -> None:
     definition = self.incremental_definition
     if not definition.tracks_state:
         return
 
     self.retrieve_latest_incremental_state()
-    self._save_last_step_to_backend()
+    if save_step_log_to_backend:
+        self._save_last_step_to_backend()
 
-    self.retrieve_source_state()
-    self._save_last_step_to_backend()
+    if definition.requires_source_state_retrieval:
+        self.retrieve_source_state()
+        if save_step_log_to_backend:
+            self._save_last_step_to_backend()
 
     if definition.tracks_logical_deletion:
         self.determine_logically_deleted_entries()
-        self._save_last_step_to_backend()
+        if save_step_log_to_backend:
+            self._save_last_step_to_backend()
 
     self.determine_processing_state()
-    self._save_last_step_to_backend()
+    if save_step_log_to_backend:
+        self._save_last_step_to_backend()
 
     if (
         self.incremental_config is not None
         and self.incremental_config.persist_initial_processing_state
     ):
         self.persist_initial_processing_state()
-        self._save_last_step_to_backend()
+        if save_step_log_to_backend:
+            self._save_last_step_to_backend()
 
 def post_processing(self) -> None:
     if (
@@ -501,6 +515,13 @@ the separate `persist_initial_processing_state` step, which runs only
 when `IncrementalConfig.persist_initial_processing_state` is `True`.
 Splitting computation and persistence lets callers reuse the
 computation without writing to the live slot.
+
+`compute_incremental_state` accepts a `save_step_log_to_backend`
+parameter (default `True`). When `False`, every nested step still runs,
+but the per-step calls to `_save_last_step_to_backend()` are suppressed
+— used by compute-only callers (e.g. the `nld flow state` CLI compute
+path) that need the in-memory state without writing execution-history
+rows for what was not an execution.
 
 ### 2.6 Factory Pattern
 
