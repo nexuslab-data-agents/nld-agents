@@ -142,7 +142,7 @@ built-in or another external type raises `NldProjectError` at registration
 time.
 
 The four runtime surfaces an external type must expose are described in
-the `how-to-create-an-new-incremental-type` skill, which ships a complete
+the `how-to-create-a-new-incremental-type` skill, which ships a complete
 `by_source_tst_with_days_from` reference implementation.
 
 `nld project info` lists every registered incremental type alongside
@@ -151,7 +151,7 @@ additional entities and python paths.
 ## Cross-References
 
 - For step-by-step instructions to author an external incremental type,
-  see the `how-to-create-an-new-incremental-type` skill.
+  see the `how-to-create-a-new-incremental-type` skill.
 - For the flow lifecycle that wraps incremental logic, see the `guide-flows` skill.
 - For the SQL-side plumbing (executor → SQLFlowTask → incremental filter), see
   section "4.2 CLI parameter plumbing" in `flow-sql-execution.md`.
