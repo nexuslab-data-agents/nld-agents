@@ -33,6 +33,13 @@ Activate this guide when the agent is working on:
 The full architectural reference is at
 `${CLAUDE_PLUGIN_ROOT}/docs/flow/execution-and-incremental-design.md`.
 
+Backend support matrices (which connector/engine supports which command
+for execution and incremental state) live at
+`${CLAUDE_PLUGIN_ROOT}/docs/flow/backends/` (connector-by-connector) and
+`${CLAUDE_PLUGIN_ROOT}/docs/flow/incremental/` (strategy-by-strategy).
+Consult them when asked whether a backend supports `get-state`,
+`get-steps`, or `compute --persist`.
+
 ### Key Sections (900 lines — read by section, not in full)
 
 | Task | Section |
@@ -151,3 +158,5 @@ additional entities and python paths.
 - For an end-to-end Mermaid trace of how the resolver feeds the
   executor and the task, see `flow-execute-internals.md` (section 4
   "Incremental logic resolution").
+- For per-backend command availability (execution and incremental
+  state), see `docs/flow/backends/` and `docs/flow/incremental/`.

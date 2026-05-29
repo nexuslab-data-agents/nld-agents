@@ -892,6 +892,10 @@ record's `status` / `status_changed_at` / `executed_by_flow_uid`; the
 detail rows are preserved so a consumed plan's `processing_state`
 stays auditable.
 
+Which connector/engine combinations implement these methods (and the
+execution-side read accessors) is tabulated in `backends/` (per
+connector) and `incremental/` (per strategy).
+
 ---
 
 ## 5. Processing Lifecycle
