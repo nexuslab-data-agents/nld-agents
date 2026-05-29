@@ -30,7 +30,9 @@ Each strategy page reports availability against four axes:
   `retrieve_current_state`, so it is available wherever the flow runs.
 - **`compute --persist`** — adds a planned-state write
   (`write_planned_processing_state`); requires a planned-state backend
-  surface.
+  surface. `nld flow state incremental get-planned` (list PLANNED plans)
+  reads the same slot, so it has the same availability as `compute
+  --persist`.
 
 ## Legend
 

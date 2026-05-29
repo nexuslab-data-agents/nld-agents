@@ -6,10 +6,11 @@ description: >
   what the most recent run persisted (optionally with the authoritative
   post-processing watermark via `--include-post-processing`), and
   `compute` resolves the processing state the next run would build —
-  optionally persisting it as a PLANNED plan. Use when the user asks
-  "where did the last delta stop?", "which keys still need processing?",
-  "what watermark will the next run resume from?", or "what would the
-  next run actually decide to do?". Stdout renders a concise text
+  optionally persisting it as a PLANNED plan, which `get-planned` then
+  lists. Use when the user asks "where did the last delta stop?", "which
+  keys still need processing?", "what watermark will the next run resume
+  from?", or "what would the next run actually decide to do?". Stdout
+  renders a concise text
   summary by default; pass `--format json` for the full machine-readable
   payload, or `--output` to write JSON to a file.
 user-invocable: true
@@ -31,6 +32,8 @@ user-invocable: true
   - `compute` — resolve the processing state the next run would build,
     without starting the run; with `--persist`, store the result as a
     PLANNED plan in the planned-state slot.
+  - `get-planned` — list the flow's PLANNED plans (lifecycle metadata,
+    newest first).
 - **When**: The user asks where the next delta will resume, which keys
   are pending or failed for a `by_key` flow, what the `by_source_tst`
   watermark holds, or what the next run *would* process if launched
@@ -257,13 +260,23 @@ and `no_increment` do not retrieve source state, so they never prompt.
 ### The planned-state slot
 
 `--persist` writes to a slot that is **separate from the live
-processing-state slot a running flow reads and writes**. A plan carries
-a lifecycle `status` of `PLANNED`, `CANCELLED`, or `COMPLETED`; writing
-a new plan flips any prior `PLANNED` plan for the same flow to
-`CANCELLED`, so at most one `PLANNED` plan exists per flow at a time.
-Persisting is supported on the PostgreSQL and S3 backends. See
-`guide-incremental` §4.5 "Planned-state slot" for the storage layout
-and lifecycle.
+processing-state slot a running flow reads and writes**, on the
+**primary** state backend only. A plan carries a lifecycle `status` of
+`PLANNED`, `CANCELLED`, or `COMPLETED`; writing a new plan flips any
+prior `PLANNED` plan for the same flow to `CANCELLED`, so at most one
+`PLANNED` plan exists per flow at a time. Persisting is supported on the
+PostgreSQL and S3 backends. See `guide-incremental` §4.5 "Planned-state
+slot" for the storage layout and lifecycle.
+
+List the plans recorded for a flow with `get-planned`:
+
+```
+nld flow state incremental get-planned --name daily_sales_refresh
+```
+
+It returns each `PLANNED` plan's lifecycle metadata (`plan_state_uid`,
+`status`, `strategy`, `computed_at`, `requestor`, …), newest first —
+the same backends that accept `--persist` back this listing.
 
 ### Recipes
 

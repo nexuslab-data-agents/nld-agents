@@ -29,8 +29,10 @@ implemented for both backend families. See the
   `write_post_processing_state` (plus partial variants for `by_key`).
 - **`get-state`** — `get_processing_state` and `get_post_processing_state`
   read the live processing-state / post-processing-state tables.
-- **`compute --persist`** — both strategies mix in
-  `PostgreSQLPlannedStateMixin`, which owns the master table
+- **`compute --persist`** and **`get-planned`** — both strategies mix
+  in `PostgreSQLPlannedStateMixin`, which provides the master/detail
+  persistence for the planned-state slot: master table
   `_nld_incremental_plans` and the per-strategy detail tables
-  `_nld_incremental_plans_<strategy>_planned_state` (see
+  `_nld_incremental_plans_<strategy>_planned_state`. The plan lifecycle
+  itself lives in the base `IncrementalBackendStateManager` (see
   `../execution-and-incremental-design.md` §4.5).

@@ -56,6 +56,7 @@ available`.
 | `nld flow state execution get-steps` | Execution | `get_execution_history(limit=1)` then reads `info.steps` |
 | `nld flow state incremental get-state` | Incremental | `get_processing_state`, `get_post_processing_state` |
 | `nld flow state incremental compute` | Incremental | `compute_incremental_state` (in memory, via `retrieve_current_state`); `--persist` adds `save_planned_processing_state` → `write_planned_processing_state` |
+| `nld flow state incremental get-planned` | Incremental | `get_planned_processing_states` → `list_planned_processing_states` (lists PLANNED plan masters) |
 
 See the `how-to-get-incremental-info` and `how-to-get-execution-info`
 skills for the CLI flags and output shapes.
@@ -103,7 +104,9 @@ JSON column) and rehydrate them on read.
 from `retrieve_current_state`, so it is available wherever the flow
 runs. `get-state` needs the `get_processing_state` /
 `get_post_processing_state` accessors, implemented on PostgreSQL only.
-`compute --persist` needs the planned-state write surface.
+`compute --persist` needs the planned-state write surface. `get-planned`
+reads the same planned-state slot, so it tracks the `compute --persist`
+column exactly.
 
 | Strategy | Connector / engine | Flow execution | `get-state` | `compute` | `compute --persist` |
 |----------|--------------------|:--------------:|:-----------:|:---------:|:-------------------:|

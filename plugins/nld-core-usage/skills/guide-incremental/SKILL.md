@@ -86,14 +86,22 @@ When adding a new incremental flag, update **both** the strategy's
 
 ```
 core/nld/flow/incremental/
-├── base/                                # abstract contracts (logic, manager, sql_filter_manager, state)
-├── models/
+├── models/                              # leaf layer: data/definition models
+│   ├── state.py                         # FlowState, FlowSourceState, FlowProcessingState
+│   ├── logic.py                         # FlowIncrementalLogic, FlowIncrementalDefinition, param defs
+│   ├── plan.py                          # FlowPlannedProcessingState(+Master), IncrementalPlanStatus
 │   ├── config.py                        # IncrementalConfig
 │   ├── events.py
 │   ├── manifest.py                      # FlowIncrementalTypeManifest
 │   ├── referential.py
 │   ├── request.py
 │   └── constants.py
+├── base/                                # abstract managers + SQL filter (depends downward on models)
+│   ├── manager.py                       # IncrementalStateManager, IncrementalBackendStateManager (+ planned-state lifecycle)
+│   └── sql_filter_manager.py
+├── backend/                             # connector-specific planned-state persistence mixins
+│   ├── postgresql/planned_state_mixin.py
+│   └── s3_blob_storage/planned_state_mixin.py
 ├── services/
 │   ├── factory.py                       # resolves a name to its logic/manager/backend via the registry
 │   └── registry.py                      # FlowIncrementalTypeRegistry + get_flow_incremental_type_registry()

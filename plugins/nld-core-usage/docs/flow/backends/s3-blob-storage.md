@@ -42,8 +42,10 @@ Backend modules: `impl/by_key/backend/s3_blob_storage_base.py`,
   --persist` and `get-state` are independent.
 - **`compute`** — resolves the next run's processing state in memory
   from `retrieve_current_state`.
-- **`compute --persist`** — the `by_key` S3 base mixes in
-  `S3PlannedStateMixin`, storing one plan folder per
+- **`compute --persist`** and **`get-planned`** — the `by_key` S3 base
+  mixes in `S3PlannedStateMixin`, which provides the master/detail
+  persistence for the planned-state slot: one plan folder per
   `plan_state_uid` under `<state-root>/plans/<plan_state_uid>/`
-  (`master.json` plus the strategy detail file). See
+  (`master.json` plus the strategy detail file). The plan lifecycle
+  itself lives in the base `IncrementalBackendStateManager`. See
   `../execution-and-incremental-design.md` §4.5.

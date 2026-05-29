@@ -829,68 +829,75 @@ and a running flow never reads the planned slot. `nld flow state
 incremental compute --persist` is the writer (see the
 `how-to-get-incremental-info` skill).
 
-**Model.** `FlowPlannedProcessingState[ProcessingState]`
-(`core/nld/flow/incremental/models/plan.py`) is the master record. It
-carries lifecycle metadata — `plan_state_uid`, `flow_namespace`,
-`flow_name`, `status`, `strategy`, `computed_at`, `status_changed_at`,
-`requestor`, `executed_by_flow_uid` — plus the strategy-specific
-`processing_state` payload as a generic. `status` is one of the
-`IncrementalPlanStatus` values:
+**Model.** Two records in `core/nld/flow/incremental/models/plan.py`:
+
+- `FlowPlannedProcessingStateMaster` — lifecycle metadata only:
+  `plan_state_uid`, `flow_namespace`, `flow_name`, `status`, `strategy`,
+  `computed_at`, `status_changed_at`, `requestor`,
+  `executed_by_flow_uid`.
+- `FlowPlannedProcessingState[ProcessingState]` — extends the master
+  with the strategy-specific `processing_state` payload (a generic);
+  `to_master()` returns the lifecycle metadata without the payload.
+
+`status` is one of the `IncrementalPlanStatus` values:
 
 | Status | Meaning |
 |--------|---------|
 | `PLANNED` | Active plan; at most one per `(flow_namespace, flow_name)`. |
-| `CANCELLED` | Superseded by a newer plan for the same flow. |
+| `CANCELLED` | Superseded by a newer plan, or cancelled explicitly. |
 | `COMPLETED` | Consumed by a run; `executed_by_flow_uid` records which. |
 
-`FlowPlannedProcessingStateResult` wraps a read result with
-`loaded_from` (`"primary"` / `"secondary"`), mirroring the dual-backend
-read path.
+**Primary backend only.** A plan is written and read on the **primary**
+backend exclusively — the planned state is the single source of truth
+for a precomputed plan. The secondary backend (the informational mirror
+of the live processing state, §4.4) is never involved.
 
-**Manager surface.** `IncrementalStateManager` exposes three dispatch
-methods, surfaced through `FlowStateManager`:
+**Manager surface.** `FlowStateManager` exposes the following (each
+delegating to `IncrementalStateManager`, which holds the primary
+backend manager):
 
 | Method | Behaviour |
 |--------|-----------|
-| `save_planned_processing_state(processing_flow_state, plan_state_uid, computed_at, requestor=None)` | Builds the `PLANNED` master record and writes it to the primary backend; best-effort mirror to the secondary. |
-| `get_planned_processing_state(plan_state_uid=None)` | Reads the active `PLANNED` plan from the primary, falling back to the secondary. Returns a `FlowPlannedProcessingStateResult` or `None`. |
-| `mark_plan_completed(plan_state_uid, executed_by_flow_uid)` | Transitions a plan to `COMPLETED` on the primary; best-effort on the secondary. |
+| `save_planned_processing_state(processing_flow_state, plan_state_uid, computed_at, requestor=None)` | Build the `PLANNED` master + payload and write it to the primary backend. |
+| `get_planned_processing_state(plan_state_uid=None)` | Return the named plan, or the latest `PLANNED` plan by `computed_at`, as a `FlowPlannedProcessingState` (or `None`). |
+| `get_planned_processing_states()` | Return every `PLANNED` master for the flow, newest first — backs `nld flow state incremental get-planned`. |
+| `update_plan_state_to_completed(plan_state_uid, executed_by_flow_uid)` | Transition a consumed plan to `COMPLETED`. |
+| `update_plan_state_to_cancelled(plan_state_uid)` | Transition a `PLANNED` plan to `CANCELLED`. |
 
-These dispatch to three backend methods on
-`IncrementalBackendStateManager` — `write_planned_processing_state`,
-`read_planned_processing_state`, `mark_planned_processing_state_completed`
-— which default to `NotImplementedError`, so each backend opts in.
-Following the dual-backend rules in §4.4, reads target the primary
-(then secondary), and secondary writes are best-effort and never abort
-the operation.
+These reach the backend methods on `IncrementalBackendStateManager`:
+`write_planned_processing_state`, `read_planned_processing_state`,
+`list_planned_processing_states`, `mark_planned_processing_state_completed`,
+and `mark_planned_processing_state_cancelled`.
 
-**Cancel-on-supersede.** Writing a new `PLANNED` plan first flips any
-existing `PLANNED` plan for the same flow to `CANCELLED`, then inserts
-the new master row, so the slot holds at most one `PLANNED` plan per
-flow.
+**Lifecycle lives in the base backend manager.**
+`IncrementalBackendStateManager` implements the generic plan lifecycle
+once, driven off the master records: cancel-on-supersede,
+latest-`PLANNED` selection, and the `COMPLETED` / `CANCELLED`
+transitions. A connector backend supplies only the master/detail
+persistence primitives; it does not re-implement the lifecycle. Writing
+a new `PLANNED` plan writes its detail first, then flips every other
+`PLANNED` master for the flow to `CANCELLED`, then writes the new
+master — so the slot holds at most one `PLANNED` plan per flow and a
+reader never sees a `PLANNED` master without its detail.
 
 **Storage layout (master + per-strategy detail).** The slot mirrors
-the live processing-state layout: a single master table/file holds
-lifecycle metadata, and the strategy-specific payload lives in its own
-detail table/file keyed by `plan_state_uid` (a plan is a proposal and
-has no live execution UID yet).
+the live processing-state layout: a master table/file holds lifecycle
+metadata, and the strategy-specific payload lives in its own detail
+table/file keyed by `plan_state_uid`.
 
-- **PostgreSQL** (`core/nld/flow/backend/postgresql/planned_state_mixin.py`):
+- **PostgreSQL** (`core/nld/flow/incremental/backend/postgresql/planned_state_mixin.py`):
   master table `_nld_incremental_plans`; per-strategy detail tables
   named `_nld_incremental_plans_<strategy>_planned_state` (e.g.
   `_nld_incremental_plans_by_key_planned_state`), whose schema mirrors
-  the matching live processing-state table. The cancel + insert pair
-  runs in the same transaction; detail rows are written before the
-  master row so a reader never observes a `PLANNED` master without its
-  detail.
-- **S3 blob** (`core/nld/flow/backend/s3_blob_storage/planned_state_mixin.py`):
+  the matching live processing-state table.
+- **S3 blob** (`core/nld/flow/incremental/backend/s3_blob_storage/planned_state_mixin.py`):
   one folder per plan under `<state-root>/plans/<plan_state_uid>/`,
   with `master.json` plus the strategy-specific detail file.
 
-`mark_planned_processing_state_completed` updates only the master
-record's `status` / `status_changed_at` / `executed_by_flow_uid`; the
-detail rows are preserved so a consumed plan's `processing_state`
-stays auditable.
+Completing or cancelling a plan updates only the master record's
+`status` / `status_changed_at` (and `executed_by_flow_uid` on
+completion); detail rows are preserved so a consumed plan's
+`processing_state` stays auditable.
 
 Which connector/engine combinations implement these methods (and the
 execution-side read accessors) is tabulated in `backends/` (per
@@ -1097,20 +1104,25 @@ class MyDataFlowTask(DataFlowTask):
 
 ### 7.1 Incremental Module
 
-The module is organised under `core/nld/flow/incremental/` into four
-subpackages: `base/` (abstract contracts), `models/` (Pydantic models
-shared across types), `services/` (factory + registry), and `impl/`
-(built-in types).
+The module is organised under `core/nld/flow/incremental/` into five
+subpackages: `models/` (Pydantic models and definitions shared across
+types — state, logic, config, plan), `base/` (abstract managers and SQL
+filter contract), `backend/` (connector-specific planned-state
+persistence mixins), `services/` (factory + registry), and `impl/`
+(built-in types). `models/` is a leaf layer; `base/` depends downward on
+it.
 
 | File | Purpose |
 |------|---------|
-| `base/logic.py` | Abstract `FlowIncrementalLogic`, `FlowIncrementalDefinition` (with step activation flags), and `FlowIncrementalParamDefinition` |
-| `base/manager.py` | Abstract `IncrementalStateManager` and `IncrementalBackendStateManager` |
-| `base/state.py` | Base state classes (`FlowState`, `FlowSourceState`, `FlowProcessingState`) |
+| `base/manager.py` | Abstract `IncrementalStateManager` and `IncrementalBackendStateManager` (the latter also owns the generic planned-state lifecycle, §4.5) |
 | `base/sql_filter_manager.py` | Abstract SQL filter contract for incremental WHERE-clause injection |
+| `models/logic.py` | Abstract `FlowIncrementalLogic`, `FlowIncrementalDefinition` (with step activation flags), and `FlowIncrementalParamDefinition` |
+| `models/state.py` | Base state classes (`FlowState`, `FlowSourceState`, `FlowProcessingState`) |
 | `models/config.py` | `IncrementalConfig` with `strategy`, `persist_initial_processing_state`, `immediate_step_persistence` |
 | `models/manifest.py` | `FlowIncrementalTypeManifest` describing a registered incremental type |
-| `models/plan.py` | `FlowPlannedProcessingState`, `FlowPlannedProcessingStateResult`, `IncrementalPlanStatus` for the planned-state slot (§4.5) |
+| `models/plan.py` | `FlowPlannedProcessingStateMaster`, `FlowPlannedProcessingState`, `IncrementalPlanStatus` for the planned-state slot (§4.5) |
+| `backend/postgresql/planned_state_mixin.py` | `PostgreSQLPlannedStateMixin` — master/detail persistence primitives for the planned-state slot on PostgreSQL |
+| `backend/s3_blob_storage/planned_state_mixin.py` | `S3PlannedStateMixin` — master/detail persistence primitives for the planned-state slot on S3 |
 | `models/referential.py` | Enums for states, selections, granularities |
 | `models/events.py`, `models/request.py`, `models/constants.py` | Shared events, request, and constant models |
 | `services/factory.py` | `IncrementalStateManagerFactory` — resolves logic/manager/backend through the registry with engine resolution |

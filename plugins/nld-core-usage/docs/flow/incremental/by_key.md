@@ -36,6 +36,9 @@ Backend modules live under `core/nld/flow/incremental/impl/by_key/backend/`.
   `S3PlannedStateMixin`, one folder per plan under
   `<state-root>/plans/<plan_state_uid>/`). On S3 the planned-state
   write works even though the live-state `get-state` accessors do not.
+- **`get-planned`** (`nld flow state incremental get-planned`) lists the
+  PLANNED plans from the same slot, so it is available on the same
+  backends as `compute --persist` (PostgreSQL and S3).
 
 For the connector-by-connector view, see
 [`../backends/`](../backends/README.md).
