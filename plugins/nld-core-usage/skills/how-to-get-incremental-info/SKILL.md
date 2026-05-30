@@ -228,12 +228,18 @@ nld flow state incremental compute --name <flow> [--namespace <ns>]
                                    [--source-request-authorized]
                                    [--format text|json]
                                    [--output] [--override-output-folder-path <dir>]
+                                   [<extra-incremental-options>]
 ```
 
 `compute` never writes the live processing-state slot and never records
 execution-history rows. It builds a fully-initialised `DataFlowTask`
 through the same executor a real run uses, so per-flow connectors and
 state-manager wiring are identical to execution.
+
+Unknown options (e.g. `--limit`, `--keys`, `--full`) pass through to
+the underlying `DataFlowTask` the same way `nld flow execute` accepts
+them, so the computed plan reflects the parameters the next execution
+would resolve.
 
 ### Flags
 
