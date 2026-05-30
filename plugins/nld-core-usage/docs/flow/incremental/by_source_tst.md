@@ -31,8 +31,9 @@ Backend modules live under
 - **`get-state`** — `get_processing_state` /
   `get_post_processing_state` are implemented on PostgreSQL only.
 - **`compute --persist`** — available on PostgreSQL only (via
-  `PostgreSQLPlannedStateMixin`, tables `_nld_incremental_plans` +
-  `_nld_incremental_plans_by_source_tst_planned_state`).
+  `PostgreSQLIncrementalBackendMixin`, table `_nld_incremental_plans`
+  for state plans + `_nld_incremental_plans_by_source_tst_planned_state`
+  for the processing-state payload).
 - **`get-planned`** (`nld flow state incremental get-planned`) lists the
   PLANNED plans from the same slot, so it is likewise available on
   PostgreSQL only.

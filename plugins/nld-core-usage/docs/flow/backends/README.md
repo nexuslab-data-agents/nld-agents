@@ -56,7 +56,7 @@ available`.
 | `nld flow state execution get-steps` | Execution | `get_execution_history(limit=1)` then reads `info.steps` |
 | `nld flow state incremental get-state` | Incremental | `get_processing_state`, `get_post_processing_state` |
 | `nld flow state incremental compute` | Incremental | `compute_incremental_state` (in memory, via `retrieve_current_state`); `--persist` adds `save_planned_processing_state` → `write_planned_processing_state` |
-| `nld flow state incremental get-planned` | Incremental | `get_planned_processing_states` → `list_planned_processing_states` (lists PLANNED plan masters) |
+| `nld flow state incremental get-planned` | Incremental | `get_planned_processing_states` → `read_planned_processing_states` (lists `PLANNED` state plans for the flow, newest first) |
 
 See the `how-to-get-incremental-info` and `how-to-get-execution-info`
 skills for the CLI flags and output shapes.

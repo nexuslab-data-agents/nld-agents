@@ -97,11 +97,12 @@ core/nld/flow/incremental/
 │   ├── request.py
 │   └── constants.py
 ├── base/                                # abstract managers + SQL filter (depends downward on models)
-│   ├── manager.py                       # IncrementalStateManager, IncrementalBackendStateManager (+ planned-state lifecycle)
+│   ├── manager.py                       # IncrementalStateManager (owns planned-state lifecycle), IncrementalBackendStateManager (persistence primitives)
 │   └── sql_filter_manager.py
-├── backend/                             # connector-specific planned-state persistence mixins
-│   ├── postgresql/planned_state_mixin.py
-│   └── s3_blob_storage/planned_state_mixin.py
+├── backend/                             # connector-specific planned-state persistence
+│   ├── plan.py                          # BackendStatePlanRow + state_plan_to_row / row_to_state_plan helpers
+│   ├── postgresql/backend_mixin.py      # PostgreSQLIncrementalBackendMixin (state-plan I/O)
+│   └── s3_blob_storage/backend_mixin.py # S3IncrementalBackendMixin (state-plan I/O)
 ├── services/
 │   ├── factory.py                       # resolves a name to its logic/manager/backend via the registry
 │   └── registry.py                      # FlowIncrementalTypeRegistry + get_flow_incremental_type_registry()
