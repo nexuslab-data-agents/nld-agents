@@ -57,10 +57,22 @@ skill.
 - The flow must have a `state_backend_connector` configured (inline or
   via the project-level default in `config/flow.yaml`); otherwise the
   CLI raises a clear RuntimeError.
-- The connection referenced by `state_backend_connector.primary` must
-  resolve to a backend that implements the read accessors. **PostgreSQL
-  is the only fully-supported backend today**; other backends inherit
-  a `NotImplementedError` default.
+- `get-state` and `--include-post-processing` need
+  `get_processing_state` / `get_post_processing_state` on the primary
+  backend. PostgreSQL implements both; the other backends inherit a
+  `NotImplementedError` default on the live-state read accessors.
+- `compute` (read-only) runs wherever the flow runs — it resolves the
+  next processing state in memory from `retrieve_current_state`. The
+  CLI prints "not supported" for `no_increment` flows because the
+  strategy has no processing state to compute.
+- `compute --persist` and `get-planned` require both layers of
+  planned-state support: the strategy's
+  `FlowIncrementalDefinition.supports_planned_state` (set on `by_key`
+  and `by_source_tst`) **and** the backend's
+  `IncrementalBackendStateManager.supports_planned_state` (set on
+  PostgreSQL and S3). When either layer is off the CLI emits a "not
+  supported" notice and `--persist` returns `persisted=False` instead
+  of letting the backend read raise.
 
 ---
 
@@ -264,9 +276,14 @@ processing-state slot a running flow reads and writes**, on the
 **primary** state backend only. A plan carries a lifecycle `status` of
 `PLANNED`, `CANCELLED`, or `COMPLETED`; writing a new plan flips any
 prior `PLANNED` plan for the same flow to `CANCELLED`, so at most one
-`PLANNED` plan exists per flow at a time. Persisting is supported on the
-PostgreSQL and S3 backends. See `guide-incremental` §4.5 "Planned-state
-slot" for the storage layout and lifecycle.
+`PLANNED` plan exists per flow at a time. Persisting requires both
+`supports_planned_state=True` on the incremental definition
+(strategies `by_key` and `by_source_tst`) and on the primary backend
+(PostgreSQL and S3 mixins). When either layer is off, `--persist`
+prints `persisted=False` and `get-planned` reports "Planned states are
+not supported for this flow" instead of attempting a backend read. See
+`execution-and-incremental-design.md` §4.5 "Planned-state slot" for the
+storage layout, lifecycle, and per-strategy freshness rules.
 
 List the plans recorded for a flow with `get-planned`:
 
@@ -277,6 +294,30 @@ nld flow state incremental get-planned --name daily_sales_refresh
 It returns each `PLANNED` plan's lifecycle metadata (`plan_state_uid`,
 `status`, `strategy`, `computed_at`, `requestor`, …), newest first —
 the same backends that accept `--persist` back this listing.
+
+### Consuming a plan from `nld flow execute`
+
+`nld flow execute --planned-state-strategy` selects how the next run
+treats a `PLANNED` plan in the slot. Choices:
+
+| Value | Behaviour |
+|-------|-----------|
+| `auto` (default) | Adopt the plan when `is_planned_processing_state_fresh` returns `True`; recompute otherwise. |
+| `recompute` | Ignore the planned-state slot entirely; always recompute. |
+| `trust` | Adopt the plan as-is, without the freshness check. |
+| `strict` | Require a fresh plan: raise `NoPlannedStateException` (code `42002`) when no plan exists, `StalePlannedStateException` (code `42003`) when the plan is stale. |
+
+On a successful run, the consumed plan transitions to `COMPLETED` and
+its `executed_by_flow_uid` is set to the run's `flow_uid`; a failed run
+leaves the plan `PLANNED` so the next run can retry it. The strategy
+flag has no effect when planned-state support is off on either layer.
+
+`nld flow execute --state-compute-only` is the execute-side equivalent
+of `nld flow state incremental compute --persist`: it computes and
+persists a `PLANNED` plan without running the flow, requires `--name`,
+and is incompatible with `--downstream` / `--upstream`. Source-side
+queries (for strategies with `requires_source_state_retrieval`) are
+pre-authorised because no target data is written.
 
 ### Recipes
 
@@ -338,22 +379,37 @@ where flow_namespace = 'source.raw'
 
 ### BigQuery / Snowflake / DuckDB
 
-The shared abstract accessors are in place but the concrete read
-implementations have not been wired yet. The CLI raises
-`NotImplementedError` for these backends. Read via the connector's
-native CLI against the same table names until that work lands.
+The shared abstract accessors for the live processing-state and
+post-processing-state tables are in place but the concrete read
+overrides have not been wired, so `get-state` raises
+`NotImplementedError` on these backends. Read via the connector's
+native CLI against the same table names. `compute` (read-only) still
+works through `retrieve_current_state`; `--persist` is unavailable
+because these backends do not opt into `supports_planned_state`.
 
 ### S3 blob / local file
 
-State lives as JSON artifacts on the connector's root path (for S3,
-`<root>` is the backend's `s3_root_path`, derived from the flow's
-`S3Structure` target by `determine_parameters_for_flow_definition` —
-composed `s3_root_prefix` + `s3_folder_path`):
+State lives as artifacts on the connector's root path. For S3,
+`<state-root>` is `<s3_root_path>/state/`, with `s3_root_path` derived
+from the flow's `S3Structure` target by
+`determine_parameters_for_flow_definition` — composed `s3_root_prefix`
++ `s3_folder_path`.
 
 - processing state:
-  `<root>/state/<flow_uid>/processed_state.json`
+  `<state-root>/<flow_uid>/processed_state.<json|parquet>`
 - post-processing state:
-  `<root>/state/<incremental_type>_state.json`
+  `<state-root>/<incremental_type>_state.<json|parquet>`
+- state-plan index (all plans for the flow, keyed by `plan_state_uid`):
+  `<state-root>/state_plans.<json|parquet>`
+- per-plan processing-state payload (one folder per plan):
+  `<state-root>/plans/<plan_state_uid>/<strategy>_planned_processing_state.<json|parquet>`
+
+`file_format` on the connector's `params` controls the extension and
+the encoding (JSON writes the full Pydantic envelope; parquet writes
+rows against the schema returned by `get_state_plans_index_schema()` /
+`get_<strategy>_processing_state_schema()`, with the envelope
+`flow_uid` / `strategy` carried in PyArrow schema metadata). The S3
+mixin assumes a single writer per flow on the index file.
 
 ---
 
@@ -408,11 +464,15 @@ miss the post-processing state entirely. See `guide-incremental` §4.4
 ## Cross-references
 
 - Architectural reference: `guide-incremental` (state classes, processing
-  lifecycle, factory pattern, backend implementations). Section 4.4
-  "Dual State Backend (Primary + Optional Secondary)" covers what
-  mirrors and what doesn't; section 4.5 "Planned-state slot" covers the
-  storage layout and lifecycle behind `compute --persist`.
+  lifecycle, factory pattern, backend implementations). The bundled
+  `execution-and-incremental-design.md` covers §4.4 "Dual State
+  Backend (Primary + Optional Secondary)" — what mirrors and what
+  doesn't — and §4.5 "Planned-state slot" — strategy/backend opt-in,
+  per-strategy freshness, storage layout, and the
+  `--planned-state-strategy` interaction.
 - For execution state (separate from incremental state):
   `how-to-get-execution-info`.
 - For choosing or configuring an incremental type for a *new* flow:
   `how-to-determine-incremental-strategy`.
+- For authoring an external incremental type that opts into plans:
+  `how-to-create-a-new-incremental-type`.

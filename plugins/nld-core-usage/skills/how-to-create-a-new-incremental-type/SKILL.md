@@ -84,7 +84,23 @@ deployment needs the others.
    names from the resolved logic. A parameter missing from
    `param_definitions` is silently dropped at runtime.
 
-3. **Wire the backend.** Place at minimum `base_with_<engine>.py`
+3. **Decide on planned-state support.** `FlowIncrementalDefinition.supports_planned_state`
+   defaults to `False`. Set it `True` on the definition when the
+   strategy can produce a `PLANNED` processing state that a later run
+   adopts via `nld flow execute --planned-state-strategy`, and override
+   `IncrementalStateManager.is_planned_processing_state_fresh` on the
+   state manager when a baseline can supersede an earlier plan (the
+   base returns `True`; `by_source_tst` checks DELTA /
+   BACKFILL_DELTA window invariants against the persisted watermark,
+   `by_key` keeps every plan fresh). Backends inherit the
+   `supports_planned_state=True` from `PostgreSQLIncrementalBackendMixin`
+   and `S3IncrementalBackendMixin`; a custom backend mixin must set
+   the `ClassVar` itself to be plan-capable. The `nld flow state
+   incremental compute --persist`, `nld flow execute
+   --state-compute-only`, and `nld flow state incremental get-planned`
+   commands gate on the AND of the strategy and backend layers.
+
+4. **Wire the backend.** Place at minimum `base_with_<engine>.py`
    (abstract) plus one concrete `<backend_type>_with_<engine>.py` per
    supported pair. Each concrete subclass overrides
    `retrieve_current_state`, `get_processing_state`,
@@ -97,7 +113,7 @@ deployment needs the others.
    from `S3Structure`, and the override is shared by execution and
    incremental S3 backends.
 
-4. **Register in `nld_project.yml`.**
+5. **Register in `nld_project.yml`.**
 
    ```yaml
    additional_incremental_types:
@@ -112,7 +128,7 @@ deployment needs the others.
    paths, and templates missing `{backend_type}` or `{engine}`) and
    registers it. A duplicate name raises `NldProjectError`.
 
-5. **Verify registration.**
+6. **Verify registration.**
 
    ```bash
    nld project info
@@ -123,7 +139,7 @@ deployment needs the others.
    any flow definition's `incremental.type:` field once the registration
    succeeds.
 
-6. **Smoke test.** Point a flow's `incremental.type` at the new name,
+7. **Smoke test.** Point a flow's `incremental.type` at the new name,
    run it with `nld flow run`, and inspect `nld flow state incremental
    get-state` to confirm the persisted watermark advances as expected.
 
