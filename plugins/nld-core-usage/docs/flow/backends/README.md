@@ -104,9 +104,15 @@ JSON column) and rehydrate them on read.
 from `retrieve_current_state`, so it is available wherever the flow
 runs. `get-state` needs the `get_processing_state` /
 `get_post_processing_state` accessors, implemented on PostgreSQL only.
-`compute --persist` needs the planned-state write surface. `get-planned`
-reads the same planned-state slot, so it tracks the `compute --persist`
-column exactly.
+`compute --persist` needs the planned-state write surface, gated on
+both `FlowIncrementalDefinition.supports_planned_state` (strategy
+layer; `by_key` and `by_source_tst` opt in) and
+`IncrementalBackendStateManager.supports_planned_state` (backend
+layer; `PostgreSQLIncrementalBackendMixin` and
+`S3IncrementalBackendMixin` opt in). `get-planned` and
+`nld flow execute --planned-state-strategy` /
+`--state-compute-only` read or write the same slot, so they share the
+`compute --persist` column.
 
 | Strategy | Connector / engine | Flow execution | `get-state` | `compute` | `compute --persist` |
 |----------|--------------------|:--------------:|:-----------:|:---------:|:-------------------:|

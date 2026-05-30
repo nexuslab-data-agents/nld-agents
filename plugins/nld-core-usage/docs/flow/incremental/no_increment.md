@@ -27,9 +27,12 @@ inherits the pydantic pass-through).
   the read accessors raise `NotImplementedError`.
 - **`compute`** — runs and resolves to an empty processing state; the
   CLI reports that there is nothing to compute.
-- **`compute --persist`** — there is no planned-state slot for
-  `no_increment`; with no processing state to persist, the command
-  records nothing.
+- **`compute --persist`** — `no_increment` keeps
+  `supports_planned_state=False`, so the strategy never persists a
+  plan. `--persist` returns `persisted=False` and `get-planned` prints
+  "Planned states are not supported for this flow" — for both the live
+  CLI and the equivalent `nld flow execute --state-compute-only`
+  short-circuit.
 
 For the connector-by-connector view, see
 [`../backends/`](../backends/README.md).

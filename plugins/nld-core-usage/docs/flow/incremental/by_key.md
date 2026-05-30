@@ -34,13 +34,21 @@ Backend modules live under `core/nld/flow/incremental/impl/by_key/backend/`.
   `PostgreSQLIncrementalBackendMixin`, table `_nld_incremental_plans`
   for state plans + `_nld_incremental_plans_by_key_planned_state` for
   the processing-state payload) and on S3 (via
-  `S3IncrementalBackendMixin`, one folder per plan under
-  `<state-root>/plans/<plan_state_uid>/` with `state_plan.json` +
-  `by_key_planned_state.json`). On S3 the planned-state write works
-  even though the live-state `get-state` accessors do not.
+  `S3IncrementalBackendMixin`, single index file
+  `<state-root>/state_plans.<json|parquet>` for state-plan metadata
+  plus per-plan
+  `<state-root>/plans/<plan_state_uid>/by_key_planned_processing_state.<json|parquet>`
+  for the processing-state payload). On S3 the planned-state write
+  works even though the live-state `get-state` accessors do not.
 - **`get-planned`** (`nld flow state incremental get-planned`) lists the
   PLANNED plans from the same slot, so it is available on the same
   backends as `compute --persist` (PostgreSQL and S3).
+- **Planned-state freshness** — `by_key` overrides
+  `is_planned_processing_state_fresh` to return `True` for every plan:
+  a plan may legitimately re-request a key that a later run already
+  processed, so the baseline state cannot make a key plan stale. This
+  makes `--planned-state-strategy auto` behave like `trust` for
+  `by_key`.
 
 For the connector-by-connector view, see
 [`../backends/`](../backends/README.md).

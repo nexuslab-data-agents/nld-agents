@@ -43,12 +43,20 @@ Backend modules: `impl/by_key/backend/s3_blob_storage_base.py`,
 - **`compute`** — resolves the next run's processing state in memory
   from `retrieve_current_state`.
 - **`compute --persist`** and **`get-planned`** — the `by_key` S3 base
-  mixes in `S3IncrementalBackendMixin`, which provides the state-plan
-  persistence for the planned-state slot: one plan folder per
-  `plan_state_uid` under `<state-root>/plans/<plan_state_uid>/`, with
-  the state plan written to `state_plan.json`. The per-strategy backend
-  writes the processing-state payload as a sibling file in the same
-  folder (`by_key_planned_state.json`). The plan lifecycle
+  mixes in `S3IncrementalBackendMixin`, which persists all state-plan
+  metadata for the flow in a single index file at
+  `<state-root>/state_plans.<json|parquet>`, keyed by
+  `plan_state_uid`. `read_state_plan` / `read_state_plans` resolve to
+  one S3 GET regardless of plan-history length;
+  `write_state_plan` is a single read-modify-write on the index, and
+  the mixin assumes a single writer per flow. The per-strategy backend
+  writes the processing-state payload as a per-plan file under
+  `<state-root>/plans/<plan_state_uid>/by_key_planned_processing_state.<json|parquet>`.
+  `file_format` on the connector's `params` controls both file
+  extensions: `json` writes the full Pydantic envelope; `parquet`
+  writes rows against `get_state_plans_index_schema()` /
+  `get_by_key_processing_state_schema()` with the envelope `flow_uid`
+  / `strategy` carried in PyArrow schema metadata. The plan lifecycle
   (cancel-on-supersede, COMPLETED / CANCELLED transitions) lives on
   `IncrementalStateManager`. See
   `../execution-and-incremental-design.md` §4.5.

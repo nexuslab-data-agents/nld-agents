@@ -149,29 +149,31 @@ sequenceDiagram
     end
 
     rect rgb(230, 255, 230)
-        Note right of Task: compute_incremental_state()<br/>Skipped entirely when<br/>tracks_state = False.
+        Note right of Task: get_incremental_state()<br/>Skipped entirely when<br/>tracks_state = False.
 
         alt tracks_state = True
-            Task->>StateManager: get_latest_incremental_state()
-            StateManager->>Incr: get_latest_incremental_state()
-            Incr->>IncrBE: retrieve_current_state()
-            IncrBE-->>Incr: FlowState (e.g. last_pull_to_timestamp)
+            alt supports_planned_state AND backend_supports_planned_state<br/>AND --planned-state-strategy ≠ RECOMPUTE
+                Task->>StateManager: get_planned_processing_state()
+                StateManager->>Incr: get_planned_processing_state()
+                Incr->>IncrBE: read_state_plan + read_planned_processing_state
+                IncrBE-->>Incr: FlowPlannedProcessingState | None
 
-            alt requires_source_state_retrieval = True
-                Task->>Task: retrieve_source_state()
+                alt plan available AND (TRUST OR is_planned_processing_state_fresh)
+                    Task->>StateManager: use_planned_processing_state(plan)
+                    StateManager->>Incr: use_planned_processing_state(plan)
+                    Note right of Incr: Adopts the plan's processing<br/>state and records the plan
+                else plan missing under STRICT
+                    Task->>Task: raise NoPlannedStateException
+                else plan stale under STRICT
+                    Task->>Task: raise StalePlannedStateException
+                else otherwise
+                    Task->>Task: compute_incremental_state()
+                end
+            else otherwise
+                Task->>Task: compute_incremental_state()
             end
 
-            alt tracks_logical_deletion = True
-                Task->>Task: determine_logically_deleted_entries()
-            end
-
-            Task->>StateManager: init_processing_state()
-            StateManager->>Incr: init_processing_state()
-            Note right of Incr: Creates empty ProcessingState<br/>with flow_uid and strategy
-
-            Task->>StateManager: update_processing_state()
-            StateManager->>Incr: update_processing_state()
-            Note right of Incr: Computes timestamp range or<br/>key decisions based on strategy<br/>and latest state
+            Note right of Task: compute_incremental_state()<br/>resolves the processing state<br/>from retrieve_current_state →<br/>optional retrieve_source_state →<br/>optional determine_logically_<br/>deleted_entries →<br/>determine_processing_state.
         end
     end
 
@@ -284,6 +286,15 @@ sequenceDiagram
   logical deletion determination within the state block. When `False`
   (e.g. `by_source_tst`), that step is skipped since timestamp-based
   incremental processing has no concept of logical deletion.
+- **Planned-state consumption** is controlled by
+  `supports_planned_state` on `FlowIncrementalDefinition` (and the
+  matching `supports_planned_state` ClassVar on
+  `IncrementalBackendStateManager`). When both are `True`,
+  `get_incremental_state` consults the planned-state slot per
+  `--planned-state-strategy`; otherwise it always falls through to
+  `compute_incremental_state`. A consumed plan is transitioned to
+  `COMPLETED` in `post_processing_for_plan` after a successful run; a
+  failed run leaves it `PLANNED` so the next run can retry it.
 
 ---
 
@@ -456,17 +467,39 @@ steps that have no meaningful work for a given incremental type.
 | `tracks_state` | All state steps: retrieve incremental state, determine/save processing state, post-processing for state | `True` | `False` | `True` | `True` |
 | `tracks_logical_deletion` | Determine logically deleted entries (only evaluated when `tracks_state` is `True`) | `True` | `False` | `False` | `True` |
 | `requires_source_state_retrieval` | Call `retrieve_source_state()` (only evaluated when `tracks_state` is `True`) | `False` | `False` | `False` | `True` |
+| `supports_planned_state` | Strategy can produce a `PLANNED` precomputed processing state (consumed by `--planned-state-strategy` on `nld flow execute`, written by `nld flow state incremental compute --persist`) | `False` | `False` | `True` | `True` |
 
 Each incremental definition overrides only the flags whose default does
 not match. `tracks_state` and `tracks_logical_deletion` default to
-`True`; `requires_source_state_retrieval` defaults to `False` because
-most incremental types compute their state purely from the persisted
-watermark and do not enumerate the source.
+`True`; `requires_source_state_retrieval` and `supports_planned_state`
+default to `False` so a new incremental type opts in explicitly when it
+implements the corresponding entry points.
 
-The flags are checked in `DataFlowTask.compute_incremental_state()` and
+The flags are checked in `DataFlowTask.get_incremental_state()` (the
+single entry point invoked from `pre_processing()`) and
 `DataFlowTask.post_processing()`:
 
 ```python
+def get_incremental_state(self) -> None:
+    definition = self.incremental_definition
+    if not definition.tracks_state:
+        return
+
+    # Plans require both the strategy and the backend to opt in.
+    # When either is off, recompute the processing state directly.
+    if (
+        not definition.supports_planned_state
+        or not self.state_manager.backend_supports_planned_state
+    ):
+        self.compute_incremental_state()
+        return
+
+    # Honour --planned-state-strategy (PlannedStateStrategy.{AUTO, TRUST,
+    # RECOMPUTE, STRICT}); RECOMPUTE skips the planned-state slot, AUTO
+    # adopts a fresh plan and falls back to compute, TRUST adopts the
+    # plan as-is, STRICT fails when no plan exists or the plan is stale.
+    ...
+
 def compute_incremental_state(self, save_step_log_to_backend: bool = True) -> None:
     definition = self.incremental_definition
     if not definition.tracks_state:
@@ -504,9 +537,18 @@ def post_processing(self) -> None:
         and not self.state_manager.was_partial_state_persistence_used()
     ):
         self.post_processing_for_state()
+    self.post_processing_for_plan()
     self.post_processing_for_execution()
     self.post_processing_at_end()
 ```
+
+`get_incremental_state` is the orchestrating entry point: it picks
+between consuming a `PLANNED` plan and recomputing the processing
+state. `compute_incremental_state` keeps the pure recompute pipeline
+and is what `get_incremental_state` falls back to when plans are off,
+when no plan exists under AUTO/RECOMPUTE, or when an AUTO plan turns
+out to be stale. `post_processing_for_plan` transitions a consumed plan
+to `COMPLETED` on a successful run (see §4.5).
 
 `determine_processing_state` is a pure computation step: it calls
 `state_manager.init_processing_state()` followed by
@@ -823,11 +865,30 @@ target connector (e.g. S3) without making the target the source of truth.
 
 The planned-state slot stores a **precomputed processing state** —
 the work a flow's next run would do, resolved without starting the
-run. It is independent of the live processing-state slot a running
-flow reads and writes: persisting a plan never touches the live slot,
-and a running flow never reads the planned slot. `nld flow state
-incremental compute --persist` is the writer (see the
-`how-to-get-incremental-info` skill).
+run. It is independent of the live processing-state slot: persisting
+a plan never touches the live slot, and a recomputing run never
+reads the planned slot. The writers are `nld flow state incremental
+compute --persist` and the equivalent `nld flow execute
+--state-compute-only` short-circuit; `nld flow execute
+--planned-state-strategy` controls how a subsequent run consumes the
+plan (see the `how-to-get-incremental-info` skill).
+
+**Two-layer opt-in.** Planned-state engagement is gated on both the
+strategy and the backend; either off means a plan can never exist for
+that flow.
+
+| Layer | Field | Default | Built-in / mixin values |
+|-------|-------|---------|-------------------------|
+| Strategy | `FlowIncrementalDefinition.supports_planned_state` | `False` | `by_key=True`, `by_source_tst=True`, `no_increment=False` |
+| Backend | `IncrementalBackendStateManager.supports_planned_state` (`ClassVar[bool]`) | `False` | `PostgreSQLIncrementalBackendMixin=True`, `S3IncrementalBackendMixin=True`; other backends inherit `False` |
+
+`FlowStateManager.backend_supports_planned_state` exposes the backend
+layer to callers; `True` requires a primary incremental backend that
+opts in. `nld flow execute --planned-state-strategy`,
+`nld flow state incremental compute --persist`, and
+`nld flow state incremental get-planned` all check the AND of the two
+layers and emit a "not supported" notice when the result is `False`,
+instead of letting the backend read raise.
 
 **Model.** Two records in `core/nld/flow/incremental/models/plan.py`:
 
@@ -865,8 +926,32 @@ backend manager):
 | `save_planned_processing_state(processing_flow_state, plan_state_uid, computed_at, requestor=None)` | Build the `PLANNED` plan and persist it. The strategy-specific processing state is written first; every other `PLANNED` state plan for the flow is then transitioned to `CANCELLED`; finally that state plan is written. |
 | `get_planned_processing_state(plan_state_uid=None)` | Return the named plan, or the latest `PLANNED` plan by `computed_at`, as a `FlowPlannedProcessingState` (or `None`). Assembled from a state plan + its processing-state payload via `definition.planned_processing_state_class`. |
 | `get_planned_processing_states()` | Return every `PLANNED` state plan for the flow, newest first — backs `nld flow state incremental get-planned`. |
-| `update_plan_state_to_completed(plan_state_uid, executed_by_flow_uid)` | Transition a consumed plan to `COMPLETED`. |
+| `is_planned_processing_state_fresh(planned_processing_state)` | Whether a plan is still consistent with the latest baseline. The default returns `True`; strategies whose processing state derives from the latest incremental state override it (see "Per-strategy freshness" below). Consulted by AUTO and STRICT modes of `--planned-state-strategy`. |
+| `use_planned_processing_state(planned_processing_state)` | Adopt the plan as the live processing state for this run, record it on the state manager as `used_planned_processing_state`, and propagate its pull timestamps to the current `FlowExecutionInfo` (mirrors `update_processing_state`). |
+| `update_plan_state_to_completed(plan_state_uid, executed_by_flow_uid)` | Transition a consumed plan to `COMPLETED`. Invoked by `DataFlowTask.post_processing_for_plan` on success. |
 | `update_plan_state_to_cancelled(plan_state_uid)` | Transition a `PLANNED` plan to `CANCELLED`. |
+| `used_planned_processing_state` (property) | The plan adopted by `use_planned_processing_state`, or `None`. Drives `post_processing_for_plan` and is also surfaced for renderers. |
+| `backend_supports_planned_state` (property) | Backend-layer capability (`IncrementalBackendStateManager.supports_planned_state`); `False` when there is no primary backend at all. |
+
+**Per-strategy freshness.** `is_planned_processing_state_fresh`
+defaults to `True` so a strategy with explicit windows (no implicit
+baseline) is always fresh. The built-ins override it:
+
+- `by_key` — every plan is considered fresh: a plan may legitimately
+  re-request a key that a later run already processed, so the baseline
+  state cannot make a key plan stale.
+- `by_source_tst` — `BACKFILL` and `FULL` plans (explicit windows) are
+  always fresh. `BACKFILL_DELTA` plans are fresh only when the plan's
+  `status_changed_at` is later than the baseline
+  `last_pull_to_timestamp`. `DELTA` plans require the same condition
+  *and* equality between the plan's `pull_from_timestamp` and the
+  baseline watermark (DELTA derives its window from it). A `None`
+  baseline (first run) makes every plan fresh by definition.
+
+`NoPlannedStateException` (code `42002`) and
+`StalePlannedStateException` (code `42003`) are raised by
+`get_incremental_state` under STRICT mode when no plan is available or
+the available plan is stale.
 
 **Backend surface.** `IncrementalBackendStateManager` exposes one
 composed read plus two sets of opt-in primitives:
@@ -914,10 +999,24 @@ processing state lives in its own per-strategy slot keyed by
   mirrors the matching live processing-state table.
 - **S3 blob** — connector mixin `S3IncrementalBackendMixin`
   (`core/nld/flow/incremental/backend/s3_blob_storage/backend_mixin.py`)
-  persists state plans to
-  `<state-root>/plans/<plan_state_uid>/state_plan.json`. The
-  per-strategy backend writes the processing-state payload as a sibling
-  file in the same folder (`by_key_planned_state.json` for `by_key`).
+  persists all state-plan metadata for a flow in a single index file
+  at `<state-root>/state_plans.<ext>`, keyed by `plan_state_uid` and
+  encoded per the connector's `file_format` (`json` writes the full
+  Pydantic envelope; `parquet` writes a rows table against
+  `get_state_plans_index_schema()`, derived from `BackendStatePlanRow`
+  via `PyArrowPydanticStructureMapper`). `read_state_plan` and
+  `read_state_plans` resolve to one S3 GET regardless of plan-history
+  length; `write_state_plan` is a single read-modify-write on the
+  index. The mixin assumes a single writer per flow, matched by the
+  cancel-on-supersede ordering in `IncrementalStateManager`. The
+  per-strategy backend writes the processing-state payload as a
+  per-plan file under `<state-root>/plans/<plan_state_uid>/` — for
+  `by_key`, `by_key_planned_processing_state.<ext>` — with the same
+  `file_format` dispatch (JSON writes the full envelope; parquet
+  writes a per-key rows table against
+  `get_by_key_processing_state_schema()` and carries the envelope
+  `flow_uid` / `strategy` in PyArrow schema metadata so it
+  round-trips losslessly).
 
 Completing or cancelling a plan updates only the state-plan record's
 `status` / `status_changed_at` (and `executed_by_flow_uid` on

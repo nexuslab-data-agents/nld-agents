@@ -37,6 +37,15 @@ Backend modules live under
 - **`get-planned`** (`nld flow state incremental get-planned`) lists the
   PLANNED plans from the same slot, so it is likewise available on
   PostgreSQL only.
+- **Planned-state freshness** — `by_source_tst` overrides
+  `is_planned_processing_state_fresh`. `BACKFILL` and `FULL` plans
+  (explicit windows) are always fresh. `BACKFILL_DELTA` plans are
+  fresh only when `status_changed_at > last_pull_to_timestamp`. `DELTA`
+  plans require that condition *and* equality between the plan's
+  `pull_from_timestamp` and the baseline watermark, because DELTA
+  derives its window from it. A `None` baseline (first run) treats
+  every plan as fresh. `--planned-state-strategy strict` raises
+  `StalePlannedStateException` when the check fails.
 
 For the connector-by-connector view, see
 [`../backends/`](../backends/README.md).

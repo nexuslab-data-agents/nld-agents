@@ -74,6 +74,7 @@ BY_SOURCE_TST_WITH_DAYS_FROM_INCREMENTAL_DEFINITION = FlowIncrementalDefinition(
     auto_processing_state_transition=True,
     partial_state_persistence=False,
     tracks_logical_deletion=False,
+    supports_planned_state=True,
     param_definitions=[
         FULL_FLAG_PARAM,
         PULL_FROM_PARAM,

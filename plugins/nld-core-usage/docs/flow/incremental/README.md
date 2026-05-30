@@ -29,10 +29,15 @@ Each strategy page reports availability against four axes:
   `--persist`; resolves the next run's processing state in memory from
   `retrieve_current_state`, so it is available wherever the flow runs.
 - **`compute --persist`** — adds a planned-state write
-  (`write_planned_processing_state`); requires a planned-state backend
-  surface. `nld flow state incremental get-planned` (list PLANNED plans)
-  reads the same slot, so it has the same availability as `compute
-  --persist`.
+  (`write_planned_processing_state`); requires
+  `supports_planned_state=True` on both the strategy
+  (`FlowIncrementalDefinition`) and the primary backend
+  (`IncrementalBackendStateManager`). When either layer is off the
+  CLI returns `persisted=False` instead of attempting the write.
+  `nld flow state incremental get-planned` (list PLANNED plans) and
+  `nld flow execute --state-compute-only` / `--planned-state-strategy`
+  consume the same slot, so they share availability with
+  `compute --persist`.
 
 ## Legend
 

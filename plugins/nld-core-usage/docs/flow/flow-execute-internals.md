@@ -264,10 +264,16 @@ flowchart TD
     R[DataFlowTask.run] --> P1[pre_processing]
     P1 --> P1a[pre_processing_at_start<br/>subclass hook]
     P1a --> P1b[get_latest_execution_state<br/>state_manager.get_latest_execution_state]
-    P1b --> P1c{compute_incremental_state<br/>tracks_state?}
-    P1c -->|yes| P1d[retrieve_latest_incremental_state<br/>retrieve_source_state (if requires_source_state_retrieval)<br/>determine_logically_deleted_entries<br/>determine_processing_state<br/>persist_initial_processing_state (if configured)]
+    P1b --> P1c{get_incremental_state<br/>tracks_state?}
     P1c -->|no| P2
-    P1d --> P2[state_manager.save_execution_start]
+    P1c -->|yes| P1d{supports_planned_state<br/>AND backend_supports_planned_state<br/>AND strategy ≠ RECOMPUTE?}
+    P1d -->|no| P1f[compute_incremental_state<br/>retrieve_latest_incremental_state<br/>+ optional retrieve_source_state<br/>+ optional determine_logically_deleted_entries<br/>+ determine_processing_state<br/>+ persist_initial_processing_state if configured]
+    P1d -->|yes| P1e{plan available<br/>AND (TRUST OR is_planned_processing_state_fresh)?}
+    P1e -->|yes| P1g[use_planned_processing_state<br/>adopt plan as processing state]
+    P1e -->|no, STRICT| P1h[raise No/StalePlannedStateException]
+    P1e -->|no, AUTO| P1f
+    P1f --> P2[state_manager.save_execution_start]
+    P1g --> P2
     P2 --> RF[run_flow<br/>subclass implementation]
     RF -->|success| RU[update_execution_status_to_completed]
     RF -->|exception| RF2[update_execution_status_to_failed]
@@ -275,13 +281,34 @@ flowchart TD
     RF2 --> POST
     POST --> POST1{tracks_state<br/>and not partial<br/>persistence used?}
     POST1 -->|yes| POST1a[post_processing_for_state<br/>save_processed_state<br/>create_post_processing_state<br/>save_post_processing_state]
-    POST1 -->|no| POST2
-    POST1a --> POST2[post_processing_for_execution<br/>update_global_execution_state<br/>save_all_execution_infos]
+    POST1 -->|no| POSTP
+    POST1a --> POSTP[post_processing_for_plan<br/>update_plan_state_to_completed<br/>when used_planned_processing_state<br/>and execution_status ≠ FAILED]
+    POSTP --> POST2[post_processing_for_execution<br/>update_global_execution_state<br/>save_all_execution_infos]
     POST2 --> POST3[post_processing_at_end<br/>subclass hook]
     POST3 --> END{flow_error?}
     END -->|yes| RAISE[re-raise]
     END -->|no| RET[return FlowExecutionInfo]
 ```
+
+`nld flow execute` carries two flags that route directly into this
+pipeline:
+
+- `--planned-state-strategy {auto,recompute,trust,strict}` (default
+  `auto`) — selects the branch in `get_incremental_state`:
+  - `auto` adopts an available plan when
+    `is_planned_processing_state_fresh` and falls back to
+    `compute_incremental_state` otherwise;
+  - `recompute` skips the planned-state slot entirely;
+  - `trust` adopts the plan as-is without the freshness check;
+  - `strict` fails with `NoPlannedStateException` (code `42002`) when
+    no plan is available and `StalePlannedStateException` (code
+    `42003`) when the available plan is stale.
+- `--state-compute-only` short-circuits `flow execute` to
+  `FlowStateIncrementalComputeTask(persist=True)` instead of invoking
+  `run_flow`, so it computes and persists a `PLANNED` plan without
+  starting the flow. It requires `--name` and is incompatible with
+  `--downstream` / `--upstream`; the source-request gate is
+  pre-authorised because no target data is written.
 
 For a deeper dive into what `run_flow()` does for SQL flows
 (write-strategy dispatch, incremental WHERE-clause injection, hook

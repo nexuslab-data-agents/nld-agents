@@ -82,6 +82,27 @@ When adding a new incremental flag, update **both** the strategy's
 `param_definitions` and the Click option / command decorator in
 `nld/cli/flow/params_flow.py` and `nld/cli/flow/main_flow.py`.
 
+### Planned-state support is a two-layer opt-in
+
+Engagement of the planned-state slot is gated on both the strategy
+and the backend. `FlowIncrementalDefinition.supports_planned_state`
+(default `False`) declares strategy-side capability;
+`IncrementalBackendStateManager.supports_planned_state` (`ClassVar`,
+default `False`) declares backend-side capability. The built-ins set
+strategy support on `by_key` and `by_source_tst`; the
+`PostgreSQLIncrementalBackendMixin` and `S3IncrementalBackendMixin`
+set backend support so every backend built on them inherits it. A
+flow recomputes the processing state whenever either layer is off,
+regardless of the `--planned-state-strategy` value on
+`nld flow execute`.
+
+Plan-capable strategies that need a baseline-aware freshness check
+override `IncrementalStateManager.is_planned_processing_state_fresh`;
+the base returns `True` for strategies with explicit windows. See
+`execution-and-incremental-design.md` §4.5 for the per-strategy
+overrides and the `nld flow execute --planned-state-strategy`
+interaction.
+
 ## Module Layout
 
 ```
