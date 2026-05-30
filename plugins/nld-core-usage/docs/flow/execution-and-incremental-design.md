@@ -28,6 +28,7 @@ This document describes the execution logging and incremental processing archite
    - 4.2 [Key Classes](#42-key-classes)
    - 4.3 [FlowStateManager Composition](#43-flowstatemanager-composition)
    - 4.4 [Dual State Backend (Primary + Optional Secondary)](#44-dual-state-backend-primary--optional-secondary)
+   - 4.5 [Planned-state slot](#45-planned-state-slot)
 5. [Processing Lifecycle](#5-processing-lifecycle)
    - 5.1 [Phase 1: Initialization](#51-phase-1-initialization)
    - 5.2 [Phase 2: Source Discovery](#52-phase-2-source-discovery)
@@ -140,7 +141,7 @@ sequenceDiagram
     Note over Task: ── PRE-PROCESSING ──
 
     rect rgb(230, 240, 255)
-        Note right of Task: pre_processing_for_execution()
+        Note right of Task: get_latest_execution_state()
         Task->>StateManager: get_latest_execution_state()
         StateManager->>Exec: get_latest_execution_state()
         Exec->>ExecBE: retrieve_latest_execution_state()
@@ -148,13 +149,17 @@ sequenceDiagram
     end
 
     rect rgb(230, 255, 230)
-        Note right of Task: pre_processing_for_state()<br/>Skipped entirely when<br/>tracks_state = False.
+        Note right of Task: compute_incremental_state()<br/>Skipped entirely when<br/>tracks_state = False.
 
         alt tracks_state = True
             Task->>StateManager: get_latest_incremental_state()
             StateManager->>Incr: get_latest_incremental_state()
             Incr->>IncrBE: retrieve_current_state()
             IncrBE-->>Incr: FlowState (e.g. last_pull_to_timestamp)
+
+            alt requires_source_state_retrieval = True
+                Task->>Task: retrieve_source_state()
+            end
 
             alt tracks_logical_deletion = True
                 Task->>Task: determine_logically_deleted_entries()
@@ -429,7 +434,7 @@ def update_processing_state(self):
 
 **CLI parameters:** `--full`, `--with-delta`, `--pull-from`, `--pull-to`. These
 are declared in `BY_SOURCE_TST_INCREMENTAL_DEFINITION.param_definitions`
-(`nld/flow/incremental/by_source_tst/logic.py`); the executor merges them into
+(`nld/flow/incremental/impl/by_source_tst/logic.py`); the executor merges them into
 the task's init params via `DataFlowDefinition.get_init_params_keys()`. A flag
 not listed in `param_definitions` will not reach `BySourceTstFlowIncrementalParams`
 and `resolve_strategy()` will fall back to `DELTA`.
@@ -446,30 +451,52 @@ When a flag is `False`, the corresponding step methods are **not called** and
 no `@track_flow_step` entries are recorded, preventing dummy log entries for
 steps that have no meaningful work for a given incremental type.
 
-| Flag | Description | no_increment | by_source_tst | by_key |
-|------|-------------|:------------:|:-------------:|:------:|
-| `tracks_state` | All state steps: retrieve incremental/source state, determine/save processing state, post-processing for state | `False` | `True` | `True` |
-| `tracks_logical_deletion` | Determine logically deleted entries (only evaluated when `tracks_state` is `True`) | `False` | `False` | `True` |
+| Flag | Description | Default | no_increment | by_source_tst | by_key |
+|------|-------------|:-------:|:------------:|:-------------:|:------:|
+| `tracks_state` | All state steps: retrieve incremental state, determine/save processing state, post-processing for state | `True` | `False` | `True` | `True` |
+| `tracks_logical_deletion` | Determine logically deleted entries (only evaluated when `tracks_state` is `True`) | `True` | `False` | `False` | `True` |
+| `requires_source_state_retrieval` | Call `retrieve_source_state()` (only evaluated when `tracks_state` is `True`) | `False` | `False` | `False` | `True` |
 
-All flags default to `True`. Each incremental definition overrides only the
-flags that should be disabled.
+Each incremental definition overrides only the flags whose default does
+not match. `tracks_state` and `tracks_logical_deletion` default to
+`True`; `requires_source_state_retrieval` defaults to `False` because
+most incremental types compute their state purely from the persisted
+watermark and do not enumerate the source.
 
-The flags are checked in `DataFlowTask.pre_processing_for_state()` and
+The flags are checked in `DataFlowTask.compute_incremental_state()` and
 `DataFlowTask.post_processing()`:
 
 ```python
-def pre_processing_for_state(self) -> None:
+def compute_incremental_state(self, save_step_log_to_backend: bool = True) -> None:
     definition = self.incremental_definition
-    if definition.tracks_state:
-        self.retrieve_latest_incremental_state()
+    if not definition.tracks_state:
+        return
+
+    self.retrieve_latest_incremental_state()
+    if save_step_log_to_backend:
         self._save_last_step_to_backend()
+
+    if definition.requires_source_state_retrieval:
         self.retrieve_source_state()
-        self._save_last_step_to_backend()
-        if definition.tracks_logical_deletion:
-            self.determine_logically_deleted_entries()
+        if save_step_log_to_backend:
             self._save_last_step_to_backend()
-        self.determine_processing_state()
+
+    if definition.tracks_logical_deletion:
+        self.determine_logically_deleted_entries()
+        if save_step_log_to_backend:
+            self._save_last_step_to_backend()
+
+    self.determine_processing_state()
+    if save_step_log_to_backend:
         self._save_last_step_to_backend()
+
+    if (
+        self.incremental_config is not None
+        and self.incremental_config.persist_initial_processing_state
+    ):
+        self.persist_initial_processing_state()
+        if save_step_log_to_backend:
+            self._save_last_step_to_backend()
 
 def post_processing(self) -> None:
     if (
@@ -480,6 +507,22 @@ def post_processing(self) -> None:
     self.post_processing_for_execution()
     self.post_processing_at_end()
 ```
+
+`determine_processing_state` is a pure computation step: it calls
+`state_manager.init_processing_state()` followed by
+`state_manager.update_processing_state()` to build the processing state
+in memory. Persistence to the live processing-state slot is handled by
+the separate `persist_initial_processing_state` step, which runs only
+when `IncrementalConfig.persist_initial_processing_state` is `True`.
+Splitting computation and persistence lets callers reuse the
+computation without writing to the live slot.
+
+`compute_incremental_state` accepts a `save_step_log_to_backend`
+parameter (default `True`). When `False`, every nested step still runs,
+but the per-step calls to `_save_last_step_to_backend()` are suppressed
+— used by compute-only callers (e.g. the `nld flow state` CLI compute
+path) that need the in-memory state without writing execution-history
+rows for what was not an execution.
 
 ### 2.6 Factory Pattern
 
@@ -507,22 +550,27 @@ Results are cached using key `{backend_type}_{engine}` to avoid repeated imports
 |------------------|---------|----------|--------|
 | by_key | s3_blob_storage | ✅ | ✅ |
 | by_key | postgresql | ✅ | ❌ |
+| by_key | bigquery | ✅ | ❌ |
+| by_key | duckdb | ✅ | ❌ |
 | by_key | local | ✅ | ✅ |
 | by_source_tst | postgresql | ✅ | ❌ |
+| by_source_tst | bigquery | ✅ | ❌ |
+| by_source_tst | snowflake | ✅ | ❌ |
+| by_source_tst | duckdb | ✅ | ❌ |
 | by_source_tst | local | ✅ | ❌ |
 | no_increment | base (pass-through) | ✅ | ✅ |
 
 **File naming pattern for backends:**
 
 ```
-{incremental_type}/backend/{backend_type}_with_{engine}.py
+impl/{incremental_type}/backend/{backend_type}_with_{engine}.py
 ```
 
 **Examples:**
-- `by_key/backend/s3_blob_storage_with_pydantic.py`
-- `by_key/backend/s3_blob_storage_with_duckdb.py`
-- `by_key/backend/postgresql_with_pydantic.py`
-- `by_key/backend/local_with_pydantic.py`
+- `impl/by_key/backend/s3_blob_storage_with_pydantic.py`
+- `impl/by_key/backend/s3_blob_storage_with_duckdb.py`
+- `impl/by_key/backend/postgresql_with_pydantic.py`
+- `impl/by_key/backend/local_with_pydantic.py`
 
 **Adding a New Incremental Backend:**
 
@@ -632,7 +680,18 @@ are unaffected.
 |---------|----------|--------|
 | s3_blob_storage | ✅ | ✅ |
 | postgresql | ✅ | ❌ |
+| bigquery | ✅ | ❌ |
+| snowflake | ✅ | ❌ |
+| duckdb | ✅ | ❌ |
 | local | ✅ | ✅ |
+
+The read-only accessors `get_latest_execution_info` and
+`get_execution_history` have default implementations on
+`ExecutionBackendStateManager` derived from
+`retrieve_latest_execution_state`, so every backend supports the read
+API used by the `nld flow state` CLI out of the box. Row-based backends
+(PostgreSQL, BigQuery, Snowflake, DuckDB) override these with optimised
+variants that join step-history rows in a dedicated query.
 
 ---
 
@@ -759,6 +818,115 @@ is best-effort, and a failure never aborts the flow. This design lets a
 centralised metadata store (e.g. PostgreSQL) own the source-of-truth
 state while a per-run artifact copy is co-located with the data on a
 target connector (e.g. S3) without making the target the source of truth.
+
+### 4.5 Planned-state slot
+
+The planned-state slot stores a **precomputed processing state** —
+the work a flow's next run would do, resolved without starting the
+run. It is independent of the live processing-state slot a running
+flow reads and writes: persisting a plan never touches the live slot,
+and a running flow never reads the planned slot. `nld flow state
+incremental compute --persist` is the writer (see the
+`how-to-get-incremental-info` skill).
+
+**Model.** Two records in `core/nld/flow/incremental/models/plan.py`:
+
+- `FlowStatePlan` — lifecycle metadata only: `plan_state_uid`,
+  `flow_namespace`, `flow_name`, `status`, `strategy`, `computed_at`,
+  `status_changed_at`, `requestor`, `executed_by_flow_uid`.
+- `FlowPlannedProcessingState[ProcessingState]` — extends `FlowStatePlan`
+  with the strategy-specific `processing_state` payload (a generic);
+  `to_state_plan()` returns the lifecycle metadata without the payload.
+
+`status` is one of the `IncrementalPlanStatus` values:
+
+| Status | Meaning |
+|--------|---------|
+| `PLANNED` | Active plan; at most one per `(flow_namespace, flow_name)`. |
+| `CANCELLED` | Superseded by a newer plan, or cancelled explicitly. |
+| `COMPLETED` | Consumed by a run; `executed_by_flow_uid` records which. |
+
+`core/nld/flow/incremental/backend/plan.py` carries the
+backend-agnostic row form `BackendStatePlanRow` plus
+`state_plan_to_row` / `row_to_state_plan` helpers; connector mixins
+project `FlowStatePlan` through this row to persist it.
+
+**Primary backend only.** A plan is written and read on the **primary**
+backend exclusively — the planned state is the single source of truth
+for a precomputed plan. The secondary backend (the informational mirror
+of the live processing state, §4.4) is never involved.
+
+**Manager surface.** `FlowStateManager` exposes the following (each
+delegating to `IncrementalStateManager`, which holds the primary
+backend manager):
+
+| Method | Behaviour |
+|--------|-----------|
+| `save_planned_processing_state(processing_flow_state, plan_state_uid, computed_at, requestor=None)` | Build the `PLANNED` plan and persist it. The strategy-specific processing state is written first; every other `PLANNED` state plan for the flow is then transitioned to `CANCELLED`; finally that state plan is written. |
+| `get_planned_processing_state(plan_state_uid=None)` | Return the named plan, or the latest `PLANNED` plan by `computed_at`, as a `FlowPlannedProcessingState` (or `None`). Assembled from a state plan + its processing-state payload via `definition.planned_processing_state_class`. |
+| `get_planned_processing_states()` | Return every `PLANNED` state plan for the flow, newest first — backs `nld flow state incremental get-planned`. |
+| `update_plan_state_to_completed(plan_state_uid, executed_by_flow_uid)` | Transition a consumed plan to `COMPLETED`. |
+| `update_plan_state_to_cancelled(plan_state_uid)` | Transition a `PLANNED` plan to `CANCELLED`. |
+
+**Backend surface.** `IncrementalBackendStateManager` exposes one
+composed read plus two sets of opt-in primitives:
+
+| Method | Layer | Behaviour |
+|--------|-------|-----------|
+| `read_planned_processing_states()` | composed | Return the `PLANNED` state plans, newest first — composed from `read_state_plans()`. |
+| `read_state_plan(plan_state_uid)` | state-plan primitive | Return a single state plan scoped to this flow. |
+| `read_state_plans()` | state-plan primitive | Return every state plan for this flow, any status. |
+| `write_state_plan(state_plan)` | state-plan primitive | Insert or update one state plan. |
+| `read_planned_processing_state(plan_state_uid)` | processing-state primitive | Read the strategy-specific processing-state payload for a plan. |
+| `write_planned_processing_state(plan_state_uid, processing_state)` | processing-state primitive | Persist the strategy-specific processing-state payload for a new `PLANNED` plan. |
+
+The state-plan primitives are provided by the connector mixin (one
+shared implementation per connector type). The processing-state
+primitives are provided by the per-strategy backend (the table or file
+layout depends on the strategy's `FlowProcessingState` subtype).
+
+**Lifecycle lives on the state manager, not the backend.**
+`IncrementalStateManager` owns cancel-on-supersede, the `COMPLETED`
+and `CANCELLED` transitions, and the assembly of the typed
+`FlowPlannedProcessingState` from a state plan plus its
+processing-state payload. The backend is reduced to persistence
+primitives and the single composed `read_planned_processing_states()`;
+it never re-implements lifecycle rules. `save_planned_processing_state`
+writes the processing state first, then iterates `read_state_plans()`
+to flip every other `PLANNED` plan to `CANCELLED` via `write_state_plan`,
+then writes that state plan — so the slot holds at most one `PLANNED`
+plan per flow and a reader never sees a state plan without its
+processing-state payload.
+
+**Storage layout (state plan + per-strategy processing state).** The
+state plan carries the lifecycle metadata; the strategy-specific
+processing state lives in its own per-strategy slot keyed by
+`plan_state_uid`.
+
+- **PostgreSQL** — connector mixin
+  `PostgreSQLIncrementalBackendMixin`
+  (`core/nld/flow/incremental/backend/postgresql/backend_mixin.py`)
+  persists state plans to the shared table `_nld_incremental_plans`
+  via `BackendStatePlanRow`. Each per-strategy backend creates and
+  owns its processing-state table
+  (`_nld_incremental_plans_by_key_planned_state`,
+  `_nld_incremental_plans_by_source_tst_planned_state`), whose schema
+  mirrors the matching live processing-state table.
+- **S3 blob** — connector mixin `S3IncrementalBackendMixin`
+  (`core/nld/flow/incremental/backend/s3_blob_storage/backend_mixin.py`)
+  persists state plans to
+  `<state-root>/plans/<plan_state_uid>/state_plan.json`. The
+  per-strategy backend writes the processing-state payload as a sibling
+  file in the same folder (`by_key_planned_state.json` for `by_key`).
+
+Completing or cancelling a plan updates only the state-plan record's
+`status` / `status_changed_at` (and `executed_by_flow_uid` on
+completion); the processing-state payload is preserved so a consumed
+plan stays auditable.
+
+Which connector/engine combinations implement these methods (and the
+execution-side read accessors) is tabulated in `backends/` (per
+connector) and `incremental/` (per strategy).
 
 ---
 
@@ -961,57 +1129,94 @@ class MyDataFlowTask(DataFlowTask):
 
 ### 7.1 Incremental Module
 
+The module is organised under `core/nld/flow/incremental/` into five
+subpackages: `models/` (Pydantic models and definitions shared across
+types — state, logic, config, plan), `base/` (abstract managers and SQL
+filter contract), `backend/` (connector-specific planned-state
+persistence mixins), `services/` (factory + registry), and `impl/`
+(built-in types). `models/` is a leaf layer; `base/` depends downward on
+it.
+
 | File | Purpose |
 |------|---------|
-| `incremental_config.py` | IncrementalConfig model with `strategy`, `persist_initial_processing_state`, and `immediate_step_persistence` settings |
-| `core/logic.py` | Base classes for incremental parameters, definitions (with step activation flags), and logic |
-| `core/state.py` | Base state classes (FlowState, FlowSourceState, FlowProcessingState) |
-| `core/manager.py` | IncrementalStateManager and IncrementalBackendStateManager |
-| `core/factory.py` | IncrementalStateManagerFactory with engine resolution |
-| `core/referential.py` | Enums for states, selections, granularities |
-| `by_key/logic.py` | ByKey parameter definitions |
-| `by_key/manager.py` | ByKeyStateManager with strategy-based logic |
-| `by_key/state.py` | ByKeyState, ByKeySourceState, ByKeyProcessingState |
-| `by_key/backend/base_with_pydantic.py` | Base pydantic engine for by_key |
-| `by_key/backend/base_with_duckdb.py` | Base DuckDB engine for by_key |
-| `by_key/backend/s3_blob_storage_with_pydantic.py` | S3 backend with pydantic engine |
-| `by_key/backend/s3_blob_storage_with_duckdb.py` | S3 backend with DuckDB engine |
-| `by_key/backend/postgresql_with_pydantic.py` | PostgreSQL backend with pydantic engine |
-| `by_key/backend/local_with_pydantic.py` | Local filesystem backend with pydantic engine |
-| `by_key/backend/local_with_duckdb.py` | Local filesystem backend with DuckDB engine |
-| `by_source_tst/logic.py` | BySourceTst parameter definitions |
-| `by_source_tst/manager.py` | BySourceTstStateManager with timestamp-based logic |
-| `by_source_tst/state.py` | BySourceTstState, BySourceTstSourceState, BySourceTstProcessingState |
-| `by_source_tst/backend/base_with_pydantic.py` | Base pydantic engine for by_source_tst |
-| `by_source_tst/backend/postgresql_with_pydantic.py` | PostgreSQL backend with pydantic engine |
-| `by_source_tst/backend/local_with_pydantic.py` | Local filesystem backend with pydantic engine |
-| `no_increment/logic.py` | NoIncrement parameter definitions |
-| `no_increment/manager.py` | NoIncrementStateManager (no-op) |
-| `no_increment/state.py` | Empty state classes |
-| `no_increment/backend/base_with_pydantic.py` | Base pydantic engine (pass-through) |
-| `no_increment/backend/base_with_duckdb.py` | Base DuckDB engine (inherits from pydantic) |
+| `base/manager.py` | Abstract `IncrementalStateManager` (owns the planned-state lifecycle, §4.5) and `IncrementalBackendStateManager` (state-plan + processing-state persistence primitives, §4.5) |
+| `base/sql_filter_manager.py` | Abstract SQL filter contract for incremental WHERE-clause injection |
+| `models/logic.py` | Abstract `FlowIncrementalLogic`, `FlowIncrementalDefinition` (with step activation flags), and `FlowIncrementalParamDefinition` |
+| `models/state.py` | Base state classes (`FlowState`, `FlowSourceState`, `FlowProcessingState`) |
+| `models/config.py` | `IncrementalConfig` with `strategy`, `persist_initial_processing_state`, `immediate_step_persistence` |
+| `models/manifest.py` | `FlowIncrementalTypeManifest` describing a registered incremental type |
+| `models/plan.py` | `FlowStatePlan`, `FlowPlannedProcessingState`, `IncrementalPlanStatus` for the planned-state slot (§4.5) |
+| `backend/plan.py` | `BackendStatePlanRow` and `state_plan_to_row` / `row_to_state_plan` helpers — the backend-agnostic row form of a state plan |
+| `backend/postgresql/backend_mixin.py` | `PostgreSQLIncrementalBackendMixin` — state-plan persistence primitives for the planned-state slot on PostgreSQL |
+| `backend/s3_blob_storage/backend_mixin.py` | `S3IncrementalBackendMixin` — state-plan persistence primitives for the planned-state slot on S3 |
+| `models/referential.py` | Enums for states, selections, granularities |
+| `models/events.py`, `models/request.py`, `models/constants.py` | Shared events, request, and constant models |
+| `services/factory.py` | `IncrementalStateManagerFactory` — resolves logic/manager/backend through the registry with engine resolution |
+| `services/registry.py` | `FlowIncrementalTypeRegistry` — single lookup boundary for built-in and external types, seeded from `additional_incremental_types` in `nld_project.yml` |
+| `impl/__init__.py` | Registers built-in `by_key`, `by_source_tst`, `no_increment` manifests on first import |
+| `impl/by_key/logic.py` | ByKey parameter definitions |
+| `impl/by_key/manager.py` | ByKeyStateManager with strategy-based logic |
+| `impl/by_key/state.py` | ByKeyState, ByKeySourceState, ByKeyProcessingState |
+| `impl/by_key/schema.py` | ByKey schema utilities |
+| `impl/by_key/sql_filter_manager.py` | ByKey SQL filter (key-based IN clause) |
+| `impl/by_key/backend/base_with_pydantic.py` | Base pydantic engine for by_key |
+| `impl/by_key/backend/base_with_duckdb.py` | Base DuckDB engine for by_key |
+| `impl/by_key/backend/s3_blob_storage_with_pydantic.py` | S3 backend with pydantic engine |
+| `impl/by_key/backend/s3_blob_storage_with_duckdb.py` | S3 backend with DuckDB engine |
+| `impl/by_key/backend/postgresql_with_pydantic.py` | PostgreSQL backend with pydantic engine |
+| `impl/by_key/backend/bigquery_with_pydantic.py` | BigQuery backend with pydantic engine |
+| `impl/by_key/backend/duckdb_with_pydantic.py` | DuckDB backend with pydantic engine |
+| `impl/by_key/backend/local_with_pydantic.py` | Local filesystem backend with pydantic engine |
+| `impl/by_key/backend/local_with_duckdb.py` | Local filesystem backend with DuckDB engine |
+| `impl/by_source_tst/logic.py` | BySourceTst parameter definitions |
+| `impl/by_source_tst/manager.py` | BySourceTstStateManager with timestamp-based logic |
+| `impl/by_source_tst/state.py` | BySourceTstState, BySourceTstSourceState, BySourceTstProcessingState |
+| `impl/by_source_tst/sql_filter_manager.py` | BySourceTst SQL filter (timestamp-based) |
+| `impl/by_source_tst/backend/base_with_pydantic.py` | Base pydantic engine for by_source_tst |
+| `impl/by_source_tst/backend/postgresql_with_pydantic.py` | PostgreSQL backend with pydantic engine |
+| `impl/by_source_tst/backend/bigquery_with_pydantic.py` | BigQuery backend with pydantic engine |
+| `impl/by_source_tst/backend/snowflake_with_pydantic.py` | Snowflake backend with pydantic engine |
+| `impl/by_source_tst/backend/duckdb_with_pydantic.py` | DuckDB backend with pydantic engine |
+| `impl/by_source_tst/backend/local_with_pydantic.py` | Local filesystem backend with pydantic engine |
+| `impl/no_increment/logic.py` | NoIncrement parameter definitions |
+| `impl/no_increment/manager.py` | NoIncrementStateManager (no-op) |
+| `impl/no_increment/state.py` | Empty state classes |
+| `impl/no_increment/sql_filter_manager.py` | NoIncrement SQL filter (pass-through) |
+| `impl/no_increment/backend/base_with_pydantic.py` | Base pydantic engine (pass-through) |
+| `impl/no_increment/backend/base_with_duckdb.py` | Base DuckDB engine (inherits from pydantic) |
 
 ### 7.2 Execution Module
 
 | File | Purpose |
 |------|---------|
 | `execution_info.py` | FlowExecutionInfo, FlowStepExecutionInfo, history classes |
-| `manager.py` | ExecutionStateManager and ExecutionBackendStateManager |
+| `batch_execution_info.py` | Batch execution info aggregation for multi-flow runs |
+| `manager.py` | ExecutionStateManager and ExecutionBackendStateManager (with default read accessors) |
 | `factory.py` | ExecutionStateManagerFactory with engine resolution |
 | `decorator.py` | @track_flow_step decorator |
+| `events.py` | Execution lifecycle events |
+| `schema.py` | PyArrow schema definitions for execution history artifacts |
+| `utils.py` | Execution-side helpers |
 | `backend/s3_blob_storage_base.py` | Shared S3 execution backend base |
 | `backend/s3_blob_storage_with_pydantic.py` | S3 backend with pydantic engine |
 | `backend/s3_blob_storage_with_duckdb.py` | S3 backend with DuckDB engine |
 | `backend/postgresql_with_pydantic.py` | PostgreSQL backend with pydantic engine |
+| `backend/bigquery_with_pydantic.py` | BigQuery backend with pydantic engine |
+| `backend/snowflake_with_pydantic.py` | Snowflake backend with pydantic engine |
+| `backend/duckdb_with_pydantic.py` | DuckDB backend with pydantic engine |
 | `backend/local_with_pydantic.py` | Local filesystem backend with pydantic engine |
 | `backend/local_with_duckdb.py` | Local filesystem backend with DuckDB engine |
+| `backend/migrations/s3_blob_storage_to_parquet.py` | Migration helper for S3 execution artifacts |
 
 ### 7.3 State Module
 
 | File | Purpose |
 |------|---------|
-| `manager/base.py` | FlowStateManager facade |
+| `manager/base.py` | FlowStateManager facade combining execution + incremental |
 | `manager/by_key.py` | FlowByKeyStateManager |
 | `manager/by_source_tst.py` | FlowBySourceTstStateManager |
 | `manager/no_increment.py` | FlowNoIncrementStateManager |
 | `factory.py` | FlowStateManagerFactory (orchestrator with engine pass-through) |
+| `config/state_backend_connector.py` | `StateBackendConnector` and `StateBackendConnectorConfig` models, validators, and merge helpers |
+| `state_backend_connector_resolver.py` | `StateBackendConnectorWrapper` resolving primary + optional secondary sides |
+| `events.py` | State lifecycle events |

@@ -33,6 +33,13 @@ Activate this guide when the agent is working on:
 The full architectural reference is at
 `${CLAUDE_PLUGIN_ROOT}/docs/flow/execution-and-incremental-design.md`.
 
+Backend support matrices (which connector/engine supports which command
+for execution and incremental state) live at
+`${CLAUDE_PLUGIN_ROOT}/docs/flow/backends/` (connector-by-connector) and
+`${CLAUDE_PLUGIN_ROOT}/docs/flow/incremental/` (strategy-by-strategy).
+Consult them when asked whether a backend supports `get-state`,
+`get-steps`, or `compute --persist`.
+
 ### Key Sections (900 lines — read by section, not in full)
 
 | Task | Section |
@@ -79,14 +86,23 @@ When adding a new incremental flag, update **both** the strategy's
 
 ```
 core/nld/flow/incremental/
-├── base/                                # abstract contracts (logic, manager, sql_filter_manager, state)
-├── models/
+├── models/                              # leaf layer: data/definition models
+│   ├── state.py                         # FlowState, FlowSourceState, FlowProcessingState
+│   ├── logic.py                         # FlowIncrementalLogic, FlowIncrementalDefinition, param defs
+│   ├── plan.py                          # FlowPlannedProcessingState(+Master), IncrementalPlanStatus
 │   ├── config.py                        # IncrementalConfig
 │   ├── events.py
 │   ├── manifest.py                      # FlowIncrementalTypeManifest
 │   ├── referential.py
 │   ├── request.py
 │   └── constants.py
+├── base/                                # abstract managers + SQL filter (depends downward on models)
+│   ├── manager.py                       # IncrementalStateManager (owns planned-state lifecycle), IncrementalBackendStateManager (persistence primitives)
+│   └── sql_filter_manager.py
+├── backend/                             # connector-specific planned-state persistence
+│   ├── plan.py                          # BackendStatePlanRow + state_plan_to_row / row_to_state_plan helpers
+│   ├── postgresql/backend_mixin.py      # PostgreSQLIncrementalBackendMixin (state-plan I/O)
+│   └── s3_blob_storage/backend_mixin.py # S3IncrementalBackendMixin (state-plan I/O)
 ├── services/
 │   ├── factory.py                       # resolves a name to its logic/manager/backend via the registry
 │   └── registry.py                      # FlowIncrementalTypeRegistry + get_flow_incremental_type_registry()
@@ -135,7 +151,7 @@ built-in or another external type raises `NldProjectError` at registration
 time.
 
 The four runtime surfaces an external type must expose are described in
-the `how-to-create-an-new-incremental-type` skill, which ships a complete
+the `how-to-create-a-new-incremental-type` skill, which ships a complete
 `by_source_tst_with_days_from` reference implementation.
 
 `nld project info` lists every registered incremental type alongside
@@ -144,10 +160,12 @@ additional entities and python paths.
 ## Cross-References
 
 - For step-by-step instructions to author an external incremental type,
-  see the `how-to-create-an-new-incremental-type` skill.
+  see the `how-to-create-a-new-incremental-type` skill.
 - For the flow lifecycle that wraps incremental logic, see the `guide-flows` skill.
 - For the SQL-side plumbing (executor → SQLFlowTask → incremental filter), see
   section "4.2 CLI parameter plumbing" in `flow-sql-execution.md`.
 - For an end-to-end Mermaid trace of how the resolver feeds the
   executor and the task, see `flow-execute-internals.md` (section 4
   "Incremental logic resolution").
+- For per-backend command availability (execution and incremental
+  state), see `docs/flow/backends/` and `docs/flow/incremental/`.

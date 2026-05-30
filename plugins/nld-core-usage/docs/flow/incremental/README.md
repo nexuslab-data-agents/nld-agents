@@ -1,0 +1,54 @@
+# Incremental backend availability
+
+This area summarises, per incremental strategy, which connectors and
+engines back it and which commands each combination supports. It is the
+strategy-oriented view of the same data presented connector-by-connector
+in [`../backends/`](../backends/README.md).
+
+For the incremental architecture (state classes, processing lifecycle,
+factory, planned-state slot), see
+[`../execution-and-incremental-design.md`](../execution-and-incremental-design.md).
+
+## Strategies
+
+| Strategy | Summary | Detail |
+|----------|---------|--------|
+| `by_key` | Per-key state and processing decisions. | [by_key.md](./by_key.md) |
+| `by_source_tst` | Timestamp-window watermark state. | [by_source_tst.md](./by_source_tst.md) |
+| `no_increment` | Pass-through; persists no incremental state. | [no_increment.md](./no_increment.md) |
+
+## Command axes
+
+Each strategy page reports availability against four axes:
+
+- **Flow execution** — `retrieve_current_state`, `write_processing_state`,
+  `write_post_processing_state` (used by `nld flow execute`).
+- **`get-state`** — `get_processing_state` / `get_post_processing_state`
+  (used by `nld flow state incremental get-state`).
+- **`compute`** — `nld flow state incremental compute` without
+  `--persist`; resolves the next run's processing state in memory from
+  `retrieve_current_state`, so it is available wherever the flow runs.
+- **`compute --persist`** — adds a planned-state write
+  (`write_planned_processing_state`); requires a planned-state backend
+  surface. `nld flow state incremental get-planned` (list PLANNED plans)
+  reads the same slot, so it has the same availability as `compute
+  --persist`.
+
+## Legend
+
+- **✅** — implemented.
+- **❌** — raises `NotImplementedError`.
+- **—** — not applicable; no backend registered for that combination.
+
+## At a glance
+
+| Strategy | Connectors with a backend | `get-state` | `compute --persist` |
+|----------|---------------------------|-------------|---------------------|
+| `by_key` | postgresql, bigquery, duckdb, local, s3_blob_storage | postgresql only | postgresql, s3_blob_storage |
+| `by_source_tst` | postgresql, bigquery, snowflake, duckdb, local | postgresql only | postgresql only |
+| `no_increment` | any (pass-through) | — | — |
+
+`get_processing_state` / `get_post_processing_state` are implemented on
+PostgreSQL only; on every other connector `get-state` raises
+`NotImplementedError`, while `compute` (preview) still works because it
+reads through `retrieve_current_state`.

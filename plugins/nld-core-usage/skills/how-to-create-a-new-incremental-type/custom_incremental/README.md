@@ -3,7 +3,7 @@
 A `by_source_tst` variant exposing a `--days-from N` runtime parameter
 that floors the next pull's lower bound at `now - N days`.
 
-Reference for the `how-to-create-an-new-incremental-type` skill — see
+Reference for the `how-to-create-a-new-incremental-type` skill — see
 that SKILL.md for context, authoring steps, and how to register the
 type from `nld_project.yml`.
 

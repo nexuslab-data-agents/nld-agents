@@ -19,7 +19,7 @@ flow directly — instead it instantiates a `DataFlowExecutionTask`
 (`core/nld/flow/task/data_flow_exec_task.py`), which is the orchestrator
 that resolves the set of flows to run, sorts them topologically, and
 delegates each one to a `DataFlowExecutor`
-(`core/nld/flow/task/executor.py`). The executor is responsible for the
+(`core/nld/flow/task/data_flow_executor.py`). The executor is responsible for the
 per-flow lifecycle: validation, parameter assembly, task instantiation,
 state-manager wiring, and the actual `run()` invocation.
 
@@ -263,9 +263,9 @@ defined on `DataFlowTask` itself
 flowchart TD
     R[DataFlowTask.run] --> P1[pre_processing]
     P1 --> P1a[pre_processing_at_start<br/>subclass hook]
-    P1a --> P1b[pre_processing_for_execution<br/>state_manager.get_latest_execution_state]
-    P1b --> P1c{incremental_definition<br/>.tracks_state?}
-    P1c -->|yes| P1d[retrieve_latest_incremental_state<br/>retrieve_source_state<br/>determine_logically_deleted_entries<br/>determine_processing_state]
+    P1a --> P1b[get_latest_execution_state<br/>state_manager.get_latest_execution_state]
+    P1b --> P1c{compute_incremental_state<br/>tracks_state?}
+    P1c -->|yes| P1d[retrieve_latest_incremental_state<br/>retrieve_source_state (if requires_source_state_retrieval)<br/>determine_logically_deleted_entries<br/>determine_processing_state<br/>persist_initial_processing_state (if configured)]
     P1c -->|no| P2
     P1d --> P2[state_manager.save_execution_start]
     P2 --> RF[run_flow<br/>subclass implementation]
@@ -308,8 +308,8 @@ and post-processing incremental state writes are **never** mirrored.
 |------|------|
 | `core/nld/cli/flow/main_flow.py` | Click command registration (`flow_execute`). |
 | `core/nld/flow/task/data_flow_exec_task.py` | `DataFlowExecutionTask` — multi-flow orchestrator. |
-| `core/nld/flow/graph.py` | `DataFlowGraph` — topological sort, lineage scoping. |
-| `core/nld/flow/task/executor.py` | `DataFlowExecutor` — per-flow lifecycle, init/run param assembly, mandatory checks. |
+| `core/nld/flow/task/data_flow_dependency_graph.py` | `DataFlowDependencyGraphTask` — topological sort, lineage scoping. |
+| `core/nld/flow/task/data_flow_executor.py` | `DataFlowExecutor` — per-flow lifecycle, init/run param assembly, mandatory checks. |
 | `core/nld/flow/definition/flow_definition.py` | `DataFlowDefinition` — task module loading, `resolve_incremental_logic`, `get_init_params_keys`. |
 | `core/nld/flow/task/data_flow_task.py` | `DataFlowTask` base — `__init__`, `incremental_logic` property, `run()` orchestration, pre/post processing. |
 | `core/nld/flow/state/factory.py` | `FlowStateManagerFactory` — strategy-keyed state-manager construction. |

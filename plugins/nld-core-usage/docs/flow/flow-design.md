@@ -389,7 +389,7 @@ JSON output (nodes + edges) ◄─┘
 | Flow config | `core/nld/flow/config/flow_config.py` |
 | DataFlowTask base | `core/nld/flow/task/data_flow_task.py` |
 | DataFlowStep base | `core/nld/flow/task/data_flow_step.py` |
-| Flow executor | `core/nld/flow/task/executor.py` |
+| Flow executor | `core/nld/flow/task/data_flow_executor.py` |
 | Flow execution task | `core/nld/flow/task/data_flow_exec_task.py` |
 | Flow info task | `core/nld/flow/task/data_flow_info.py` |
 | Flow dependency graph task | `core/nld/flow/task/data_flow_dependency_graph.py` |
@@ -403,9 +403,9 @@ JSON output (nodes + edges) ◄─┘
 | Execution tracking | `core/nld/flow/execution/execution_info.py` |
 | Execution decorator | `core/nld/flow/execution/decorator.py` |
 | Incremental factory | `core/nld/flow/incremental/services/factory.py` |
-| Incremental logic (by_source_tst) | `core/nld/flow/incremental/by_source_tst/logic.py` |
-| Incremental logic (by_key) | `core/nld/flow/incremental/by_key/logic.py` |
-| Incremental logic (no_increment) | `core/nld/flow/incremental/no_increment/logic.py` |
+| Incremental logic (by_source_tst) | `core/nld/flow/incremental/impl/by_source_tst/logic.py` |
+| Incremental logic (by_key) | `core/nld/flow/incremental/impl/by_key/logic.py` |
+| Incremental logic (no_increment) | `core/nld/flow/incremental/impl/no_increment/logic.py` |
 | Loading strategies | `core/nld/flow/utils/flow_loading_strategy.py` |
 | Update strategies | `core/nld/flow/utils/flow_update_strategy.py` |
 | Backend mixins (local) | `core/nld/flow/backend/local/backend_mixin.py` |

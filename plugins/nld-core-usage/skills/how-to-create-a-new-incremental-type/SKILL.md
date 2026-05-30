@@ -1,5 +1,5 @@
 ---
-name: how-to-create-an-new-incremental-type
+name: how-to-create-a-new-incremental-type
 description: Author a new external incremental type for nld-core and register it from `nld_project.yml`. Walks through the four runtime surfaces (logic, state-manager, state models, backend) the `FlowIncrementalTypeRegistry` requires, and points at a complete `custom_incremental/` reference implementation that extends by_source_tst with a `--days-from` backfill parameter.
 user-invocable: false
 ---

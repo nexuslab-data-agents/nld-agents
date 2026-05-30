@@ -1,13 +1,18 @@
 ---
 name: how-to-get-incremental-info
 description: >
-  Inspect the persisted incremental state of an `nld` flow from the
-  shell using `nld flow state incremental get-state`. Use when the user
-  asks "where did the last delta stop?", "which keys still need
-  processing?", or "what watermark will the next run resume from?".
-  Returns the current processing state by default; `--include-post-processing`
-  bundles in the authoritative post-processing state. Output is JSON to
-  stdout, or to a file via `--output`.
+  Inspect the incremental state of an `nld` flow from the shell using
+  the `nld flow state incremental` subcommand group: `get-state` returns
+  what the most recent run persisted (optionally with the authoritative
+  post-processing watermark via `--include-post-processing`), and
+  `compute` resolves the processing state the next run would build —
+  optionally persisting it as a PLANNED plan, which `get-planned` then
+  lists. Use when the user asks "where did the last delta stop?", "which
+  keys still need processing?", "what watermark will the next run resume
+  from?", or "what would the next run actually decide to do?". Stdout
+  renders a concise text
+  summary by default; pass `--format json` for the full machine-readable
+  payload, or `--output` to write JSON to a file.
 user-invocable: true
 ---
 
@@ -19,13 +24,21 @@ user-invocable: true
 
 ## Definition
 
-- **What**: Read the persisted incremental state of a flow (current
-  processing state, optionally also the authoritative post-processing
-  state) via `nld flow state incremental get-state`.
+- **What**: Read or compute the incremental state of a flow via the
+  `nld flow state incremental` subcommand group:
+  - `get-state` — read the persisted processing state (current run);
+    with `--include-post-processing`, also the authoritative
+    post-processing state.
+  - `compute` — resolve the processing state the next run would build,
+    without starting the run; with `--persist`, store the result as a
+    PLANNED plan in the planned-state slot.
+  - `get-planned` — list the flow's PLANNED plans (lifecycle metadata,
+    newest first).
 - **When**: The user asks where the next delta will resume, which keys
-  are pending or failed for a `by_key` flow, or what the
-  `by_source_tst` watermark currently is. Also use as a first step
-  when debugging "why did the flow not pick up X?".
+  are pending or failed for a `by_key` flow, what the `by_source_tst`
+  watermark holds, or what the next run *would* process if launched
+  against the live source. Also use as a first step when debugging
+  "why did the flow not pick up X?".
 - **Why**: The CLI resolves the flow's incremental strategy
   automatically (`by_source_tst` / `by_key` / `no_increment`), targets
   the **primary** state backend, and emits schema-stable JSON. Reading
@@ -33,7 +46,8 @@ user-invocable: true
   bypasses that resolution.
 
 For the architecture (state classes, processing lifecycle, dual state
-backend semantics), see the `guide-incremental` skill.
+backend semantics, planned-state slot), see the `guide-incremental`
+skill.
 
 ---
 
@@ -55,6 +69,7 @@ backend semantics), see the `guide-incremental` skill.
 ```
 nld flow state incremental get-state --name <flow> [--namespace <ns>]
                                      [--include-post-processing]
+                                     [--format text|json]
                                      [--output] [--override-output-folder-path <dir>]
 ```
 
@@ -65,7 +80,8 @@ nld flow state incremental get-state --name <flow> [--namespace <ns>]
 | `--name <flow>` | Flow name (required). |
 | `--namespace <ns>` | Namespace of the flow. Optional — the registry resolves it from the project layout when omitted. Pass explicitly when the flow was relocated and you want to read state under a previous namespace. |
 | `--include-post-processing` | Also include the authoritative post-processing state in the payload (the value the next run will read as its starting point). |
-| `--output` | Write JSON to a fixed file under `output/<timestamp>/`. |
+| `--format text\|json` | Stdout rendering. `text` (default) prints a concise human-friendly summary; `json` prints the full machine-readable payload. |
+| `--output` | Write JSON to a fixed file under `output/<timestamp>/`. File output is always JSON, independent of `--format`. |
 | `--override-output-folder-path <dir>` | Write into `<dir>` instead; implies `--output`. |
 
 ### Output shapes
@@ -114,12 +130,15 @@ the range the most recent run covered.
 ### 2. `by_key`: which keys still need processing?
 
 ```
-nld flow state incremental get-state --name customer_enrichment --include-post-processing \
+nld flow state incremental get-state --name customer_enrichment --include-post-processing --format json \
   | jq '.post_processing_state.keys
         | to_entries
         | map(select(.value.status != "SUCCEEDED"))
         | map({key: .key, status: .value.status, last_error: .value.last_process_error_message})'
 ```
+
+Pass `--format json` whenever piping into `jq` — without it stdout is
+the text summary, not the machine payload.
 
 Returns every key that hasn't reached `SUCCEEDED` — typically
 `NOT_PROCESSED`, `FAILED`, or `DELETED`. Use this before manually
@@ -139,7 +158,7 @@ moved during that run.
 ### 4. `by_key`: count of pending vs failed vs succeeded keys
 
 ```
-nld flow state incremental get-state --name customer_enrichment --include-post-processing \
+nld flow state incremental get-state --name customer_enrichment --include-post-processing --format json \
   | jq '.post_processing_state.keys
         | [.[].status]
         | group_by(.)
@@ -149,7 +168,7 @@ nld flow state incremental get-state --name customer_enrichment --include-post-p
 ### 5. `by_source_tst`: was the latest run a backfill or a delta?
 
 ```
-nld flow state incremental get-state --name daily_sales_refresh \
+nld flow state incremental get-state --name daily_sales_refresh --format json \
   | jq '{flow_uid, strategy, processing_status,
          range: [.pull_from_timestamp, .pull_to_timestamp]}'
 ```
@@ -179,6 +198,111 @@ nld flow state incremental get-state --name wttj_companies_extraction \
 The registry resolves the flow at its current namespace by default;
 state written under a previous namespace remains under that
 namespace. Pass `--namespace` explicitly to read it.
+
+---
+
+## Computing the next processing state (`compute`)
+
+`get-state` reads what the most recent run left behind. `compute`
+resolves what the **next** run would do: it runs the flow's own
+pre-processing-for-state slice (retrieve latest incremental state →
+retrieve source state → determine logically deleted entries →
+determine processing state) and returns the resulting
+`FlowProcessingState`, without starting a run.
+
+```
+nld flow state incremental compute --name <flow> [--namespace <ns>]
+                                   [--persist] [--requestor <user>]
+                                   [--source-request-authorized]
+                                   [--format text|json]
+                                   [--output] [--override-output-folder-path <dir>]
+```
+
+`compute` never writes the live processing-state slot and never records
+execution-history rows. It builds a fully-initialised `DataFlowTask`
+through the same executor a real run uses, so per-flow connectors and
+state-manager wiring are identical to execution.
+
+### Flags
+
+| Flag | Purpose |
+|------|---------|
+| `--name <flow>` / `--namespace <ns>` | Flow selection, as for `get-state`. |
+| `--persist` | Persist the computed processing state to the state backend as a `PLANNED` plan, cancelling any prior `PLANNED` plan for the same flow. Without it, `compute` is read-only. |
+| `--requestor <user>` | Identifier recorded on the persisted plan. Defaults to the current OS user (`getpass.getuser()`, falling back to `"unknown"`). Only meaningful with `--persist`. |
+| `--source-request-authorized` | Pre-authorize the source-side queries that `retrieve_source_state` issues. When omitted and the flow's incremental definition declares `requires_source_state_retrieval` (only `by_key` today), the CLI prompts for confirmation before touching the source. |
+| `--format text\|json`, `--output`, `--override-output-folder-path <dir>` | Same rendering / file-output convention as `get-state`. The fixed file name is `flow_state_incremental_compute.json`. |
+
+### Output shape
+
+```json
+{
+  "processing_state": { ... },   // the FlowProcessingState the next run would build
+  "persisted": true,              // false when --persist is not set
+  "plan_state_uid": "…",          // present only when persisted
+  "requestor": "…"                // present only when persisted
+}
+```
+
+`processing_state` is omitted when the strategy produces no processing
+state (e.g. `no_increment`). `null` fields are stripped
+(`exclude_none=True`). The shape of `processing_state` matches the
+per-strategy shape documented for `get-state` above.
+
+### Source-side cost
+
+For `by_key` flows, `compute` calls the flow's `retrieve_source_state`,
+which can issue real queries against third-party APIs or listings. The
+command gates that step: pass `--source-request-authorized` to proceed
+non-interactively, or answer the confirmation prompt. `by_source_tst`
+and `no_increment` do not retrieve source state, so they never prompt.
+
+### The planned-state slot
+
+`--persist` writes to a slot that is **separate from the live
+processing-state slot a running flow reads and writes**, on the
+**primary** state backend only. A plan carries a lifecycle `status` of
+`PLANNED`, `CANCELLED`, or `COMPLETED`; writing a new plan flips any
+prior `PLANNED` plan for the same flow to `CANCELLED`, so at most one
+`PLANNED` plan exists per flow at a time. Persisting is supported on the
+PostgreSQL and S3 backends. See `guide-incremental` §4.5 "Planned-state
+slot" for the storage layout and lifecycle.
+
+List the plans recorded for a flow with `get-planned`:
+
+```
+nld flow state incremental get-planned --name daily_sales_refresh
+```
+
+It returns each `PLANNED` plan's lifecycle metadata (`plan_state_uid`,
+`status`, `strategy`, `computed_at`, `requestor`, …), newest first —
+the same backends that accept `--persist` back this listing.
+
+### Recipes
+
+#### `by_key`: preview which keys the next run will process
+
+```
+nld flow state incremental compute --name customer_enrichment \
+  --source-request-authorized --format json \
+  | jq '.processing_state.keys
+        | to_entries
+        | map(select(.value.processing_status == "TO_BE_PROCESSED"))
+        | map(.key)'
+```
+
+Lists the keys the next run would mark `TO_BE_PROCESSED`, computed
+against the current source and the persisted state — before committing
+to a run.
+
+#### Persist a plan for the record
+
+```
+nld flow state incremental compute --name daily_sales_refresh --persist
+```
+
+Computes and stores a `PLANNED` plan; the printed `plan_state_uid`
+identifies it in the planned-state slot.
 
 ---
 
@@ -265,10 +389,19 @@ miss the post-processing state entirely. See `guide-incremental` §4.4
 - **Don't read the secondary backend for incremental state.** It only
   carries processing-state mirrors, never the post-processing state.
   Reads via the CLI already enforce this.
-- **`--output` writes a deterministic file name**
-  (`flow_state_incremental_get_state.json`). Use
+- **`--output` writes a deterministic file name** per subcommand
+  (`flow_state_incremental_get_state.json` for `get-state`,
+  `flow_state_incremental_compute.json` for `compute`). Use
   `--override-output-folder-path` to control the directory; the file
   name itself is fixed.
+- **Reach for `compute` to answer "what would the next run do?"** —
+  `get-state` describes the past; `compute` resolves the next run's
+  decisions against the live source. On `by_key` flows it queries the
+  source, so pass `--source-request-authorized` only when those queries
+  are acceptable.
+- **Default `compute` to read-only.** Add `--persist` only when you
+  intend to record a `PLANNED` plan; it cancels any prior `PLANNED`
+  plan for the flow.
 
 ---
 
@@ -277,7 +410,8 @@ miss the post-processing state entirely. See `guide-incremental` §4.4
 - Architectural reference: `guide-incremental` (state classes, processing
   lifecycle, factory pattern, backend implementations). Section 4.4
   "Dual State Backend (Primary + Optional Secondary)" covers what
-  mirrors and what doesn't.
+  mirrors and what doesn't; section 4.5 "Planned-state slot" covers the
+  storage layout and lifecycle behind `compute --persist`.
 - For execution state (separate from incremental state):
   `how-to-get-execution-info`.
 - For choosing or configuring an incremental type for a *new* flow:
