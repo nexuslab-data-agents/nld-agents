@@ -124,14 +124,19 @@ Available connections:
 ```
 
 Each entry shows the connection `name`, its `type` (`postgresql`,
-`bigquery`, `snowflake`, `duckdb`, …), and the configured profile
-names. A connection with no named profiles is reported as
-`profiles: default`. When the project resolves no connections at all,
-the command logs `No connections found in the project`.
+`bigquery`, `snowflake`, `duckdb`, …), and its **selectable** profiles.
+The profile list reports `default` whenever the connection declares
+parameters directly (the implicit default profile), followed by every
+named profile — so a connection with both surfaces `default` *and* its
+named profiles (e.g. `default, staging`). A connection that declares
+neither is reported as `profiles: default`. When the project resolves no
+connections at all, the command logs `No connections found in the
+project`.
 
 Use this first to get the **exact** `--connection-name` for any
 downstream command — the value is case-sensitive and must match the
-config key, not a guess.
+config key, not a guess — and to see which `--profile-name` values are
+selectable.
 
 ### 3. Does a specific connection work?
 
@@ -163,10 +168,19 @@ resolved config.
 nld connection debug --connection-name my_postgres --profile-name staging
 ```
 
-Opens the connection under the named profile, applying any
-profile-specific overrides (e.g. a different database or account). Use
-this to confirm a profile resolves before pointing a flow at it. The
-profile name must be one of those reported by `nld connection list`.
+Opens the connection under the named profile. The named profile is
+merged over the connection's default parameters, with the named values
+winning — so `staging` applies its overrides (e.g. a different database
+or account) on top of the shared defaults. Omitting `--profile-name`
+opens the default profile. The profile name must be one of those
+reported by `nld connection list`; an unknown name fails with an
+unavailable-profile error.
+
+`--profile-name` is honoured wherever a connector is opened — the same
+flag selects the profile for `nld connection export-env-var` (Recipe 1)
+and `nld connection get-structure`, and for the `nld flow state get-*`
+read commands it selects the credential profile of the flow's state
+backend connection.
 
 ### 5. Discover, then verify
 

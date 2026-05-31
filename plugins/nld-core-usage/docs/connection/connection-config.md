@@ -288,6 +288,63 @@ staging_params = {
 }
 ```
 
+## Selecting a Profile at Connection Time
+
+A profile is resolved when a connector is opened, not only when reading
+raw parameters. `NldExecutionContext.get_data_connector` and
+`load_connector` accept an optional `profile_name`:
+
+```python
+# Default profile — parameters declared directly on the connection
+connector = execution_context.get_data_connector("my_postgres")
+
+# Named profile, merged over the default profile (named values win)
+connector = execution_context.get_data_connector(
+    "my_postgres", profile_name="staging"
+)
+```
+
+When `profile_name` is omitted, the connector opens with
+`default_profile`. When supplied, the named profile is merged over
+`default_profile` via `ConnectionConfig.get_parameters_for_profile`, so
+named values override the defaults. An unknown profile name raises
+`UnavailableConnectionProfileException`.
+
+The first `get_data_connector` call for a connection lazy-loads it under
+the requested profile; the profile is fixed for the lifetime of that
+loaded connector.
+
+### Enumerating Selectable Profiles
+
+`ConnectionConfig.get_available_profile_names()` returns every profile a
+caller can select:
+
+- `"default"` whenever the connection declares parameters directly (a
+  non-empty `default_profile`),
+- each named profile from `profiles`,
+- `"default"` as the sole fallback when the connection declares neither.
+
+This differs from `get_profile_names()`, which returns only the named
+profiles. Use `get_available_profile_names()` for listings that must
+surface the implicit default alongside named profiles.
+
+### CLI Surface
+
+`--profile-name` selects the profile on the subcommands that open a
+connector:
+
+- `nld connection debug`, `nld connection export-env-var`, and
+  `nld connection get-structure` open the named connection under the
+  selected profile.
+- `nld flow state` read subcommands (`execution get-state`,
+  `execution get-history`, `execution get-steps`,
+  `incremental get-state`, `incremental get-planned`) select the
+  credential profile of the state backend connection they read from.
+
+Omitting the flag uses the default profile. `nld connection list` takes
+no `--profile-name`; it reports each connection's selectable profiles
+via `get_available_profile_names()`.
+
 ## Testing
 
 Comprehensive tests are available in `tests/unit/connector/base/test_config_sources.py`:
