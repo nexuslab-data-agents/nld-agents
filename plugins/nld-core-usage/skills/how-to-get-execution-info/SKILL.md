@@ -83,6 +83,7 @@ nld flow state execution get-steps    --name <flow> [--namespace <ns>]
 |------|---------|
 | `--name <flow>` | Flow name (required). |
 | `--namespace <ns>` | Namespace of the flow. Optional — the registry resolves it from the project layout when omitted. **Use this to read historical rows persisted under a previous namespace if the flow was relocated.** |
+| `--profile-name <profile>` | Optional. Select the credential profile of the state backend connection to read from. |
 | `--format text\|json` | Stdout rendering. `text` (default) prints a concise human-friendly summary; `json` prints the full machine-readable payload. |
 | `--output` | Boolean flag. Write JSON to a fixed file under `output/<timestamp>/`. File output is always JSON, independent of `--format`. |
 | `--override-output-folder-path <dir>` | Write into `<dir>` instead of the timestamped folder; implies `--output`. |
