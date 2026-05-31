@@ -20,7 +20,7 @@ Structure characterisations are defined in the `characterisations:` section at t
 structure_type: TABLE
 connector_type: postgresql
 properties:
-  database: nld_isis_clh
+  database: nld_demo_clh
   schema: acquisition_opendata
 templates:
   - raw_standard_tracking

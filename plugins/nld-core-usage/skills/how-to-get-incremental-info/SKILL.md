@@ -91,6 +91,7 @@ nld flow state incremental get-state --name <flow> [--namespace <ns>]
 |------|---------|
 | `--name <flow>` | Flow name (required). |
 | `--namespace <ns>` | Namespace of the flow. Optional — the registry resolves it from the project layout when omitted. Pass explicitly when the flow was relocated and you want to read state under a previous namespace. |
+| `--profile-name <profile>` | Optional. Select the credential profile of the state backend connection to read from. |
 | `--include-post-processing` | Also include the authoritative post-processing state in the payload (the value the next run will read as its starting point). |
 | `--format text\|json` | Stdout rendering. `text` (default) prints a concise human-friendly summary; `json` prints the full machine-readable payload. |
 | `--output` | Write JSON to a fixed file under `output/<timestamp>/`. File output is always JSON, independent of `--format`. |

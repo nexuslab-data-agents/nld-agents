@@ -38,6 +38,7 @@ When reading the reference doc, focus on the section relevant to your task:
 | Understanding connector class hierarchy | Part 2: "Class Hierarchy" |
 | Working with PostgreSQL connectors | Part 2: "PostgreSQL Connector Structure" |
 | Understanding engine selection | Part 2: "Engine Selection" |
+| Selecting a profile when opening a connector (`get_data_connector` / `--profile-name`) | "Selecting a Profile at Connection Time" |
 | Writing tests for connection code | Part 1: "Testing" |
 
 ## Critical Rules
