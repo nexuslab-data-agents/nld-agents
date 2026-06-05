@@ -109,13 +109,12 @@ interaction.
 ```
 core/nld/flow/incremental/
 ├── models/                              # leaf layer: data/definition models
-│   ├── state.py                         # FlowState, FlowSourceState, FlowProcessingState
+│   ├── state.py                         # FlowState, FlowSourceState, FlowProcessingState; FlowStatePlan, FlowPlannedProcessingState, FlowPlannedProcessingDetailledState
 │   ├── logic.py                         # FlowIncrementalLogic, FlowIncrementalDefinition, param defs
-│   ├── plan.py                          # FlowPlannedProcessingState(+Master), IncrementalPlanStatus
 │   ├── config.py                        # IncrementalConfig
 │   ├── events.py
 │   ├── manifest.py                      # FlowIncrementalTypeManifest
-│   ├── referential.py
+│   ├── referential.py                   # state/selection/granularity enums, IncrementalPlanStatus
 │   ├── request.py
 │   └── constants.py
 ├── base/                                # abstract managers + SQL filter (depends downward on models)

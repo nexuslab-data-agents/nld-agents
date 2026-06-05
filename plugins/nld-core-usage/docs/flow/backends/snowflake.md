@@ -35,6 +35,6 @@ list.
   from `retrieve_current_state`.
 - **`compute --persist`** (`by_source_tst`) — `SnowflakeIncrementalBackendMixin`
   persists state plans in `_nld_incremental_plans`, with the
-  processing-state payload in
+  detailed-state payload in
   `_nld_incremental_plans_by_source_tst_planned_processing_state`.
   `get-planned` lists the PLANNED plans from the same slot.

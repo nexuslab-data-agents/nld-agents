@@ -34,7 +34,7 @@ Backend modules live under
   `PostgreSQLIncrementalBackendMixin` / `SnowflakeIncrementalBackendMixin`,
   table `_nld_incremental_plans` for state plans +
   `_nld_incremental_plans_by_source_tst_planned_processing_state` for the
-  processing-state payload).
+  detailed-state payload).
 - **`get-planned`** (`nld flow state incremental get-planned`) lists the
   PLANNED plans from the same slot, so it is available on PostgreSQL and
   Snowflake.

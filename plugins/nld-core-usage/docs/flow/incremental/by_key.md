@@ -32,13 +32,13 @@ Backend modules live under `core/nld/flow/incremental/impl/by_key/backend/`.
   `get_post_processing_state` are implemented on PostgreSQL only.
 - **`compute --persist`** — available on PostgreSQL (via
   `PostgreSQLIncrementalBackendMixin`, table `_nld_incremental_plans`
-  for state plans + `_nld_incremental_plans_by_key_planned_state` for
-  the processing-state payload) and on S3 (via
+  for state plans + `_nld_incremental_plans_by_key_planned_processing_state`
+  for the detailed-state payload) and on S3 (via
   `S3IncrementalBackendMixin`, single index file
   `<state-root>/state_plans.<json|parquet>` for state-plan metadata
   plus per-plan
   `<state-root>/plans/<plan_state_uid>/by_key_planned_processing_state.<json|parquet>`
-  for the processing-state payload). On S3 the planned-state write
+  for the detailed-state payload). On S3 the planned-state write
   works even though the live-state `get-state` accessors do not.
 - **`get-planned`** (`nld flow state incremental get-planned`) lists the
   PLANNED plans from the same slot, so it is available on the same
