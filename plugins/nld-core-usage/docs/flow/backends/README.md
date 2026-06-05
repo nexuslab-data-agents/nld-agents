@@ -102,14 +102,16 @@ JSON column) and rehydrate them on read.
 
 `compute` (preview) resolves the next run's processing state in memory
 from `retrieve_current_state`, so it is available wherever the flow
-runs. `get-state` needs the `get_processing_state` /
-`get_post_processing_state` accessors, implemented on PostgreSQL only.
+runs. `get-state` needs the `read_processing_state` /
+`read_post_processing_state` accessors; for `by_source_tst` they are
+implemented on PostgreSQL and Snowflake, and for `by_key` on PostgreSQL.
 `compute --persist` needs the planned-state write surface, gated on
 both `FlowIncrementalDefinition.supports_planned_state` (strategy
 layer; `by_key` and `by_source_tst` opt in) and
 `IncrementalBackendStateManager.supports_planned_state` (backend
-layer; `PostgreSQLIncrementalBackendMixin` and
-`S3IncrementalBackendMixin` opt in). `get-planned` and
+layer; `PostgreSQLIncrementalBackendMixin`,
+`SnowflakeIncrementalBackendMixin`, and `S3IncrementalBackendMixin`
+opt in). `get-planned` and
 `nld flow execute --planned-state-strategy` /
 `--state-compute-only` read or write the same slot, so they share the
 `compute --persist` column.
@@ -125,7 +127,7 @@ layer; `PostgreSQLIncrementalBackendMixin` and
 | `by_key` | `s3_blob_storage` / `duckdb` | ✅ | ❌ | ✅ | ✅ |
 | `by_source_tst` | `postgresql` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
 | `by_source_tst` | `bigquery` / `pydantic` | ✅ | ❌ | ✅ | ❌ |
-| `by_source_tst` | `snowflake` / `pydantic` | ✅ | ❌ | ✅ | ❌ |
+| `by_source_tst` | `snowflake` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
 | `by_source_tst` | `duckdb` / `pydantic` | ✅ | ❌ | ✅ | ❌ |
 | `by_source_tst` | `local` / `pydantic` | ✅ | ❌ | ✅ | ❌ |
 | `no_increment` | any / `pydantic`, `duckdb` | ✅ (no-op) | ❌ | ✅ (empty) | — |

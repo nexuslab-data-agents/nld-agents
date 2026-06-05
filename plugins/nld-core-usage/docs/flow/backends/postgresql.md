@@ -34,8 +34,9 @@ implemented for both backend families. See the
   persistence for the planned-state slot: the shared table
   `_nld_incremental_plans` (one row per state plan via
   `BackendStatePlanRow`). Each per-strategy backend also creates and
-  owns its processing-state table
-  (`_nld_incremental_plans_<strategy>_planned_state`). The plan
+  owns its detailed-state table
+  (`_nld_incremental_plans_<strategy>_planned_processing_state`), whose
+  columns are the strategy's plan-time fields. The plan
   lifecycle (cancel-on-supersede, COMPLETED / CANCELLED transitions)
   lives on `IncrementalStateManager` (see
   `../execution-and-incremental-design.md` §4.5).

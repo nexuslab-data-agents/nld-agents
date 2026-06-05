@@ -384,7 +384,15 @@ where flow_namespace = 'source.raw'
   and flow_name = 'daily_sales_refresh';
 ```
 
-### BigQuery / Snowflake / DuckDB
+### Snowflake
+
+`by_source_tst` is fully supported: `read_processing_state` /
+`read_post_processing_state` back `get-state`, and
+`SnowflakeIncrementalBackendMixin` opts into `supports_planned_state`,
+so `compute --persist` and `get-planned` work. The table names match
+the PostgreSQL section above. `by_key` has no Snowflake backend.
+
+### BigQuery / DuckDB
 
 The shared abstract accessors for the live processing-state and
 post-processing-state tables are in place but the concrete read

@@ -90,8 +90,9 @@ and the backend. `FlowIncrementalDefinition.supports_planned_state`
 `IncrementalBackendStateManager.supports_planned_state` (`ClassVar`,
 default `False`) declares backend-side capability. The built-ins set
 strategy support on `by_key` and `by_source_tst`; the
-`PostgreSQLIncrementalBackendMixin` and `S3IncrementalBackendMixin`
-set backend support so every backend built on them inherits it. A
+`PostgreSQLIncrementalBackendMixin`, `SnowflakeIncrementalBackendMixin`,
+and `S3IncrementalBackendMixin` set backend support so every backend
+built on them inherits it. A
 flow recomputes the processing state whenever either layer is off,
 regardless of the `--planned-state-strategy` value on
 `nld flow execute`.
@@ -108,13 +109,12 @@ interaction.
 ```
 core/nld/flow/incremental/
 ├── models/                              # leaf layer: data/definition models
-│   ├── state.py                         # FlowState, FlowSourceState, FlowProcessingState
+│   ├── state.py                         # FlowState, FlowSourceState, FlowProcessingState; FlowStatePlan, FlowPlannedProcessingState, FlowPlannedProcessingDetailledState
 │   ├── logic.py                         # FlowIncrementalLogic, FlowIncrementalDefinition, param defs
-│   ├── plan.py                          # FlowPlannedProcessingState(+Master), IncrementalPlanStatus
 │   ├── config.py                        # IncrementalConfig
 │   ├── events.py
 │   ├── manifest.py                      # FlowIncrementalTypeManifest
-│   ├── referential.py
+│   ├── referential.py                   # state/selection/granularity enums, IncrementalPlanStatus
 │   ├── request.py
 │   └── constants.py
 ├── base/                                # abstract managers + SQL filter (depends downward on models)
@@ -123,6 +123,7 @@ core/nld/flow/incremental/
 ├── backend/                             # connector-specific planned-state persistence
 │   ├── plan.py                          # BackendStatePlanRow + state_plan_to_row / row_to_state_plan helpers
 │   ├── postgresql/backend_mixin.py      # PostgreSQLIncrementalBackendMixin (state-plan I/O)
+│   ├── snowflake/backend_mixin.py       # SnowflakeIncrementalBackendMixin (state-plan I/O)
 │   └── s3_blob_storage/backend_mixin.py # S3IncrementalBackendMixin (state-plan I/O)
 ├── services/
 │   ├── factory.py                       # resolves a name to its logic/manager/backend via the registry

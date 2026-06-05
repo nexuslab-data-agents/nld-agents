@@ -50,7 +50,7 @@ Backend modules: `impl/by_key/backend/s3_blob_storage_base.py`,
   one S3 GET regardless of plan-history length;
   `write_state_plan` is a single read-modify-write on the index, and
   the mixin assumes a single writer per flow. The per-strategy backend
-  writes the processing-state payload as a per-plan file under
+  writes the detailed-state payload as a per-plan file under
   `<state-root>/plans/<plan_state_uid>/by_key_planned_processing_state.<json|parquet>`.
   `file_format` on the connector's `params` controls both file
   extensions: `json` writes the full Pydantic envelope; `parquet`
