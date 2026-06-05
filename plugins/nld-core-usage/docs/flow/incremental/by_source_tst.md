@@ -11,7 +11,7 @@ and legend, and `guide-incremental` for the architecture.
 |--------------------|:--------------:|:-----------:|:---------:|:-------------------:|
 | `postgresql` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
 | `bigquery` / `pydantic` | ✅ | ❌ | ✅ | ❌ |
-| `snowflake` / `pydantic` | ✅ | ❌ | ✅ | ❌ |
+| `snowflake` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
 | `duckdb` / `pydantic` | ✅ | ❌ | ✅ | ❌ |
 | `local` / `pydantic` | ✅ | ❌ | ✅ | ❌ |
 | `s3_blob_storage` | — | — | — | — |
@@ -28,15 +28,16 @@ Backend modules live under
   prompt for source authorization — it resolves the watermark window
   from the persisted state alone.
 - **Flow execution** — implemented on every registered backend.
-- **`get-state`** — `get_processing_state` /
-  `get_post_processing_state` are implemented on PostgreSQL only.
-- **`compute --persist`** — available on PostgreSQL only (via
-  `PostgreSQLIncrementalBackendMixin`, table `_nld_incremental_plans`
-  for state plans + `_nld_incremental_plans_by_source_tst_planned_state`
-  for the processing-state payload).
+- **`get-state`** — `read_processing_state` /
+  `read_post_processing_state` are implemented on PostgreSQL and Snowflake.
+- **`compute --persist`** — available on PostgreSQL and Snowflake (via
+  `PostgreSQLIncrementalBackendMixin` / `SnowflakeIncrementalBackendMixin`,
+  table `_nld_incremental_plans` for state plans +
+  `_nld_incremental_plans_by_source_tst_planned_processing_state` for the
+  processing-state payload).
 - **`get-planned`** (`nld flow state incremental get-planned`) lists the
-  PLANNED plans from the same slot, so it is likewise available on
-  PostgreSQL only.
+  PLANNED plans from the same slot, so it is available on PostgreSQL and
+  Snowflake.
 - **Planned-state freshness** — `by_source_tst` overrides
   `is_planned_processing_state_fresh`. `BACKFILL` and `FULL` plans
   (explicit windows) are always fresh. `BACKFILL_DELTA` plans are

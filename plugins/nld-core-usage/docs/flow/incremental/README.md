@@ -50,10 +50,11 @@ Each strategy page reports availability against four axes:
 | Strategy | Connectors with a backend | `get-state` | `compute --persist` |
 |----------|---------------------------|-------------|---------------------|
 | `by_key` | postgresql, bigquery, duckdb, local, s3_blob_storage | postgresql only | postgresql, s3_blob_storage |
-| `by_source_tst` | postgresql, bigquery, snowflake, duckdb, local | postgresql only | postgresql only |
+| `by_source_tst` | postgresql, bigquery, snowflake, duckdb, local | postgresql, snowflake | postgresql, snowflake |
 | `no_increment` | any (pass-through) | — | — |
 
-`get_processing_state` / `get_post_processing_state` are implemented on
-PostgreSQL only; on every other connector `get-state` raises
-`NotImplementedError`, while `compute` (preview) still works because it
-reads through `retrieve_current_state`.
+`read_processing_state` / `read_post_processing_state` back `get-state`. For
+`by_source_tst` they are implemented on PostgreSQL and Snowflake; on the
+remaining connectors `get-state` raises `NotImplementedError`, while
+`compute` (preview) still works because it reads through
+`retrieve_current_state`.
