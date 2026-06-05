@@ -46,13 +46,17 @@ semantics), see the `guide-flows` and `guide-incremental` skills.
   `config/flow.yaml`). If neither is set, the CLI raises a clear
   RuntimeError.
 - The execution-side read accessors (`get_latest_execution_info`,
-  `get_execution_history`) have default implementations on
-  `ExecutionBackendStateManager` derived from
-  `retrieve_latest_execution_state`, so every backend that supports
-  writes also supports execution reads: PostgreSQL, BigQuery,
-  Snowflake, DuckDB, S3 blob storage, and the local file backend.
-  Row-based backends override the defaults with optimised variants
-  that join step-history rows in a dedicated query.
+  `get_execution_history`) are implemented on the base
+  `ExecutionBackendStateManager`: they read the execution header via
+  `retrieve_latest_execution_state` and populate
+  `FlowExecutionInfo.steps` through an abstract
+  `_get_steps_for(flow_uid)` hook that every backend implements. Every
+  backend that supports writes therefore supports execution reads —
+  headers and step lists alike: PostgreSQL, BigQuery, Snowflake,
+  DuckDB, S3 blob storage, and the local file backend. Row-based
+  backends implement `_get_steps_for` against their
+  `_nld_execution_step_history` table; blob and local backends resolve
+  inline steps from the loaded execution payloads.
 - The resolver lazy-loads state-backend connectors from
   `connection_configs`, so the CLI works even when the executor has
   not yet loaded the connector for a regular run.
@@ -241,13 +245,13 @@ step list is available too.
 
 ### BigQuery / Snowflake / DuckDB
 
-The CLI reads from these row-based backends via the default
+The CLI reads from these row-based backends via the shared
 `get_latest_execution_info` / `get_execution_history` implementations
-on `ExecutionBackendStateManager`, which call
-`retrieve_latest_execution_state` and select the latest header.
-Concrete backend classes override the defaults with optimised
-variants that join `_nld_execution_state`, `_nld_execution_history`,
-and `_nld_execution_step_history` in a dedicated query.
+on `ExecutionBackendStateManager`, which select the latest header from
+`_nld_execution_state` / `_nld_execution_history` and attach steps via
+each backend's `_get_steps_for(flow_uid)` — a query against
+`_nld_execution_step_history`. `get-state`, `get-history`, and
+`get-steps` return populated step lists on all three backends.
 
 For ad-hoc analysis, the same tables are reachable via each
 connector's native CLI (`bq query`, `snowsql`, `duckdb`).
