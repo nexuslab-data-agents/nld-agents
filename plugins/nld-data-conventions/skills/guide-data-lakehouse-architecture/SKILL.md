@@ -320,7 +320,7 @@ Each process type governs how data moves between layers:
 
 **Important Notes**:
 - Process names are **case-sensitive** and must be used exactly as listed
-- Use these names in Kestra flow definitions, dbt model configs, data lineage metadata, and documentation
+- Use these names in Kestra flow definitions, NLD flow definitions, data lineage metadata, and documentation
 - Any transition not listed in this table is **not authorized** and should raise an architectural review
 
 ---
