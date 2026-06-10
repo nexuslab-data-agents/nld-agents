@@ -48,12 +48,18 @@ A directional link between two structures.
 
 | Field | Type | Purpose |
 |-------|------|---------|
-| `left_structure` | `NldEntityReference[Structure]` | Upstream structure reference. |
-| `right_structure` | `NldEntityReference[Structure]` | Downstream structure reference. |
-| `cardinality` | `StructureModelCardinality` | Relationship cardinality (required). |
-| `field_mappings` | `dict[str, str]` | left field → right field (must be non-empty). |
+| `left_structure` | `NldEntityReference[Structure]` | Left structure reference (by convention, the structure the model is about). |
+| `right_structure` | `NldEntityReference[Structure]` | Right structure reference (the joined table). |
+| `cardinality` | `StructureModelCardinality` | Join cardinality (required). |
+| `left_to_right_mappings` | `list[StructureModelColumnMapping]` | Join keys; each item is a bare column name (identical on both sides) or a `{left, right}` pair when names differ. Non-empty. |
 | `condition` | `str \| None` | Optional filter expression for conditional links. |
 | `attributes` | `dict \| None` | Optional free-form metadata. |
+
+### `StructureModelColumnMapping(NldBaseModel)`
+
+A single join-key pairing: `left` and `right` column names. A bare YAML string
+(e.g. `organization_reference`) is shorthand for an identical `{left, right}`
+pair; use the explicit `{left, right}` form when the names differ.
 
 ### `StructureModelCardinality` (enum)
 
@@ -89,7 +95,7 @@ embed the structure body.
 ## Validation
 
 `StructureModel._is_valid()` resolves each link's left and right structures from
-the registry and checks that **every** field in `field_mappings` exists on the
+the registry and checks that **every** column in `left_to_right_mappings` exists on the
 corresponding structure. It returns a list of error strings (empty == valid) and
 requires an active `NldExecutionContext` with loaded entities.
 
@@ -117,18 +123,30 @@ nld structure model info  --name <model> [--namespace <ns>]
   (e.g. raw→refined). They are complementary: dictionary for vocabulary,
   structure model for lineage.
 
+## Convention: one model per structure, associated structure on the left
+
+A model is named after a structure and catalogues that structure's **known join
+links**. **Standard rule:** the associated structure is always the
+`left_structure` of every link; `right_structure` is the joined table. Join keys
+go in `left_to_right_mappings` (left column = a column on the associated
+structure, right column = a column on the joined table).
+
 ## Example
 
 ```yaml
-name: web_hr_apec_company_layers
-description: Raw → refined lineage for the APEC company entity
+name: refined_web_hr_wttj_job          # the model is about this structure
+description: Known join links for refined_web_hr_wttj_job
 links:
-  raw_to_refined:
-    left_structure: apec.raw_web_hr_apec_companies
-    right_structure: apec.refined_web_hr_apec_company
+  company:                             # join to another entity (FK)
+    left_structure: wttj.refined_web_hr_wttj_job
+    right_structure: wttj.refined_web_hr_wttj_company
+    cardinality: many_to_one
+    left_to_right_mappings:
+      - cd_organization_reference      # identical on both sides
+  raw:                                 # join to the same row in another layer
+    left_structure: wttj.refined_web_hr_wttj_job
+    right_structure: wttj.raw_web_hr_wttj_jobs
     cardinality: one_to_one
-    field_mappings:
-      apec_company_id: cd_apec_company_id
-      raison_sociale: ds_legal_name
-      effectif: nb_employees
+    left_to_right_mappings:
+      - {left: cd_job_reference, right: job_reference}
 ```

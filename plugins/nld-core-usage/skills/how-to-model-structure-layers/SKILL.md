@@ -19,7 +19,7 @@ user-invocable: true
 ## Definition
 
 - **What**: Author a `StructureModel` YAML that links two structures via named
-  `links`, each carrying `field_mappings` (left field → right field) and a
+  `links`, each carrying `left_to_right_mappings` (join keys) and a
   `cardinality`, then validate it with the CLI.
 - **When**: After both layers exist as structures (e.g. `raw_web_hr_apec_companies`
   and `refined_web_hr_apec_company`) and you want the raw→refined mapping to be
@@ -61,19 +61,24 @@ The file `name:` must match the model name (file stem is used when omitted).
 
 ## The model file
 
+A model is named after a structure and lists that structure's join links.
+
 ```yaml
-name: web_hr_apec_company_layers
-description: Raw → refined lineage for the APEC company entity
+name: refined_web_hr_wttj_job              # the model is about this structure
+description: Known join links for refined_web_hr_wttj_job
 links:
-  raw_to_refined:                          # link name (becomes the link's name)
-    left_structure: apec.raw_web_hr_apec_companies      # NldEntityReference
-    right_structure: apec.refined_web_hr_apec_company
+  raw:                                     # link name
+    left_structure: wttj.refined_web_hr_wttj_job        # the associated structure
+    right_structure: wttj.raw_web_hr_wttj_jobs          # the joined table
     cardinality: one_to_one
-    field_mappings:                         # left field -> right field
-      apec_company_id: cd_apec_company_id
-      raison_sociale: ds_legal_name
-      effectif: nb_employees
-      annee_creation: yr_creation
+    left_to_right_mappings:                # join keys
+      - {left: cd_job_reference, right: job_reference}   # names differ -> pair
+  company:
+    left_structure: wttj.refined_web_hr_wttj_job
+    right_structure: wttj.refined_web_hr_wttj_company
+    cardinality: many_to_one
+    left_to_right_mappings:
+      - cd_organization_reference          # identical both sides -> shorthand
 ```
 
 Key rules:
@@ -82,17 +87,21 @@ Key rules:
   `"<namespace>.<structure_name>"` (use a leading `.` or no dot for the root
   namespace). They stay strings on disk and are resolved on demand — do **not**
   inline the structure.
-- **`field_mappings`** maps **left field → right field**. For raw→refined put the
-  raw (source-language) column on the left and the refined (canonical) column on
-  the right. Every mapped field must exist on its side or `validate` fails.
+- **Standard rule: associated structure on the left.** When you keep one model
+  per structure, the structure the model is named after is the `left_structure`
+  of every link; `right_structure` is the joined table.
+- **`left_to_right_mappings`** holds the **join keys**. Each entry is a single
+  column name (when identical on both sides) or a `{left, right}` pair (when the
+  names differ). The left column is on `left_structure`, the right on
+  `right_structure`. Every column must exist or `validate` fails.
 - **`cardinality`** is one of: `one_to_one`, `one_to_many`, `many_to_one`,
   `many_to_many`, `one_to_zero`, `zero_to_one`, `many_to_zero`, `zero_to_many`.
-  raw↔refined is typically `one_to_one`.
-- **`condition`** (optional) — a filter expression for conditional links.
+  Same-row cross-layer joins are `one_to_one`; a child→parent FK is `many_to_one`.
+- **`condition`** (optional) — a filter expression for conditional joins.
 - **`attributes`** (optional) — free-form metadata (e.g. `{join_type: left}`).
 
-One model can hold several links (e.g. company and job layers together), or you
-can keep one model per entity. Prefer one model per entity for clear ownership.
+Prefer **one model per structure** (named after it), listing every table it
+joins to — cross-layer (same row across raw/refined/…) and cross-entity (FK).
 
 ---
 
