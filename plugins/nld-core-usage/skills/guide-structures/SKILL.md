@@ -53,8 +53,37 @@ project-local path. If not found, read the bundled copy.
 (PRIMARY_KEY, TIMESTAMP, FOREIGN_KEY, etc.) or field-level characterisation
 definitions.
 
+## CLI: listing & filtering structures
+
+`nld structure list` enumerates structures, optionally filtered by property
+and/or tag:
+
+```
+nld structure list [--namespace <ns>] [--property key=value]... [--tag <tag>]...
+```
+
+- `--property key=value` and `--tag` are **repeatable** and **ANDed** (a
+  structure must match every given pair / tag).
+- Filtering is against the **merged** properties/tags (`get_all_properties` /
+  `get_all_tags`), so template-contributed values are included.
+- Output is a table: `Name | Namespace | Type | <each filtered property> | Tags`.
+
+```
+# every structure tagged with a given layer property
+nld structure list --property layer=landing
+
+# raw external-source structures in one namespace
+nld structure list --namespace apec --property layer=raw --tag external_source
+```
+
+Other `nld structure` subcommands: `info` (single structure detail), `adapt`,
+`deploy plan` / `deploy execute`, `render`. For inter-structure join models, see
+the `guide-structure-model` skill (`nld structure model list/info/validate`).
+
 ## Cross-References
 
+- For inter-structure join models (links, cardinality, field mappings), see the
+  `guide-structure-model` skill.
 - For flows that reference structures as targets, see the `guide-flows` skill.
 - For the underlying Pydantic model system that Structure inherits from, see
   the `guide-base-model` skill.
