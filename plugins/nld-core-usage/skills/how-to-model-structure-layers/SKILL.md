@@ -136,37 +136,6 @@ nld structure model validate [--name <model>] [--namespace <ns>]
 
 ---
 
-## Recipes
-
-### Lineage for one entity, raw → refined
-One link, `one_to_one`, raw columns on the left, refined on the right. Validate
-with `--name`.
-
-### Whole-namespace check in CI / pre-merge
-`nld structure model validate --namespace apec` validates every model under the
-namespace and exits non-zero on the first invalid mapping — drop it into a
-pre-merge step so layer renames can't silently break lineage.
-
-### Multi-layer chain
-Add `raw_json_to_raw` and `view_to_refined` links (or separate models) to model
-the full `raw_json → raw → view → refined` path; `validate` checks each hop.
-
----
-
-## Guidelines for agents
-
-- **Model after both layers exist**, then validate immediately — an unvalidated
-  model is worse than none (it implies a checked lineage that isn't).
-- **Left = upstream, right = downstream.** Keep the direction consistent
-  (raw→refined) so `info` reads as a transformation map.
-- **Pair with the dictionary, don't duplicate it.** The dictionary says
-  `raison_sociale` and `ds_legal_name` both mean `legal_name`; the structure
-  model says *this raw column becomes that refined column*. Use both.
-- **A failing `validate` is a real signal** — usually a column was renamed or
-  dropped in one layer. Fix the structures or the mapping, never silence it.
-
----
-
 ## Cross-references
 
 - Architectural reference: `guide-structure-model` skill.
