@@ -45,7 +45,7 @@ The full architectural reference is at
 | Namespace hierarchy and override rules | "4. Namespace Resolution" |
 | `resolve_term` / `find_by_synonym` / `find_terms` | "5. Python Lookup API" |
 | Registry accessors | "6. Entity Registry Integration" |
-| Authoring guidelines for vocabulary files | "7. Authoring Guidelines" |
+| Concept-curation discipline for vocabulary files | "7. Authoring Discipline" |
 
 ## Cross-References
 
