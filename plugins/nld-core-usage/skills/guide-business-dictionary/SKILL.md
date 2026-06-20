@@ -3,9 +3,10 @@ name: guide-business-dictionary
 description: >
   Architectural guide for the nld-core BusinessDictionary entity — a namespaced,
   YAML-based business vocabulary used by agents to name tables and fields.
-  Covers the Term/BusinessDictionary models, namespace hierarchy resolution
-  (nearest override wins), the `resolve_term` / `find_by_synonym` Python API,
-  and the `NldEntityRegistry.get_business_dictionary*` accessors.
+  Covers the Term/BusinessDictionary models (multi-language translations,
+  singular/plural, rich examples), namespace hierarchy resolution (nearest
+  override wins), the `resolve_term` / `find_by_synonym` / `find_terms` Python
+  API, and the `NldEntityRegistry.get_business_dictionary*` accessors.
 user-invocable: false
 ---
 
@@ -20,7 +21,8 @@ fields, and that runtime code can query for canonical business terms.
 Activate this guide when the agent is working on:
 - Code under `nld/business/` (`dictionary.py`, `lookup.py`)
 - Authoring or editing `business/dictionary/**/*.yml` vocabulary files
-- Calling `resolve_term` or `find_by_synonym`
+- Adding term `translations`, `plural` forms, or `{value, description}` examples
+- Calling `resolve_term`, `find_by_synonym`, or `find_terms`
 - Using `NldEntityRegistry.get_business_dictionary` /
   `get_business_dictionary_dict` / `get_business_dictionary_keys` /
   `list_business_dictionary_keys`
@@ -41,7 +43,7 @@ The full architectural reference is at
 | `Term` and `BusinessDictionary` models | "2. Models" |
 | YAML file layout (`business/dictionary/<ns>/<ns>.yml`) | "3. Filesystem Layout" |
 | Namespace hierarchy and override rules | "4. Namespace Resolution" |
-| `resolve_term` vs. `find_by_synonym` | "5. Python Lookup API" |
+| `resolve_term` / `find_by_synonym` / `find_terms` | "5. Python Lookup API" |
 | Registry accessors | "6. Entity Registry Integration" |
 | Authoring guidelines for vocabulary files | "7. Authoring Guidelines" |
 
