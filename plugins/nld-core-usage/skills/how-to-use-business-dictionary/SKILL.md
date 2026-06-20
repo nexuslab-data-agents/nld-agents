@@ -2,11 +2,12 @@
 name: how-to-use-business-dictionary
 description: >
   Look up canonical business terms from the shell with
-  `nld business dict find`. Use when naming a table or field and you want
+  `nld business dict find`, or list a namespace's vocabulary with
+  `nld business dict list`. Use when naming a table or field and you want
   the project's agreed vocabulary (synonyms, description, examples,
-  related terms) instead of guessing. Scope the search with `--synonym`
-  and `--related-terms`, narrow by subdomain with `--namespace`, and
-  capture the JSON output with `--output` when feeding it to another step.
+  translations, related terms) instead of guessing. Scope the search with
+  `--synonym` and `--related-terms`, narrow by subdomain with `--namespace`,
+  and capture the JSON output with `--output` when feeding it to another step.
 user-invocable: true
 ---
 
@@ -64,7 +65,10 @@ nld business dict find --term <query> [--synonym] [--related-terms]
 
 Flags compose. Matching precedence inside a single term is
 `name → synonym → related_term` and each term appears at most once — the
-deepest (most specific) namespace that has the term wins.
+deepest (most specific) namespace that has the term wins. `name` matching
+covers the term's `plural` and its `translations` (each translation's name and
+plural); `synonym` matching covers translation synonyms — so a term resolves
+from any of its languages.
 
 ### Output shape
 
@@ -77,10 +81,18 @@ deepest (most specific) namespace that has the term wins.
     {
       "term": {
         "name": "customer",
+        "plural": "customers",
+        "grammatical_class": "noun",
         "description": "...",
         "synonyms": ["client", "buyer"],
-        "examples": ["id_customer", "cd_customer_status"],
-        "related_terms": ["order"]
+        "examples": [
+          { "value": "id_customer", "description": null },
+          { "value": "cd_customer_status", "description": "Lifecycle status code" }
+        ],
+        "related_terms": ["order"],
+        "translations": [
+          { "language": "fr", "name": "client", "plural": "clients", "synonyms": ["acheteur"] }
+        ]
       },
       "matched_on": "name",
       "source_namespace": "."
@@ -91,7 +103,21 @@ deepest (most specific) namespace that has the term wins.
 
 `matched_on` is always one of `"name"`, `"synonym"`, or `"related_term"`.
 `source_namespace` tells you which dictionary file the term was resolved
-from — useful for confirming that a namespace override actually applied.
+from — useful for confirming that a namespace override actually applied. Each
+`examples` entry is a `{value, description}` object (a bare string in the YAML
+is serialized as a value-only object).
+
+### Listing a namespace's vocabulary
+
+```
+nld business dict list [--namespace <ns>]
+```
+
+Lists the terms visible from a namespace (resolved nearest-first, so namespace
+overrides win), with each term's source namespace, languages (primary +
+translations), and synonyms. Use it to survey the available vocabulary before
+naming, or to confirm which terms a subdomain inherits. Defaults to the root
+namespace (`.`) when `--namespace` is omitted.
 
 ---
 
