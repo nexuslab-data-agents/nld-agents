@@ -242,27 +242,64 @@ added to `ENTITY_CATEGORIES` and ordered last in
 All accessors that take `namespace` default to the project root when it is
 `None`.
 
-## 7. Authoring Guidelines
+## 7. Authoring Discipline
 
-- **One file per namespace.** Place `business/dictionary/<ns path>/<leaf>.yml`.
-  The file's `name` must match the namespace leaf.
-- **Start at the root** (`general.yml`) with cross-domain terms (customer,
-  order, product, …). Only add namespaced files when a term genuinely has a
-  different meaning in that subdomain.
-- **Override sparingly.** A namespaced dictionary should only contain terms
-  that need to differ from a parent. There is no model-level merge — it is
-  lookup-time resolution — so a namespaced file that redeclares a term
-  identically to its parent is noise.
-- **Populate `synonyms` generously** so that `find_by_synonym` can map
-  free-text user input to the canonical term.
-- **Use real column/table names in `examples`** (e.g. `id_customer`,
-  `dt_order_placed`) so agents naming fields can see concrete outputs
-  consistent with the field-naming conventions (`id_`, `cd_`, `dt_`, …). Use
-  the `{value, description}` form when the usage needs explaining; the bare
-  string otherwise.
-- **Keep terms singular** and put the plural in `plural` so both forms resolve.
-- **Set the dictionary `language`** and add `translations` for terms used in
-  more than one language — `find_by_synonym` and `find_terms` match translation
-  names and synonyms, so a term resolves from any of its languages.
-- **Keep `related_terms` to canonical names** that exist somewhere in the
-  visible hierarchy — these are navigational, not definitional.
+A term names a **concept**, not a column. Author the concept once, cleanly, and
+let `examples` carry the concrete column/table names that realise it.
+
+### Term granularity
+
+- **One word wherever possible.** A term is a single word; use two only when the
+  meaning genuinely requires it. Ignore `_id` / `_name` / `_description`
+  suffixes when picking the term: `company_id` → `company`, `legal_name` →
+  `legal`.
+- **Split composed concepts** into their parts and capture the composition as an
+  `example`: `gender_parity` → terms `gender` + `parity`, with
+  `gender_parity` as an example of `parity`.
+- **Singular term + `plural`.** Keep the term key singular and link the plural
+  via `plural` (`employee` / `plural: employees`) — never make the term itself
+  plural. Both forms then resolve.
+
+### Term fields
+
+- **`grammatical_class` on every term.** One of `noun` (most concepts —
+  `address`, `age`), `adjective` (`legal`, `remote`, `published`, `archived`),
+  `verb` (`apply`), `pronoun`, `adverb`, `preposition`. nld-core rejects any
+  other value, so set it deliberately.
+- **`description` is general, never provider-specific.** Describe the concept
+  itself — a generic `company` term does not describe "the APEC company".
+  Provider- or usage-specific meaning belongs in an example's `description`.
+- **`synonyms` are true same-meaning alternatives only.** Loosely-associated
+  words go in `related_terms` (for `employee`, `headcount` and `workforce` are
+  `related_terms`, not synonyms). Populate genuine synonyms generously so
+  `find_by_synonym` can map free-text input to the canonical term.
+- **`preferred_term` discourages a near-synonym.** When two concepts are close
+  but one is canonical, point the weaker at the stronger (`legal_entity` →
+  `preferred_term: company`, `town` → `preferred_term: city`) instead of
+  collapsing them into `synonyms`.
+- **`related_terms` may forward-reference** a term not yet defined; they are
+  navigational, not definitional.
+- **`examples` carry real column/table names** consistent with the field-naming
+  conventions (`id_`, `cd_`, `dt_`, …). Use the `{value, description}` form when
+  the usage needs explaining (a composed term), the bare string otherwise. Omit
+  `examples` and `related_terms` entirely rather than writing `[]`.
+
+### Languages
+
+- **Set the dictionary `language`** to the primary language of its term keys.
+- **Foreign-language names belong in `translations`, never in `synonyms`.** Each
+  translation carries its own `name`, `plural`, `synonyms`, and `examples`; a
+  usage belongs to the language it is written in. `find_by_synonym` and
+  `find_terms` match translation names and synonyms, so a term resolves from any
+  of its languages.
+
+### Files & namespaces
+
+- **One file per namespace.** Place `business/dictionary/<ns path>/<leaf>.yml`;
+  the file's `name` matches the namespace leaf.
+- **Start at the root** (`general.yml`) with cross-domain terms. Only add a
+  namespaced file when a term genuinely differs in that subdomain.
+- **Override sparingly.** Resolution is lookup-time, not a model-level merge, so
+  a namespaced file should redeclare a term only to specialise it (e.g. to add
+  provider-specific `examples` / `translations`); redeclaring it identically to
+  a parent is noise.

@@ -190,6 +190,29 @@ Prefer these flags over redirecting stdout when composing with another
 task — the CLI prints a log line to stdout when writing to a file,
 which would otherwise pollute a redirected file.
 
+### 6. Add or extend a term (look first, then edit, then verify)
+
+Discovery and verification go through the CLI; authoring is a YAML edit.
+
+```
+# 1. Look first — does the concept already exist (in any language)?
+nld business dict list --namespace <ns>
+nld business dict find --term <user_word> --synonym --namespace <ns>
+
+# 2. Edit the YAML under business/dictionary/<ns>/<leaf>.yml.
+#    Name the concept (single word, singular), set grammatical_class,
+#    keep the description general, put foreign names under translations.
+#    See guide-business-dictionary §7 for the full curation discipline.
+
+# 3. Verify — loading via the CLI surfaces any model error and confirms
+#    resolution/overrides:
+nld business dict list --namespace <ns>
+nld business dict find --term <new_or_translated_name> --synonym --namespace <ns>
+```
+
+Never verify by grepping the YAML — `list` / `find` load the model the way the
+runtime does and catch validation errors a grep would miss.
+
 ---
 
 ## Guidelines for agents
@@ -208,6 +231,13 @@ which would otherwise pollute a redirected file.
 - **Zero matches is a signal**, not a failure — consider whether a new
   term should be added to the dictionary, or whether the user's word
   should become a synonym of an existing one.
+- **CLI-first for discovery and verification.** Use `list` / `find` to
+  survey and to confirm edits; do not grep the YAML.
+- **Missing a capability? Extend nld-core.** If a needed dictionary
+  operation (a filter, a validation command) is not exposed by the CLI,
+  add it to nld-core (`nld/business/task/` + `nld/cli/business/`) with a
+  task-level test rather than working around it with ad-hoc file
+  inspection.
 
 ---
 
