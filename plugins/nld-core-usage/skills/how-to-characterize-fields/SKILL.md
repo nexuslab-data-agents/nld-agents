@@ -109,8 +109,9 @@ For each field, walk these in order:
    - length-of-time measure (months, years, days) → `duration` with a
      `unit_of_measure` attribute (and `aggregation_applied_rule` when the value is
      pre-aggregated, e.g. a min / max / average duration).
-   - ratio on a 0–100 scale → `percentage_out_of_100` (the audit `min`/`max`
-     bounded by 0 and 100 confirms it).
+   - ratio / proportion → `percentage` with a `base` attribute (`100` for a
+     0–100 scale, `1` for a 0–1 fraction); the audit `min`/`max` bounds confirm
+     the base.
    - `dt_` / `ts_` business time not already a `rec_*` technical timestamp →
      `functional_timestamp`, `snapshot_date`, `validity_start/end_*`.
    - string/int encoded date or time (`YYYYMMDD`, `HHMMSS`, …) →

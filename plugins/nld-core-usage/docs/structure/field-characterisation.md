@@ -101,6 +101,7 @@ The attribute keys recognized today are:
 | `linked_field` | `amount_in_cur`, `amount_in_uom` | Single field name of the currency / unit-of-measure that this amount is expressed in (an amount is expressed in exactly one currency / unit). See §4 MEASURE / CURRENCY. |
 | `unit_of_measure` | `duration` (and other unit-bearing measures) | Literal unit the measure is expressed in (e.g. `month`, `year`, `day`). Unlike `uom`/`linked_field`, the unit is a literal value carried inline, not a reference to a sibling field. See §4 MEASURE. |
 | `aggregation_applied_rule` | `duration` (and other aggregated measures) | The aggregation already applied to produce the value (e.g. `min`, `max`, `average`, `sum`). Use when a column is a pre-aggregated measure (e.g. a min / max / average duration). See §4 MEASURE. |
+| `base` | `percentage` | The scale the ratio is expressed on: `100` for a 0–100 percentage, `1` for a 0–1 fraction. See §4 MEASURE. |
 
 > Note: a number of additional names appear as `auto()` placeholders in
 > `FieldCharacterisationDefinitions` (e.g. `rec_insert_user_name`,
@@ -148,7 +149,7 @@ The characterisations of each category follow.
 | `amount_in_uom` | Numeric amount expressed in a unit of measure (not a currency). Carries a `linked_field` attribute naming its single `uom` field. |
 | `quantity` | Plain quantity, dimensionless or paired with a separate unit field. |
 | `duration` | A length of time. Carries a `unit_of_measure` attribute (literal, e.g. `month`, `year`) and, when pre-aggregated, an `aggregation_applied_rule` attribute (e.g. `min`, `max`, `average`). |
-| `percentage_out_of_100` | A ratio expressed on a 0–100 scale (as opposed to a 0–1 fraction). |
+| `percentage` | A ratio / proportion. Carries a `base` attribute giving the scale: `100` for a 0–100 percentage, `1` for a 0–1 fraction. |
 
 A `uom` field can govern **several** amounts (`linked_fields`, a list), while an
 `amount_in_uom` is expressed in **exactly one** unit (`linked_field`, a single
