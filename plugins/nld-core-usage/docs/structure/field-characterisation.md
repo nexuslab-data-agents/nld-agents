@@ -102,8 +102,8 @@ The attribute keys recognized today are:
 | `unit_of_measure` | `duration` (and other unit-bearing measures) | Literal unit the measure is expressed in (e.g. `month`, `year`, `day`). Unlike `uom`/`linked_field`, the unit is a literal value carried inline, not a reference to a sibling field. See §4 MEASURE. |
 | `aggregation_applied_rule` | `duration` (and other aggregated measures) | The aggregation already applied to produce the value (e.g. `min`, `max`, `average`, `sum`). Use when a column is a pre-aggregated measure (e.g. a min / max / average duration). See §4 MEASURE. |
 | `base` | `percentage` | The scale the ratio is expressed on: `100` for a 0–100 percentage, `1` for a 0–1 fraction. See §4 MEASURE. |
-| `referential` | `referential_value` | Name of the referential / list of values the field draws from (e.g. `contract_type`). See §4 CODE. |
-| `multi_value` | `referential_value` | `true` when the column holds several values concatenated (e.g. comma-separated); default `false`. See §4 CODE. |
+| `referential` | `referenced` | Name of the referential / list of values the field draws from (e.g. `contract_type`). See §4 CODE. |
+| `multi_value` | `referenced` | `true` when the column holds several values concatenated (e.g. comma-separated); default `false`. See §4 CODE. |
 | `standard` | `language`, `country` | The standard the code follows (e.g. `iso_639`, `iso_3166`). See §4 CODE. |
 | `format` | `functional_date`, `functional_time` | The encoded format of the value (e.g. `yyyymmdd`, `ddmmyyyy`, `hhmmss`, `hhmm`). See §4 DATETIME. |
 
@@ -300,7 +300,7 @@ fields:
 
 | Name | Description |
 |------|-------------|
-| `referential_value` | A value drawn from a referential / controlled list of values (a coded enumeration / nomenclature), as opposed to free text. Carries an optional `referential` attribute (the list name) and an optional `multi_value` attribute. |
+| `referenced` | A value drawn from a referential / controlled list of values (a coded enumeration / nomenclature), as opposed to free text. Carries an optional `referential` attribute (the list name) and an optional `multi_value` attribute. |
 | `language` | A language code from a standard referential. Carries a `standard` attribute (e.g. `iso_639`). |
 | `country` | A country code from a standard referential. Carries a `standard` attribute (e.g. `iso_3166`). |
 
@@ -310,14 +310,14 @@ fields:
     data_type: CHARACTER VARYING
     characterisations:
       - name: contract_type
-        characterisation: referential_value
+        characterisation: referenced
         attributes:
           referential: contract_type
   organization_industry:
     data_type: CHARACTER VARYING
     characterisations:
       - name: organization_industry
-        characterisation: referential_value
+        characterisation: referenced
         attributes:
           referential: industry
           multi_value: true

@@ -113,7 +113,7 @@ For each field, walk these in order:
      0–100 scale, `1` for a 0–1 fraction); the audit `min`/`max` bounds confirm
      the base.
    - value drawn from a controlled list / enumeration / nomenclature →
-     `referential_value` (with an optional `referential` attribute naming the list,
+     `referenced` (with an optional `referential` attribute naming the list,
      and `multi_value: true` when several codes are concatenated).
    - language code → `language` (`standard: iso_639`); country code → `country`
      (`standard: iso_3166`).
@@ -190,7 +190,7 @@ Audit: <audit name> (audited_at <ts>, row_count <n>)   |   or: NO AUDIT — rule
 |-------|-----------|---------|--------|----------|----------|-----------|----------|
 | ts_inserted_at   | TIMESTAMP_TZ      | rec_insert_tst | skip (template) | — | — | — | template field, valid by definition |
 | cd_job_reference | CHARACTER VARYING | primary_key | skip (key) | — | — | — | — |
-| contract_type    | CHARACTER VARYING | —          | propose | referential_value (referential: contract_type) | CODE | high | distinct=8, has distribution → value from a controlled list, not free text |
+| contract_type    | CHARACTER VARYING | —          | propose | referenced (referential: contract_type) | CODE | high | distinct=8, has distribution → value from a controlled list, not free text |
 | ds_salary        | NUMERIC           | —          | propose | amount_in_cur | CURRENCY | medium | numeric, 17% coverage; no resolvable currency sibling → flag |
 | dt_published     | CHARACTER VARYING | —          | propose | functional_date (format: yyyymmdd) | DATETIME | high | values like 20251019, min/max are 8-digit ints |
 | ds_comment       | CHARACTER VARYING | free_text  | challenge | (keep / coded?) | DATA_ENTRY | medium | tagged free_text but distinct=5 → evidence contradicts |
