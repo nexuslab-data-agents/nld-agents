@@ -1,15 +1,15 @@
 ---
-name: how-to-determine-structure-links
+name: how-to-trace-flow-lineage
 description: >
-  Determine the upstream and downstream links of a structure (or a flow) from the
-  shell with `nld flow deps`. The command builds the flow dependency graph — a
+  Trace the upstream and downstream flow lineage of a structure (or a flow) from
+  the shell with `nld flow deps`. The command builds the flow dependency graph — a
   directed, bipartite graph of flow nodes and structure nodes — and scopes it to
   the lineage around one node. Use when you need to know what feeds a structure,
   what consumes it, or the structure-to-structure lineage across the project.
 user-invocable: true
 ---
 
-# How to Determine the Links Between Structures
+# How to Trace Flow Lineage
 
 **Classification**: Atomic Skill | Structure Analysis
 
