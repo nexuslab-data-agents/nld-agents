@@ -29,7 +29,8 @@ Then ask Claude *"how do I make this flow incremental?"* and it routes to the ri
 | `guide-incremental` | `by_key` / `by_source_tst` / `no_increment` strategies, state management |
 | `guide-structures` | Structure definitions, field characterisations, deployment |
 | `guide-structure-audit` | StructureAudit entity — per-structure coverage and value-distribution audits |
-| `how-to-audit-a-structure` | Author, validate, and render a StructureAudit with `nld structure audit` |
+| `how-to-profile-a-structure` | Profile (or hand-author), validate, and render a StructureAudit with `nld structure audit` |
+| `how-to-characterize-fields` | Propose field characterisations for one structure from the rules + its audit, report, and confirm before updating |
 | `how-to-get-execution-info` | Retrieving flow execution metadata from state backends |
 | `how-to-get-incremental-info` | Retrieving incremental state from state backends |
 | `how-to-use-business-dictionary` | `nld business dict find` / `list` CLI usage |

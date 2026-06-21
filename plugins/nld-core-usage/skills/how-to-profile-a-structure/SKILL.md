@@ -1,0 +1,282 @@
+---
+name: how-to-profile-a-structure
+description: >
+  Produce a StructureAudit for a structure — the measured facts about it (target,
+  run metadata, per-column coverage and value distributions). For SQL connectors,
+  `nld structure audit run` profiles the live table and writes the audit YAML for
+  you; for other connectors, author the YAML by hand. Then validate it against the
+  real structure with `nld structure audit validate` and render a markdown report
+  with `nld structure audit render`. Use when you want a versioned, checkable audit
+  committed next to the data.
+user-invocable: true
+---
+
+# How to Profile a Structure
+
+**Classification**: Atomic Skill | Structure Analysis
+
+---
+
+## Definition
+
+- **What**: Produce a `StructureAudit` YAML under `assets/audits/structure/`
+  capturing a structure's target, run metadata, and per-column coverage and
+  value distributions, then validate and render it with the CLI. For SQL
+  connectors the measuring **and** the YAML writing are done by
+  `nld structure audit run`; for non-SQL connectors you author the YAML by hand.
+- **When**: You want a structure's measured profile (row counts, non-null
+  coverage, distinct counts, value distributions) recorded as a versioned entity
+  rather than free-form notes.
+- **Why**: A `StructureAudit` is a checkable, machine-readable source of truth.
+  `validate` confirms every audited column is an actual field of the referenced
+  structure, so a renamed or dropped column surfaces as an error instead of a
+  stale figure. `render` turns the audit into a standard markdown report.
+
+### Which path
+
+| Connector | How to produce the audit |
+|-----------|--------------------------|
+| **SQL connector** (PostgreSQL, BigQuery, Snowflake, … — any profiling-capable engine) | Run `nld structure audit run`. It profiles the live table and writes the audit YAML for you. **Preferred.** |
+| **Non-SQL / profiling not supported** | Author the audit YAML by hand from measurements you obtained elsewhere (see "The audit file"). `run` refuses connections whose engine cannot profile. |
+
+For the entity internals (models, fields, namespace resolution, registry
+accessors), see the `guide-structure-audit` skill.
+
+---
+
+## Prerequisites
+
+- Run from a directory with `nld_project.yml`.
+- The audited structure must already exist under the entity path
+  (`<entity_path>/structure/<ns>/...`).
+- **For `nld structure audit run`** (SQL connectors): a working connection to the
+  environment holding the table, reachable from the project (verify with
+  `nld connection debug --name <conn>`). The table must be deployed and populated.
+- **For manual authoring** (non-SQL connectors): the measurements (coverage,
+  distinct counts, distributions) come from querying the data elsewhere — you
+  record them; this path does not compute them.
+
+---
+
+## Filesystem layout
+
+StructureAudits are the built-in `structure_audit` entity
+(`folder_name="audits/structure"`, resolved relative to `entity_path`). With
+`entity_path: assets`, files live at:
+
+```
+assets/audits/structure/<ns path>/<audit_name>.yml      # namespaced
+assets/audits/structure/<audit_name>.yml                # root namespace
+```
+
+The audit's `name:` (and file stem) is the **audited structure name, with no
+version suffix**. A `prd` audit keeps the bare structure name
+(`raw_web_hr_wttj_jobs`); a non-production audit appends its environment
+(`raw_web_hr_wttj_jobs_dev`).
+
+---
+
+## Run the audit (SQL connectors)
+
+`nld structure audit run` is the preferred way to produce an audit when the data
+sits behind a SQL connector. It profiles the live table and writes the audit YAML
+to the layout above — you do not hand-write anything.
+
+```
+nld structure audit run --name <structure> [--namespace <ns>]
+                        [--connection <conn>] [--sample <N>]
+                        [--environment <env>] [--force]
+```
+
+| Option | Purpose |
+|--------|---------|
+| `--name` | The **structure** to profile. The audit is named after it (with the environment suffix for non-`prd`). Required. |
+| `--namespace` | Namespace the structure resolves in. |
+| `--connection` | Connection to query. Defaults to the structure namespace's mapped connection, so you usually omit it. |
+| `--sample <N>` | Profile a random sample of at most `N` rows instead of the full table. The sampling is recorded under `metadata.sampling`. Omit for a full pass. |
+| `--environment <env>` | Environment label recorded in `target.environment` and folded into the audit name. Defaults to `prd`. |
+| `--force` | Overwrite an existing audit YAML. Without it, an existing audit is left untouched and the run is skipped. |
+
+What the run does for you:
+
+- **SQL connectors only.** The connection's engine must support data profiling; a
+  connection that cannot profile is refused with an error. Use the manual path
+  for everything else.
+- **Measures** row count, per-column non-null coverage, distinct counts, min/max,
+  and low-cardinality value distributions, plus the date-coverage window on the
+  field carrying `rec_source_extraction_tst` (when present).
+- **Excludes template tracking columns** automatically, so the written audit
+  validates cleanly against the structure.
+- **Warns on small tables** (a profile over very few rows is flagged as not
+  representative).
+- **Writes** the audit YAML, then you `validate` and (optionally) `render` it as
+  usual.
+
+Quick example — profile the production PostgreSQL table behind a structure:
+
+```
+nld structure audit run --name raw_web_hr_wttj_jobs --namespace wttj
+nld structure audit validate --name raw_web_hr_wttj_jobs --namespace wttj
+nld structure audit render   --name raw_web_hr_wttj_jobs --namespace wttj
+```
+
+---
+
+## The audit file
+
+This is the shape `run` produces and the shape you write by hand on the manual
+(non-SQL) path. Read it to understand a generated audit or to author one yourself.
+
+```yaml
+name: raw_web_hr_wttj_jobs                 # the audited structure (prd)
+description: Data analysis audit of the WTTJ jobs raw table
+structure: wttj.raw_web_hr_wttj_jobs       # NldEntityReference (kept as a string)
+target:
+  environment: prd                         # dev / stg / prd (required)
+  connector_type: postgresql
+  database: nld_isis_clh
+  schema: acquisition_web_hr
+  table: raw_web_hr_wttj_jobs
+metadata:
+  audited_at: 2026-04-04T00:00:00          # ISO 8601 timestamp
+  row_count: 1251
+  sampling:
+    sampled: false                         # true -> add method/sample_size/fraction
+  date_coverage:                           # omit when there is no date dimension
+    field_characterisation: rec_source_extraction_tst
+    from: 2025-10-19
+    to: 2026-04-01
+columns:
+  cd_job_reference:                        # key sets the column name
+    data_type: CHARACTER VARYING
+    nullable: false
+    primary_key: true
+    coverage: { non_null: 1251, pct: 100.0, distinct: 1251 }
+  contract_type:
+    data_type: CHARACTER VARYING
+    nullable: false
+    coverage: { non_null: 1251, pct: 100.0, distinct: 8 }
+    distribution:                          # low-cardinality columns only
+      top_n: 10
+      truncated: false                     # true when distinct > top_n
+      values:
+        - { value: full_time, count: 884, pct: 70.7 }
+        - { value: internship, count: 171, pct: 13.7 }
+  ds_salary:
+    data_type: NUMERIC
+    nullable: true
+    coverage: { non_null: 217, pct: 17.3, distinct: 95, min: 6, max: 70000000 }
+    notes: Sparse free-text salary, low coverage
+```
+
+Key rules:
+
+- **`structure`** is an `NldEntityReference` string
+  (`"<namespace>.<structure_name>"`). Keep it a string; never inline the
+  structure body. Every audited column must be a field of this structure or
+  `validate` fails.
+- **`target.environment`** is required. Add `connection`, `connector_type`,
+  `database`, `schema`, `table` to make the audit reproducible across
+  environments.
+- **`metadata.sampling`**: set `sampled: false` for a full pass. When `true`,
+  add `method`, `sample_size`, and/or `fraction` (0–1) to describe how the
+  sample was drawn.
+- **`metadata.date_coverage`** is measured on the field carrying
+  `field_characterisation` (e.g. `rec_source_extraction_tst`), not a hard-coded
+  column. Omit the block for structures with no date dimension.
+- **`coverage`** records `non_null`, `pct` (non-null over total), and optionally
+  `distinct`, `min`, `max`.
+- **`distribution`** is for low-cardinality columns. Cap at `top_n` (default
+  `10`), set `truncated: true` when the column has more distinct values than
+  listed, and order `values` by `count` descending.
+- Record only **measured facts**. Field-selection decisions are not part of the
+  entity.
+
+---
+
+## The commands
+
+```
+nld structure audit run     --name <structure> [--namespace <ns>] [--connection <conn>]
+                            [--sample <N>] [--environment <env>] [--force]
+nld structure audit list   [--namespace <ns>]
+nld structure audit info    --name <audit> [--namespace <ns>]
+nld structure audit validate [--name <audit>] [--namespace <ns>]
+nld structure audit render  --name <audit> [--namespace <ns>] [--stdout]
+                            [--override-output-folder-path <dir>]
+```
+
+| Command | Purpose |
+|---------|---------|
+| `run` | **SQL connectors only.** Profile the live table and write the audit YAML. See "Run the audit". |
+| `list` | List the audits visible from a namespace. |
+| `info` | Print an audit's target, metadata, columns, and distributions. |
+| `validate` | Resolve the referenced structure and check every audited column exists on it. Validates one audit with `--name`, or **all** visible audits when omitted. Exits non-zero and lists the offending columns when invalid. |
+| `render` | Mechanically reformat the audit YAML into a standard markdown report (the same measured facts, nothing added). Writes to a timestamped folder under `output/` by default; `--stdout` prints it; `--override-output-folder-path` chooses the folder. |
+
+---
+
+## Process
+
+### SQL connector (preferred)
+
+1. **Confirm the structure exists**
+   (`nld structure info --name <s> --namespace <ns>`).
+2. **Run the audit**:
+   `nld structure audit run --name <s> --namespace <ns>` (add `--sample <N>` for a
+   large table, `--environment <env>` for non-`prd`, `--force` to overwrite). This
+   profiles the live table and writes the audit YAML.
+3. **Inspect**: `nld structure audit info --name <audit> --namespace <ns>`.
+4. **Validate** (the gate):
+   `nld structure audit validate --namespace <ns>`.
+5. **Render** the report when you need a readable artifact:
+   `nld structure audit render --name <audit> --namespace <ns>`.
+
+### Non-SQL connector (manual)
+
+1. **Confirm the structure exists**
+   (`nld structure info --name <s> --namespace <ns>`).
+2. **Measure** the structure's columns elsewhere (row count, non-null coverage,
+   distinct counts, min/max, value distributions for low-cardinality columns).
+3. **Author the audit** at `assets/audits/structure/<ns>/<structure>.yml`
+   following the template above, naming it after the audited structure.
+4. **List** to confirm discovery:
+   `nld structure audit list --namespace <ns>`.
+5. **Inspect**: `nld structure audit info --name <audit> --namespace <ns>`.
+6. **Validate** (the gate):
+   `nld structure audit validate --namespace <ns>`. Fix any reported column that
+   is not a field of the structure (typically a typo or a drifted column name).
+7. **Render** the report when you need a readable artifact:
+   `nld structure audit render --name <audit> --namespace <ns>`.
+
+---
+
+## Two kinds of markdown report
+
+Do not confuse them:
+
+- **Rendered audit report** — produced by `nld structure audit render`. A
+  mechanical reformat of the audit YAML into markdown: the same measured facts,
+  nothing added. Deterministic, regenerated any time from the audit.
+- **Analysis markdown** — an *additional*, optional report an **agent** writes
+  **after analysing** the audit. It adds information the audit does not hold:
+  interpretation, field-selection reasoning, anomalies, recommendations. It is a
+  separate artifact (not output by any `audit` command), authored alongside the
+  audit when that extra context is worth keeping. Downstream skills such as
+  `how-to-characterize-fields` read it for context beyond the raw figures.
+
+This skill produces the **audit** (and optionally its rendered report). Writing
+an analysis markdown is a deliberate, separate step on top of it.
+
+---
+
+## Cross-references
+
+- Architectural reference: `guide-structure-audit` skill.
+- The connection `run` queries: `how-to-check-connections` skill
+  (`nld connection list` / `debug`).
+- The audited structures themselves: `guide-structures`.
+- Column naming prefixes (`cd_`, `id_`, `dt_`, …) in audited columns: see the
+  `nld-data-conventions` skills.
+- Using a produced audit as a data profile to characterise fields:
+  `how-to-characterize-fields` skill.

@@ -25,8 +25,8 @@ Activate this guide when working on:
 - The `nld structure audit` CLI (list / info / validate / render)
 - Capturing column coverage and value distributions for a structure
 
-For the step-by-step authoring/validation workflow, see
-`how-to-audit-a-structure`.
+For the step-by-step profiling/authoring/validation workflow, see
+`how-to-profile-a-structure`.
 
 ## What an audit captures (and what it does not)
 
