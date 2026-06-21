@@ -1,5 +1,5 @@
 ---
-name: how-to-audit-a-structure
+name: how-to-profile-a-structure
 description: >
   Produce a StructureAudit for a structure — the measured facts about it (target,
   run metadata, per-column coverage and value distributions). For SQL connectors,
@@ -11,7 +11,7 @@ description: >
 user-invocable: true
 ---
 
-# How to Audit a Structure
+# How to Profile a Structure
 
 **Classification**: Atomic Skill | Structure Analysis
 

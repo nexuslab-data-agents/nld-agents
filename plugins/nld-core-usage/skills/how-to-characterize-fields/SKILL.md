@@ -56,7 +56,7 @@ names, §4 **common characterisations**). For naming-prefix conventions, see the
   **markdown** report of that audit is also sometimes available next to it (or
   under `output/`) — it carries the same measured facts in readable form and can
   be used as the data profile when the YAML is not at hand. If neither exists,
-  author the audit first with the `how-to-audit-a-structure` skill, or proceed on
+  author the audit first with the `how-to-profile-a-structure` skill, or proceed on
   the rules + current state alone and **say so** in the report.
 
 ---
@@ -207,7 +207,7 @@ Rules for the report:
 3. **Load the data profile**:
    `nld structure audit info --name <audit> --namespace <ns>` (or the rendered
    markdown report when only that is available). If absent, offer to run
-   `how-to-audit-a-structure` first, or continue without it and flag every
+   `how-to-profile-a-structure` first, or continue without it and flag every
    proposal as evidence-light.
 4. **For each own field**, apply the decision framework (rule → data profile →
    link wiring → common set → challenge → single-per-structure check), producing
@@ -233,7 +233,7 @@ Rules for the report:
 
 - Characterisation catalogue & rules: `field-characterisation.md`
   (§3 in-code, §4 **common characterisations**) via the `guide-structures` skill.
-- The data profile this skill consumes: `how-to-audit-a-structure` and
+- The data profile this skill consumes: `how-to-profile-a-structure` and
   `guide-structure-audit` skills.
 - Writing characterisations in YAML: `structure-design.md`
   "Field Characterisations".
