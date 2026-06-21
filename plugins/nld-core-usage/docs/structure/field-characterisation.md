@@ -98,8 +98,9 @@ The attribute keys recognized today are:
 |-----------|------------|---------|
 | `enforced` | `mandatory`, `unique` | When `True`, the constraint must be enforced at the backend level (e.g. `NOT NULL` / `UNIQUE` constraint in DDL). When `False`, the characterisation is informational only. |
 | `linked_fields` | `currency`, `uom` | List of the amount field names this currency / unit-of-measure field qualifies (a single currency or unit field can govern several amounts). See §4 MEASURE / CURRENCY. |
-| `linked_field` | `amount_in_cur`, `amount_in_uom` | Single field name of the currency / unit-of-measure that this amount is expressed in (an amount is expressed in exactly one currency / unit). See §4 MEASURE / CURRENCY. |
-| `unit_of_measure` | `duration` (and other unit-bearing measures) | Literal unit the measure is expressed in (e.g. `month`, `year`, `day`). Unlike `uom`/`linked_field`, the unit is a literal value carried inline, not a reference to a sibling field. See §4 MEASURE. |
+| `linked_field` | `amount_in_cur`, `amount_in_uom` | Single field name of the currency / unit-of-measure that this amount is expressed in (an amount is expressed in exactly one currency / unit). Use when the currency / unit is held in a **sibling field**; when it is a fixed constant use `currency` / `unit_of_measure` instead. See §4 MEASURE / CURRENCY. |
+| `currency` | `amount_in_cur` | Literal ISO 4217 currency code (e.g. `EUR`) carried inline, for an amount whose currency is a **fixed constant** with no per-row currency field. Mutually exclusive with `linked_field`. See §4 CURRENCY. |
+| `unit_of_measure` | `duration`, `amount_in_uom` (and other unit-bearing measures) | Literal unit the measure is expressed in (e.g. `month`, `year`, `day`, `KG`). Unlike `uom`/`linked_field`, the unit is a literal value carried inline, not a reference to a sibling field. On `amount_in_uom` it is the **fixed-unit** alternative to `linked_field` (mutually exclusive). See §4 MEASURE. |
 | `aggregation_applied_rule` | `duration` (and other aggregated measures) | The aggregation already applied to produce the value (e.g. `min`, `max`, `average`, `sum`). Use when a column is a pre-aggregated measure (e.g. a min / max / average duration). See §4 MEASURE. |
 | `base` | `percentage` | The scale the ratio is expressed on: `100` for a 0–100 percentage, `1` for a 0–1 fraction. See §4 MEASURE. |
 | `referential` | `referenced` | Name of the referential / list of values the field draws from (e.g. `contract_type`). See §4 CODE. |
@@ -152,7 +153,7 @@ The characterisations of each category follow.
 | Name | Description |
 |------|-------------|
 | `uom` | Unit of measure code (e.g. `KG`, `G`, `CAR`, `L`, `mL`, `M3`). Carries a `linked_fields` attribute listing the amount fields it qualifies. |
-| `amount_in_uom` | Numeric amount expressed in a unit of measure (not a currency). Carries a `linked_field` attribute naming its single `uom` field. |
+| `amount_in_uom` | Numeric amount expressed in a unit of measure (not a currency). Carries **either** a `linked_field` attribute naming its single `uom` field, **or** — when the unit is a fixed constant with no sibling field — a literal `unit_of_measure` attribute (e.g. `KG`). Exactly one of the two. |
 | `quantity` | Plain quantity, dimensionless or paired with a separate unit field. |
 | `duration` | A length of time. Carries a `unit_of_measure` attribute (literal, e.g. `month`, `year`) and, when pre-aggregated, an `aggregation_applied_rule` attribute (e.g. `min`, `max`, `average`). |
 | `percentage` | A ratio / proportion. Carries a `base` attribute giving the scale: `100` for a 0–100 percentage, `1` for a 0–1 fraction. |
@@ -188,6 +189,21 @@ fields:
           linked_field: unit_of_measure
 ```
 
+When the unit is a **fixed constant** for the whole column and there is no
+per-row unit field, carry it inline as a literal `unit_of_measure` attribute
+instead of `linked_field` (the amount then needs no paired `uom` field):
+
+```yaml
+fields:
+  net_weight_in_kg:
+    data_type: NUMERIC
+    characterisations:
+      - name: weight
+        characterisation: amount_in_uom
+        attributes:
+          unit_of_measure: KG
+```
+
 A `duration` carries its unit as a literal attribute (`unit_of_measure`), and an
 `aggregation_applied_rule` when the value is a pre-aggregated measure (e.g. a
 minimum / maximum / average duration):
@@ -217,11 +233,14 @@ fields:
 | Name | Description |
 |------|-------------|
 | `currency` | Currency code (e.g. `EUR`, `USD`). Carries a `linked_fields` attribute listing the amount fields it qualifies. |
-| `amount_in_cur` | Monetary amount expressed in a currency. Carries a `linked_field` attribute naming its single `currency` field. |
+| `amount_in_cur` | Monetary amount expressed in a currency. Carries **either** a `linked_field` attribute naming its single `currency` field, **or** — when the currency is a fixed constant with no sibling field — a literal `currency` attribute (e.g. `EUR`). Exactly one of the two. |
 
-A `currency` field can govern **several** amounts (`linked_fields`, a list),
-while an `amount_in_cur` is expressed in **exactly one** currency
-(`linked_field`, a single name):
+An `amount_in_cur` resolves its currency in one of two **mutually exclusive**
+ways: by **sibling field** (`linked_field`) or by **fixed value** (`currency`,
+a literal ISO 4217 code). Exactly one must be present; both present or both
+absent is invalid. A `currency` field can govern **several** amounts
+(`linked_fields`, a list), while an `amount_in_cur` is expressed in **exactly
+one** currency (`linked_field`, a single name):
 
 ```yaml
 fields:
@@ -248,6 +267,22 @@ fields:
         characterisation: amount_in_cur
         attributes:
           linked_field: reporting_currency
+```
+
+When the currency is a **fixed constant** for the whole column and there is no
+per-row currency field (e.g. a revenue figure always expressed in euros), carry
+it inline as a literal `currency` attribute instead of `linked_field` (the
+amount then needs no paired `currency` field):
+
+```yaml
+fields:
+  num_revenue:
+    data_type: BIGINT
+    characterisations:
+      - name: num_revenue
+        characterisation: amount_in_cur
+        attributes:
+          currency: EUR
 ```
 
 #### 4.5 DATETIME

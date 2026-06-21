@@ -105,6 +105,9 @@ For each field, walk these in order:
    - `ds_` description / free text → `free_text`.
    - amount / `nb_` / numeric measure → `amount_in_uom` or `quantity`
      (with a paired `uom`), or `amount_in_cur` (with a paired `currency`).
+     The unit / currency may be supplied **either** by a sibling field
+     (`linked_field`) **or**, when it is a fixed constant with no per-row
+     column, as a literal value (`unit_of_measure` / `currency`).
    - currency / unit code column → `currency` / `uom`.
    - length-of-time measure (months, years, days) → `duration` with a
      `unit_of_measure` attribute (and `aggregation_applied_rule` when the value is
@@ -148,12 +151,19 @@ For each field, walk these in order:
    - **Coverage caveats** — note low coverage; a sparsely populated column gets a
      lower-confidence proposal.
 
-6. **Wire amount ↔ currency / uom links.** A `currency` (or `uom`) field carries
-   a `linked_fields` attribute listing **every** amount it qualifies; each
-   `amount_in_cur` (or `amount_in_uom`) carries a `linked_field` attribute naming
-   its **single** currency / unit field. Propose both ends together and resolve
-   the link by sibling-column name; flag any amount with no resolvable
-   currency / unit in the report. See `field-characterisation.md` §4 MEASURE /
+6. **Wire amount ↔ currency / uom links.** An amount resolves its currency / unit
+   in one of two **mutually exclusive** ways. **By sibling field:** a `currency`
+   (or `uom`) field carries a `linked_fields` attribute listing **every** amount it
+   qualifies, and each `amount_in_cur` (or `amount_in_uom`) carries a `linked_field`
+   attribute naming its **single** currency / unit field — propose both ends
+   together and resolve the link by sibling-column name. **By fixed value:** when
+   the currency / unit is a known constant for the whole column and there is **no**
+   per-row field (e.g. a revenue always in euros), carry it inline as a literal
+   `currency` (or `unit_of_measure`) attribute on the amount; such an amount needs
+   no paired field and is **not** added to any `linked_fields` list. Only flag an
+   amount that has **neither** a resolvable sibling field **nor** a fixed value —
+   a fixed literal currency / unit is a valid resolution, not a flag. See
+   `field-characterisation.md` §4 MEASURE /
    CURRENCY for the exact YAML.
 
 7. **Prefer the common set, then the in-code set.** Draw names from §4 **common
@@ -191,7 +201,8 @@ Audit: <audit name> (audited_at <ts>, row_count <n>)   |   or: NO AUDIT — rule
 | ts_inserted_at   | TIMESTAMP_TZ      | rec_insert_tst | skip (template) | — | — | — | template field, valid by definition |
 | cd_job_reference | CHARACTER VARYING | primary_key | skip (key) | — | — | — | — |
 | contract_type    | CHARACTER VARYING | —          | propose | referenced (referential: contract_type) | CODE | high | distinct=8, has distribution → value from a controlled list, not free text |
-| ds_salary        | NUMERIC           | —          | propose | amount_in_cur | CURRENCY | medium | numeric, 17% coverage; no resolvable currency sibling → flag |
+| ds_salary        | NUMERIC           | —          | propose | amount_in_cur | CURRENCY | medium | numeric, 17% coverage; no currency sibling and no known fixed currency → flag |
+| revenue          | BIGINT            | —          | propose | amount_in_cur (currency: EUR) | CURRENCY | high | monetary, always euros, no per-row currency field → fixed literal, not a flag |
 | dt_published     | CHARACTER VARYING | —          | propose | functional_date (format: yyyymmdd) | DATETIME | high | values like 20251019, min/max are 8-digit ints |
 | ds_comment       | CHARACTER VARYING | free_text  | challenge | (keep / coded?) | DATA_ENTRY | medium | tagged free_text but distinct=5 → evidence contradicts |
 
@@ -243,7 +254,8 @@ Rules for the report:
    `characterisations:` entries on each field (string shorthand or full object;
    see `structure-design.md` "Field Characterisations"). Wire paired
    characterisations together: the `currency`/`uom` field's `linked_fields` and
-   each amount's `linked_field`.
+   each amount's `linked_field` — or, for a fixed-constant currency / unit, the
+   amount's literal `currency` / `unit_of_measure` attribute (no paired field).
 8. **Verify** the edited structure still loads:
    `nld structure info --name <s> --namespace <ns>`. If the structure layers map
    onto another structure, re-validate with `nld structure model validate`.
