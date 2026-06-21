@@ -198,7 +198,7 @@ fields:
   net_weight_in_kg:
     data_type: NUMERIC
     characterisations:
-      - name: net_weight_in_kg
+      - name: weight
         characterisation: amount_in_uom
         attributes:
           unit_of_measure: KG
