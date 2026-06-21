@@ -31,6 +31,7 @@ Then ask Claude *"how do I make this flow incremental?"* and it routes to the ri
 | `guide-structure-audit` | StructureAudit entity — per-structure coverage and value-distribution audits |
 | `how-to-profile-a-structure` | Profile (or hand-author), validate, and render a StructureAudit with `nld structure audit` |
 | `how-to-characterize-fields` | Propose field characterisations for one structure from the rules + its audit, report, and confirm before updating |
+| `how-to-determine-structure-links` | Determine upstream/downstream structure and flow links with `nld flow deps` |
 | `how-to-get-execution-info` | Retrieving flow execution metadata from state backends |
 | `how-to-get-incremental-info` | Retrieving incremental state from state backends |
 | `how-to-use-business-dictionary` | `nld business dict find` / `list` CLI usage |
