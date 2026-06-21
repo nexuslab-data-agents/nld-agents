@@ -99,6 +99,13 @@ The attribute keys recognized today are:
 | `enforced` | `mandatory`, `unique` | When `True`, the constraint must be enforced at the backend level (e.g. `NOT NULL` / `UNIQUE` constraint in DDL). When `False`, the characterisation is informational only. |
 | `linked_fields` | `currency`, `uom` | List of the amount field names this currency / unit-of-measure field qualifies (a single currency or unit field can govern several amounts). See §4 MEASURE / CURRENCY. |
 | `linked_field` | `amount_in_cur`, `amount_in_uom` | Single field name of the currency / unit-of-measure that this amount is expressed in (an amount is expressed in exactly one currency / unit). See §4 MEASURE / CURRENCY. |
+| `unit_of_measure` | `duration` (and other unit-bearing measures) | Literal unit the measure is expressed in (e.g. `month`, `year`, `day`). Unlike `uom`/`linked_field`, the unit is a literal value carried inline, not a reference to a sibling field. See §4 MEASURE. |
+| `aggregation_applied_rule` | `duration` (and other aggregated measures) | The aggregation already applied to produce the value (e.g. `min`, `max`, `average`, `sum`). Use when a column is a pre-aggregated measure (e.g. a min / max / average duration). See §4 MEASURE. |
+| `base` | `percentage` | The scale the ratio is expressed on: `100` for a 0–100 percentage, `1` for a 0–1 fraction. See §4 MEASURE. |
+| `referential` | `referenced` | Name of the referential / list of values the field draws from (e.g. `contract_type`). See §4 CODE. |
+| `multi_value` | `referenced` | `true` when the column holds several values concatenated (e.g. comma-separated); default `false`. See §4 CODE. |
+| `standard` | `language`, `country` | The standard the code follows (e.g. `iso_639`, `iso_3166`). See §4 CODE. |
+| `format` | `functional_date`, `functional_time` | The encoded format of the value (e.g. `yyyymmdd`, `ddmmyyyy`, `hhmmss`, `hhmm`). See §4 DATETIME. |
 
 > Note: a number of additional names appear as `auto()` placeholders in
 > `FieldCharacterisationDefinitions` (e.g. `rec_insert_user_name`,
@@ -128,6 +135,9 @@ category they belong to.
 | `FUNCTIONAL` | Cross-structure references, priorities, and other functional roles. |
 | `HIERARCHY` | Fields carrying the parent / child references of a hierarchical relationship. |
 | `REPORTING_USAGE` | Fields whose purpose is purely to support reporting layers. |
+| `GEO` | Geographic information — coordinates and postal codes. |
+| `CODE` | Values drawn from a controlled list of values (referentials, language / country codes). |
+| `WEB` | Web addresses and slugs. |
 
 The characterisations of each category follow.
 
@@ -144,6 +154,8 @@ The characterisations of each category follow.
 | `uom` | Unit of measure code (e.g. `KG`, `G`, `CAR`, `L`, `mL`, `M3`). Carries a `linked_fields` attribute listing the amount fields it qualifies. |
 | `amount_in_uom` | Numeric amount expressed in a unit of measure (not a currency). Carries a `linked_field` attribute naming its single `uom` field. |
 | `quantity` | Plain quantity, dimensionless or paired with a separate unit field. |
+| `duration` | A length of time. Carries a `unit_of_measure` attribute (literal, e.g. `month`, `year`) and, when pre-aggregated, an `aggregation_applied_rule` attribute (e.g. `min`, `max`, `average`). |
+| `percentage` | A ratio / proportion. Carries a `base` attribute giving the scale: `100` for a 0–100 percentage, `1` for a 0–1 fraction. |
 
 A `uom` field can govern **several** amounts (`linked_fields`, a list), while an
 `amount_in_uom` is expressed in **exactly one** unit (`linked_field`, a single
@@ -174,6 +186,30 @@ fields:
         characterisation: amount_in_uom
         attributes:
           linked_field: unit_of_measure
+```
+
+A `duration` carries its unit as a literal attribute (`unit_of_measure`), and an
+`aggregation_applied_rule` when the value is a pre-aggregated measure (e.g. a
+minimum / maximum / average duration):
+
+```yaml
+fields:
+  contract_duration_min:
+    data_type: INTEGER
+    characterisations:
+      - name: contract_duration_min
+        characterisation: duration
+        attributes:
+          unit_of_measure: month
+          aggregation_applied_rule: min
+  average_age:
+    data_type: NUMERIC
+    characterisations:
+      - name: average_age
+        characterisation: duration
+        attributes:
+          unit_of_measure: year
+          aggregation_applied_rule: average
 ```
 
 #### 4.4 CURRENCY
@@ -224,10 +260,10 @@ fields:
 | `validity_end_timestamp` | Timestamp at which the entry stops being valid. |
 | `validity_start_date` | Date at which the entry starts being valid. |
 | `validity_end_date` | Date at which the entry stops being valid. |
-| `date_yyyymmdd` | Functional date stored as a string or integer in `YYYYMMDD` format. |
-| `date_ddmmyyyy` | Functional date stored as a string or integer in `DDMMYYYY` format. |
-| `time_hhmmss` | Functional time-of-day stored as a string or integer in `HHMMSS` format. |
-| `time_hhmm` | Functional time-of-day stored as a string or integer in `HHMM` format. |
+| `functional_date` | Functional date stored as a string or integer in a non-standard encoded format. Carries a `format` attribute giving the layout (e.g. `yyyymmdd`, `ddmmyyyy`). |
+| `functional_time` | Functional time-of-day stored as a string or integer in a non-standard encoded format. Carries a `format` attribute giving the layout (e.g. `hhmmss`, `hhmm`). |
+| `functional_year` | Business-meaningful year stored as an integer (e.g. a company creation year), as opposed to a full date. |
+| `time_period` | A period / granularity of time (e.g. `monthly`, `yearly`), typically qualifying an amount or rate. |
 
 #### 4.6 FUNCTIONAL
 
@@ -236,6 +272,7 @@ fields:
 | `priority` | Priority indicator stored as a strictly positive integer, where `1` denotes the highest priority. |
 | `tec_external_reference` | Foreign-key style reference to another structure, resolved against the **technical** key of the target structure. |
 | `func_external_reference` | Foreign-key style reference to another structure, resolved against the **functional** key of the target structure. |
+| `source_identifier` | A stable identifier issued by the source system, exposed as-is. Not a reference to another modelled structure (use `*_external_reference` for that). |
 
 #### 4.7 HIERARCHY
 
@@ -250,6 +287,62 @@ fields:
 |------|-------------|
 | `reporting_technical_info` | Technical field exposed only for reporting purposes (e.g. a stable unique identifier on a master-data structure). |
 | `reporting_ordering` | Field used as the default ordering key for reporting layers. |
+
+#### 4.9 GEO
+
+| Name | Description |
+|------|-------------|
+| `latitude` | Geographic latitude in decimal degrees. |
+| `longitude` | Geographic longitude in decimal degrees. |
+| `zip_code` | Postal / ZIP code. |
+
+#### 4.10 CODE
+
+| Name | Description |
+|------|-------------|
+| `referenced` | A value drawn from a referential / controlled list of values (a coded enumeration / nomenclature), as opposed to free text. Carries an optional `referential` attribute (the list name) and an optional `multi_value` attribute. |
+| `language` | A language code from a standard referential. Carries a `standard` attribute (e.g. `iso_639`). |
+| `country` | A country code from a standard referential. Carries a `standard` attribute (e.g. `iso_3166`). |
+
+```yaml
+fields:
+  contract_type:
+    data_type: CHARACTER VARYING
+    characterisations:
+      - name: contract_type
+        characterisation: referenced
+        attributes:
+          referential: contract_type
+  organization_industry:
+    data_type: CHARACTER VARYING
+    characterisations:
+      - name: organization_industry
+        characterisation: referenced
+        attributes:
+          referential: industry
+          multi_value: true
+  job_language:
+    data_type: CHARACTER VARYING
+    characterisations:
+      - name: job_language
+        characterisation: language
+        attributes:
+          standard: iso_639
+  office_country_code:
+    data_type: CHARACTER VARYING
+    characterisations:
+      - name: office_country_code
+        characterisation: country
+        attributes:
+          standard: iso_3166
+```
+
+#### 4.11 WEB
+
+| Name | Description |
+|------|-------------|
+| `url` | A web URL. |
+| `slug` | A URL slug / opaque human-readable identifier used in web addresses. |
 
 ### 5. Adding a New Characterisation
 

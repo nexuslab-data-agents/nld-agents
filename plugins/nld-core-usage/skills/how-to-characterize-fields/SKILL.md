@@ -106,10 +106,28 @@ For each field, walk these in order:
    - amount / `nb_` / numeric measure → `amount_in_uom` or `quantity`
      (with a paired `uom`), or `amount_in_cur` (with a paired `currency`).
    - currency / unit code column → `currency` / `uom`.
+   - length-of-time measure (months, years, days) → `duration` with a
+     `unit_of_measure` attribute (and `aggregation_applied_rule` when the value is
+     pre-aggregated, e.g. a min / max / average duration).
+   - ratio / proportion → `percentage` with a `base` attribute (`100` for a
+     0–100 scale, `1` for a 0–1 fraction); the audit `min`/`max` bounds confirm
+     the base.
+   - value drawn from a controlled list / enumeration / nomenclature →
+     `referenced` (with an optional `referential` attribute naming the list,
+     and `multi_value: true` when several codes are concatenated).
+   - language code → `language` (`standard: iso_639`); country code → `country`
+     (`standard: iso_3166`).
    - `dt_` / `ts_` business time not already a `rec_*` technical timestamp →
      `functional_timestamp`, `snapshot_date`, `validity_start/end_*`.
-   - string/int encoded date or time (`YYYYMMDD`, `HHMMSS`, …) →
-     `date_yyyymmdd` / `date_ddmmyyyy` / `time_hhmmss` / `time_hhmm`.
+   - string/int encoded date or time (`YYYYMMDD`, `HHMMSS`, …) → `functional_date`
+     / `functional_time` with a `format` attribute (e.g. `yyyymmdd`, `ddmmyyyy`,
+     `hhmmss`, `hhmm`).
+   - integer year on its own (e.g. `yr_`, a creation year) → `functional_year`.
+   - period / granularity of time (e.g. `monthly`, `yearly`) → `time_period`.
+   - geographic coordinate column → `latitude` / `longitude`; postal / ZIP code →
+     `zip_code` (GEO category).
+   - web URL → `url`; URL slug / opaque web identifier → `slug` (WEB category).
+   - stable identifier issued by the source system → `source_identifier`.
    - parent/child link column → `hierarchy_parent_info` /
      `hierarchy_child_info` (HIERARCHY category).
    - strictly-positive ranking integer → `priority`.
@@ -122,7 +140,8 @@ For each field, walk these in order:
      with a `distribution` block) supports a coded role; high distinct + long
      values support `free_text`.
    - **Format characterisations** — `min`/`max` and sample values confirm an
-     encoded date/time (`date_yyyymmdd`, `time_hhmmss`, …) or `epoch_ms`.
+     encoded date/time (`functional_date` / `functional_time` with the matching
+     `format` attribute, e.g. `yyyymmdd`, `hhmmss`) or `epoch_ms`.
    - **Amount vs. quantity vs. currency** — numeric range plus a sibling
      unit/currency column decides `amount_in_uom` vs `amount_in_cur` vs
      `quantity`.
@@ -171,9 +190,9 @@ Audit: <audit name> (audited_at <ts>, row_count <n>)   |   or: NO AUDIT — rule
 |-------|-----------|---------|--------|----------|----------|-----------|----------|
 | ts_inserted_at   | TIMESTAMP_TZ      | rec_insert_tst | skip (template) | — | — | — | template field, valid by definition |
 | cd_job_reference | CHARACTER VARYING | primary_key | skip (key) | — | — | — | — |
-| contract_type    | CHARACTER VARYING | —          | propose | free_text? / coded | DATA_ENTRY | low | distinct=8, has distribution → likely coded enum, not free text |
+| contract_type    | CHARACTER VARYING | —          | propose | referenced (referential: contract_type) | CODE | high | distinct=8, has distribution → value from a controlled list, not free text |
 | ds_salary        | NUMERIC           | —          | propose | amount_in_cur | CURRENCY | medium | numeric, 17% coverage; no resolvable currency sibling → flag |
-| dt_published     | CHARACTER VARYING | —          | propose | date_yyyymmdd | DATETIME | high | values like 20251019, min/max are 8-digit ints |
+| dt_published     | CHARACTER VARYING | —          | propose | functional_date (format: yyyymmdd) | DATETIME | high | values like 20251019, min/max are 8-digit ints |
 | ds_comment       | CHARACTER VARYING | free_text  | challenge | (keep / coded?) | DATA_ENTRY | medium | tagged free_text but distinct=5 → evidence contradicts |
 
 ## Summary
