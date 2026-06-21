@@ -212,7 +212,7 @@ nld structure audit render  --name <audit> [--namespace <ns>] [--stdout]
 | `list` | List the audits visible from a namespace. |
 | `info` | Print an audit's target, metadata, columns, and distributions. |
 | `validate` | Resolve the referenced structure and check every audited column exists on it. Validates one audit with `--name`, or **all** visible audits when omitted. Exits non-zero and lists the offending columns when invalid. |
-| `render` | Render the audit to a standard markdown report. Writes to a timestamped folder under `output/` by default; `--stdout` prints it; `--override-output-folder-path` chooses the folder. |
+| `render` | Mechanically reformat the audit YAML into a standard markdown report (the same measured facts, nothing added). Writes to a timestamped folder under `output/` by default; `--stdout` prints it; `--override-output-folder-path` chooses the folder. |
 
 ---
 
@@ -248,6 +248,25 @@ nld structure audit render  --name <audit> [--namespace <ns>] [--stdout]
    is not a field of the structure (typically a typo or a drifted column name).
 7. **Render** the report when you need a readable artifact:
    `nld structure audit render --name <audit> --namespace <ns>`.
+
+---
+
+## Two kinds of markdown report
+
+Do not confuse them:
+
+- **Rendered audit report** — produced by `nld structure audit render`. A
+  mechanical reformat of the audit YAML into markdown: the same measured facts,
+  nothing added. Deterministic, regenerated any time from the audit.
+- **Analysis markdown** — an *additional*, optional report an **agent** writes
+  **after analysing** the audit. It adds information the audit does not hold:
+  interpretation, field-selection reasoning, anomalies, recommendations. It is a
+  separate artifact (not output by any `audit` command), authored alongside the
+  audit when that extra context is worth keeping. Downstream skills such as
+  `how-to-characterize-fields` read it for context beyond the raw figures.
+
+This skill produces the **audit** (and optionally its rendered report). Writing
+an analysis markdown is a deliberate, separate step on top of it.
 
 ---
 

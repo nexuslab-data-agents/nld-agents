@@ -52,12 +52,14 @@ names, §4 **common characterisations**). For naming-prefix conventions, see the
   (`<entity_path>/structure/<ns>/...`).
 - **Strongly recommended**: a `StructureAudit` for the same structure exists
   (`assets/audits/structure/<ns>/<structure>.yml`). The audit is the data
-  profile that turns guesses into evidence-based proposals. A rendered
-  **markdown** report of that audit is also sometimes available next to it (or
-  under `output/`) — it carries the same measured facts in readable form and can
-  be used as the data profile when the YAML is not at hand. If neither exists,
-  author the audit first with the `how-to-profile-a-structure` skill, or proceed on
-  the rules + current state alone and **say so** in the report.
+  profile that turns guesses into evidence-based proposals. An **agent-authored
+  analysis markdown** — a separate report someone produced by analysing the audit,
+  carrying additional information beyond the raw measured facts (field-selection
+  notes, anomalies, interpretation) — is also sometimes available next to it; when
+  present, read it for that extra context. (This is **not** the mechanical
+  `nld structure audit render` output, which only reformats the audit YAML.) If no
+  audit exists, profile the structure first with the `how-to-profile-a-structure`
+  skill, or proceed on the rules + current state alone and **say so** in the report.
 
 ---
 
@@ -70,7 +72,7 @@ use only one.
 |---|--------|------------------|-------------------|
 | 1 | **The rule** | `field-characterisation.md` §3–§4; `guide-field-conventions` prefixes | Which characterisation a field's name/type/role maps to (the candidate set). |
 | 2 | **Current structure state** | `nld structure info --name <s> --namespace <ns>` | Existing characterisations, keys, data types, field order — what is already covered and must not be duplicated. |
-| 3 | **Data profile (audit)** | `nld structure audit info --name <audit> --namespace <ns>`, or the rendered markdown report when only that is available | Coverage %, distinct count, min/max, value distributions — the evidence that confirms or rejects a candidate. |
+| 3 | **Data profile (audit)** | `nld structure audit info --name <audit> --namespace <ns>`, plus any agent-authored analysis markdown next to the audit | Coverage %, distinct count, min/max, value distributions — the evidence that confirms or rejects a candidate; the analysis markdown adds interpretation beyond the raw facts. |
 
 ---
 
@@ -205,10 +207,10 @@ Rules for the report:
    them from analysis — they are valid by definition. Only the structure's own
    fields are in scope.
 3. **Load the data profile**:
-   `nld structure audit info --name <audit> --namespace <ns>` (or the rendered
-   markdown report when only that is available). If absent, offer to run
-   `how-to-profile-a-structure` first, or continue without it and flag every
-   proposal as evidence-light.
+   `nld structure audit info --name <audit> --namespace <ns>`, and read any
+   agent-authored analysis markdown next to the audit for extra context. If no
+   audit exists, offer to run `how-to-profile-a-structure` first, or continue
+   without it and flag every proposal as evidence-light.
 4. **For each own field**, apply the decision framework (rule → data profile →
    link wiring → common set → challenge → single-per-structure check), producing
    a `propose`, `challenge`, or no-op outcome.
