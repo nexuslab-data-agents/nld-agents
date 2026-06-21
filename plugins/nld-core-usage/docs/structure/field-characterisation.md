@@ -99,6 +99,8 @@ The attribute keys recognized today are:
 | `enforced` | `mandatory`, `unique` | When `True`, the constraint must be enforced at the backend level (e.g. `NOT NULL` / `UNIQUE` constraint in DDL). When `False`, the characterisation is informational only. |
 | `linked_fields` | `currency`, `uom` | List of the amount field names this currency / unit-of-measure field qualifies (a single currency or unit field can govern several amounts). See §4 MEASURE / CURRENCY. |
 | `linked_field` | `amount_in_cur`, `amount_in_uom` | Single field name of the currency / unit-of-measure that this amount is expressed in (an amount is expressed in exactly one currency / unit). See §4 MEASURE / CURRENCY. |
+| `unit_of_measure` | `duration` (and other unit-bearing measures) | Literal unit the measure is expressed in (e.g. `month`, `year`, `day`). Unlike `uom`/`linked_field`, the unit is a literal value carried inline, not a reference to a sibling field. See §4 MEASURE. |
+| `aggregation_applied_rule` | `duration` (and other aggregated measures) | The aggregation already applied to produce the value (e.g. `min`, `max`, `average`, `sum`). Use when a column is a pre-aggregated measure (e.g. a min / max / average duration). See §4 MEASURE. |
 
 > Note: a number of additional names appear as `auto()` placeholders in
 > `FieldCharacterisationDefinitions` (e.g. `rec_insert_user_name`,
@@ -128,6 +130,7 @@ category they belong to.
 | `FUNCTIONAL` | Cross-structure references, priorities, and other functional roles. |
 | `HIERARCHY` | Fields carrying the parent / child references of a hierarchical relationship. |
 | `REPORTING_USAGE` | Fields whose purpose is purely to support reporting layers. |
+| `GEO` | Geographic coordinates (latitude / longitude). |
 
 The characterisations of each category follow.
 
@@ -144,6 +147,8 @@ The characterisations of each category follow.
 | `uom` | Unit of measure code (e.g. `KG`, `G`, `CAR`, `L`, `mL`, `M3`). Carries a `linked_fields` attribute listing the amount fields it qualifies. |
 | `amount_in_uom` | Numeric amount expressed in a unit of measure (not a currency). Carries a `linked_field` attribute naming its single `uom` field. |
 | `quantity` | Plain quantity, dimensionless or paired with a separate unit field. |
+| `duration` | A length of time. Carries a `unit_of_measure` attribute (literal, e.g. `month`, `year`) and, when pre-aggregated, an `aggregation_applied_rule` attribute (e.g. `min`, `max`, `average`). |
+| `percentage_out_of_100` | A ratio expressed on a 0–100 scale (as opposed to a 0–1 fraction). |
 
 A `uom` field can govern **several** amounts (`linked_fields`, a list), while an
 `amount_in_uom` is expressed in **exactly one** unit (`linked_field`, a single
@@ -174,6 +179,30 @@ fields:
         characterisation: amount_in_uom
         attributes:
           linked_field: unit_of_measure
+```
+
+A `duration` carries its unit as a literal attribute (`unit_of_measure`), and an
+`aggregation_applied_rule` when the value is a pre-aggregated measure (e.g. a
+minimum / maximum / average duration):
+
+```yaml
+fields:
+  contract_duration_min:
+    data_type: INTEGER
+    characterisations:
+      - name: contract_duration_min
+        characterisation: duration
+        attributes:
+          unit_of_measure: month
+          aggregation_applied_rule: min
+  average_age:
+    data_type: NUMERIC
+    characterisations:
+      - name: average_age
+        characterisation: duration
+        attributes:
+          unit_of_measure: year
+          aggregation_applied_rule: average
 ```
 
 #### 4.4 CURRENCY
@@ -228,6 +257,7 @@ fields:
 | `date_ddmmyyyy` | Functional date stored as a string or integer in `DDMMYYYY` format. |
 | `time_hhmmss` | Functional time-of-day stored as a string or integer in `HHMMSS` format. |
 | `time_hhmm` | Functional time-of-day stored as a string or integer in `HHMM` format. |
+| `functional_year` | Business-meaningful year stored as an integer (e.g. a company creation year), as opposed to a full date. |
 
 #### 4.6 FUNCTIONAL
 
@@ -250,6 +280,13 @@ fields:
 |------|-------------|
 | `reporting_technical_info` | Technical field exposed only for reporting purposes (e.g. a stable unique identifier on a master-data structure). |
 | `reporting_ordering` | Field used as the default ordering key for reporting layers. |
+
+#### 4.9 GEO
+
+| Name | Description |
+|------|-------------|
+| `latitude` | Geographic latitude in decimal degrees. |
+| `longitude` | Geographic longitude in decimal degrees. |
 
 ### 5. Adding a New Characterisation
 

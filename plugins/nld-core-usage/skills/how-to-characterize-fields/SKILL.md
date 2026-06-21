@@ -106,10 +106,17 @@ For each field, walk these in order:
    - amount / `nb_` / numeric measure → `amount_in_uom` or `quantity`
      (with a paired `uom`), or `amount_in_cur` (with a paired `currency`).
    - currency / unit code column → `currency` / `uom`.
+   - length-of-time measure (months, years, days) → `duration` with a
+     `unit_of_measure` attribute (and `aggregation_applied_rule` when the value is
+     pre-aggregated, e.g. a min / max / average duration).
+   - ratio on a 0–100 scale → `percentage_out_of_100` (the audit `min`/`max`
+     bounded by 0 and 100 confirms it).
    - `dt_` / `ts_` business time not already a `rec_*` technical timestamp →
      `functional_timestamp`, `snapshot_date`, `validity_start/end_*`.
    - string/int encoded date or time (`YYYYMMDD`, `HHMMSS`, …) →
      `date_yyyymmdd` / `date_ddmmyyyy` / `time_hhmmss` / `time_hhmm`.
+   - integer year on its own (e.g. `yr_`, a creation year) → `functional_year`.
+   - geographic coordinate column → `latitude` / `longitude` (GEO category).
    - parent/child link column → `hierarchy_parent_info` /
      `hierarchy_child_info` (HIERARCHY category).
    - strictly-positive ranking integer → `priority`.
