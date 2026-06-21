@@ -10,7 +10,7 @@ characterisations are written in YAML files.
 1. [Overview](#1-overview)
 2. [Core Classes](#2-core-classes)
 3. [Default Characterisations Implemented in Code](#3-default-characterisations-implemented-in-code)
-4. [Common Optional Characterisations](#4-common-optional-characterisations)
+4. [Common Characterisations](#4-common-characterisations)
 5. [Adding a New Characterisation](#5-adding-a-new-characterisation)
 
 ---
@@ -92,11 +92,13 @@ but only these are wired into platform behavior.
 
 #### 3.6 Allowed attributes
 
-The only attribute key currently recognized is:
+The attribute keys recognized today are:
 
 | Attribute | Applies to | Meaning |
 |-----------|------------|---------|
 | `enforced` | `mandatory`, `unique` | When `True`, the constraint must be enforced at the backend level (e.g. `NOT NULL` / `UNIQUE` constraint in DDL). When `False`, the characterisation is informational only. |
+| `linked_fields` | `currency`, `uom` | List of the amount field names this currency / unit-of-measure field qualifies (a single currency or unit field can govern several amounts). See §4 MEASURE / CURRENCY. |
+| `linked_field` | `amount_in_cur`, `amount_in_uom` | Single field name of the currency / unit-of-measure that this amount is expressed in (an amount is expressed in exactly one currency / unit). See §4 MEASURE / CURRENCY. |
 
 > Note: a number of additional names appear as `auto()` placeholders in
 > `FieldCharacterisationDefinitions` (e.g. `rec_insert_user_name`,
@@ -104,42 +106,18 @@ The only attribute key currently recognized is:
 > with no concrete `FieldCharacterisationDefinition` yet — they should be
 > promoted to full definitions before being used in YAML.
 
-### 4. Common Optional Characterisations
+### 4. Common Characterisations
 
-The following characterisations are **not yet implemented in code** but
-are the recommended set to use when a project needs to attach functional
-semantics to fields. New definitions should be added to
-`FieldCharacterisationDefinitions` (and their names to
-`FieldCharacterisationDefinitionNames`) as the need arises, grouped by
-the category column below.
+The following characterisations are the **standard set projects use** to
+attach functional semantics to fields. They are **not yet implemented in
+code** as concrete `FieldCharacterisationDefinition` instances, but they
+are the agreed vocabulary a project should reach for first — before
+inventing an ad-hoc name — when characterising a field. New definitions
+should be added to `FieldCharacterisationDefinitions` (and their names to
+`FieldCharacterisationDefinitionNames`) as the need arises, grouped by the
+category they belong to.
 
-| Name | Category | Description |
-|------|----------|-------------|
-| `free_text` | DATA_ENTRY | Free-form text input with no validation applied at entry time. |
-| `uom` | MEASURE | Unit of measure code (e.g. `KG`, `G`, `CAR`, `L`, `mL`, `M3`). |
-| `amount_in_uom` | MEASURE | Numeric amount expressed in a unit of measure (not a currency). |
-| `quantity` | MEASURE | Plain quantity, dimensionless or paired with a separate unit field. |
-| `currency` | CURRENCY | Currency code (e.g. `EUR`, `USD`). |
-| `amount_in_cur` | CURRENCY | Monetary amount expressed in a currency. Typically paired with a `currency` field. |
-| `functional_timestamp` | DATETIME | Business-meaningful timestamp (e.g. delivery received at, order created at), as opposed to a technical record timestamp. |
-| `snapshot_date` | DATETIME | Date identifying the snapshot the row belongs to (e.g. stock snapshot date). |
-| `validity_start_timestamp` | DATETIME | Timestamp at which the entry starts being valid. |
-| `validity_end_timestamp` | DATETIME | Timestamp at which the entry stops being valid. |
-| `validity_start_date` | DATETIME | Date at which the entry starts being valid. |
-| `validity_end_date` | DATETIME | Date at which the entry stops being valid. |
-| `date_yyyymmdd` | DATETIME | Functional date stored as a string or integer in `YYYYMMDD` format. |
-| `date_ddmmyyyy` | DATETIME | Functional date stored as a string or integer in `DDMMYYYY` format. |
-| `time_hhmmss` | DATETIME | Functional time-of-day stored as a string or integer in `HHMMSS` format. |
-| `time_hhmm` | DATETIME | Functional time-of-day stored as a string or integer in `HHMM` format. |
-| `priority` | FUNCTIONAL | Priority indicator stored as a strictly positive integer, where `1` denotes the highest priority. |
-| `tec_external_reference` | FUNCTIONAL | Foreign-key style reference to another structure, resolved against the **technical** key of the target structure. |
-| `func_external_reference` | FUNCTIONAL | Foreign-key style reference to another structure, resolved against the **functional** key of the target structure. |
-| `hierarchy_parent_info` | FUNCTIONAL | Field carrying the parent reference of a hierarchical relationship. |
-| `hierarchy_child_info` | FUNCTIONAL | Field carrying the child reference of a hierarchical relationship. |
-| `reporting_technical_info` | REPORTING_USAGE | Technical field exposed only for reporting purposes (e.g. a stable unique identifier on a master-data structure). |
-| `reporting_ordering` | REPORTING_USAGE | Field used as the default ordering key for reporting layers. |
-
-#### Categories at a glance
+#### 4.1 Categories at a glance
 
 | Category | Purpose |
 |----------|---------|
@@ -147,8 +125,131 @@ the category column below.
 | `MEASURE` | Physical measures and amounts expressed in a unit of measure. |
 | `CURRENCY` | Monetary amounts and their currency reference. |
 | `DATETIME` | Functional dates, timestamps, and validity windows (including non-standard string-encoded formats). |
-| `FUNCTIONAL` | Cross-structure references, hierarchies, and other functional roles. |
+| `FUNCTIONAL` | Cross-structure references, priorities, and other functional roles. |
+| `HIERARCHY` | Fields carrying the parent / child references of a hierarchical relationship. |
 | `REPORTING_USAGE` | Fields whose purpose is purely to support reporting layers. |
+
+The characterisations of each category follow.
+
+#### 4.2 DATA_ENTRY
+
+| Name | Description |
+|------|-------------|
+| `free_text` | Free-form text input with no validation applied at entry time. |
+
+#### 4.3 MEASURE
+
+| Name | Description |
+|------|-------------|
+| `uom` | Unit of measure code (e.g. `KG`, `G`, `CAR`, `L`, `mL`, `M3`). Carries a `linked_fields` attribute listing the amount fields it qualifies. |
+| `amount_in_uom` | Numeric amount expressed in a unit of measure (not a currency). Carries a `linked_field` attribute naming its single `uom` field. |
+| `quantity` | Plain quantity, dimensionless or paired with a separate unit field. |
+
+A `uom` field can govern **several** amounts (`linked_fields`, a list), while an
+`amount_in_uom` is expressed in **exactly one** unit (`linked_field`, a single
+name):
+
+```yaml
+fields:
+  unit_of_measure:
+    data_type: VARCHAR
+    characterisations:
+      - name: unit_of_measure
+        characterisation: uom
+        attributes:
+          linked_fields:
+            - net_weight_in_uom
+            - gross_weight_in_uom
+  net_weight_in_uom:
+    data_type: NUMERIC
+    characterisations:
+      - name: net_weight_in_uom
+        characterisation: amount_in_uom
+        attributes:
+          linked_field: unit_of_measure
+  gross_weight_in_uom:
+    data_type: NUMERIC
+    characterisations:
+      - name: gross_weight_in_uom
+        characterisation: amount_in_uom
+        attributes:
+          linked_field: unit_of_measure
+```
+
+#### 4.4 CURRENCY
+
+| Name | Description |
+|------|-------------|
+| `currency` | Currency code (e.g. `EUR`, `USD`). Carries a `linked_fields` attribute listing the amount fields it qualifies. |
+| `amount_in_cur` | Monetary amount expressed in a currency. Carries a `linked_field` attribute naming its single `currency` field. |
+
+A `currency` field can govern **several** amounts (`linked_fields`, a list),
+while an `amount_in_cur` is expressed in **exactly one** currency
+(`linked_field`, a single name):
+
+```yaml
+fields:
+  reporting_currency:
+    data_type: VARCHAR
+    characterisations:
+      - name: reporting_currency
+        characterisation: currency
+        attributes:
+          linked_fields:
+            - sales_in_reporting_currency
+            - cost_in_reporting_currency
+  sales_in_reporting_currency:
+    data_type: NUMERIC
+    characterisations:
+      - name: sales_in_reporting_currency
+        characterisation: amount_in_cur
+        attributes:
+          linked_field: reporting_currency
+  cost_in_reporting_currency:
+    data_type: NUMERIC
+    characterisations:
+      - name: cost_in_reporting_currency
+        characterisation: amount_in_cur
+        attributes:
+          linked_field: reporting_currency
+```
+
+#### 4.5 DATETIME
+
+| Name | Description |
+|------|-------------|
+| `functional_timestamp` | Business-meaningful timestamp (e.g. delivery received at, order created at), as opposed to a technical record timestamp. |
+| `snapshot_date` | Date identifying the snapshot the row belongs to (e.g. stock snapshot date). |
+| `validity_start_timestamp` | Timestamp at which the entry starts being valid. |
+| `validity_end_timestamp` | Timestamp at which the entry stops being valid. |
+| `validity_start_date` | Date at which the entry starts being valid. |
+| `validity_end_date` | Date at which the entry stops being valid. |
+| `date_yyyymmdd` | Functional date stored as a string or integer in `YYYYMMDD` format. |
+| `date_ddmmyyyy` | Functional date stored as a string or integer in `DDMMYYYY` format. |
+| `time_hhmmss` | Functional time-of-day stored as a string or integer in `HHMMSS` format. |
+| `time_hhmm` | Functional time-of-day stored as a string or integer in `HHMM` format. |
+
+#### 4.6 FUNCTIONAL
+
+| Name | Description |
+|------|-------------|
+| `priority` | Priority indicator stored as a strictly positive integer, where `1` denotes the highest priority. |
+| `tec_external_reference` | Foreign-key style reference to another structure, resolved against the **technical** key of the target structure. |
+| `func_external_reference` | Foreign-key style reference to another structure, resolved against the **functional** key of the target structure. |
+
+#### 4.7 HIERARCHY
+
+| Name | Description |
+|------|-------------|
+| `hierarchy_parent_info` | Field carrying the parent reference of a hierarchical relationship. |
+| `hierarchy_child_info` | Field carrying the child reference of a hierarchical relationship. |
+
+#### 4.8 REPORTING_USAGE
+
+| Name | Description |
+|------|-------------|
+| `reporting_technical_info` | Technical field exposed only for reporting purposes (e.g. a stable unique identifier on a master-data structure). |
+| `reporting_ordering` | Field used as the default ordering key for reporting layers. |
 
 ### 5. Adding a New Characterisation
 
