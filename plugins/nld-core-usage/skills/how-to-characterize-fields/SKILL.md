@@ -99,9 +99,9 @@ For each field, walk these in order:
 
 4. **Read the rule from name + type.** Use the naming prefix and data type to
    form the candidate characterisation(s):
-   - `cd_` / `id_` code or identifier → a reference (`tec_external_reference` /
-     `func_external_reference`) or `reporting_technical_info` if it is just a
-     stable id exposed for reporting.
+   - `cd_` / `id_` code or identifier → `references` (a reference to another
+     structure or a controlled list) or `reporting_technical_info` if it is just
+     a stable id exposed for reporting.
    - `ds_` description / free text → `free_text`.
    - amount / `nb_` / numeric measure → `amount_in_uom` or `quantity`
      (with a paired `uom`), or `amount_in_cur` (with a paired `currency`).
@@ -115,9 +115,10 @@ For each field, walk these in order:
    - ratio / proportion → `percentage` with a `base` attribute (`100` for a
      0–100 scale, `1` for a 0–1 fraction); the audit `min`/`max` bounds confirm
      the base.
-   - value drawn from a controlled list / enumeration / nomenclature →
-     `referenced` (with an optional `referential` attribute naming the list,
-     and `multi_value: true` when several codes are concatenated).
+   - value drawn from a controlled list / enumeration / nomenclature, or a
+     reference to another structure → `references` (with an optional
+     `referential` attribute naming the list or target, and `multi_value: true`
+     when several codes are concatenated).
    - language code → `language` (`standard: iso_639`); country code → `country`
      (`standard: iso_3166`).
    - `dt_` / `ts_` business time not already a `rec_*` technical timestamp →
@@ -169,7 +170,12 @@ For each field, walk these in order:
 7. **Prefer the common set, then the in-code set.** Draw names from §4 **common
    characterisations** first; fall back to §3 in-code names where they fit
    (`mandatory`, `unique`). If nothing fits, propose **no characterisation** and
-   say why — an empty proposal is a valid, honest outcome.
+   say why — an empty proposal is a valid, honest outcome. A common-set name that
+   is not a §3 built-in must be backed by a project-level
+   `field_characterisation_definition` (under `characterisations/field/`, see
+   `field-characterisation.md` §6) for `nld structure validate` to accept it;
+   when proposing such a name, note in the report whether the project already
+   declares its definition.
 
 8. **Challenge a characterisation the evidence contradicts.** For an own-field
    that is **already** characterised, if the data profile disagrees with it
@@ -200,7 +206,7 @@ Audit: <audit name> (audited_at <ts>, row_count <n>)   |   or: NO AUDIT — rule
 |-------|-----------|---------|--------|----------|----------|-----------|----------|
 | ts_inserted_at   | TIMESTAMP_TZ      | rec_insert_tst | skip (template) | — | — | — | template field, valid by definition |
 | cd_job_reference | CHARACTER VARYING | primary_key | skip (key) | — | — | — | — |
-| contract_type    | CHARACTER VARYING | —          | propose | referenced (referential: contract_type) | CODE | high | distinct=8, has distribution → value from a controlled list, not free text |
+| contract_type    | CHARACTER VARYING | —          | propose | references (referential: contract_type) | CODE | high | distinct=8, has distribution → value from a controlled list, not free text |
 | ds_salary        | NUMERIC           | —          | propose | amount_in_cur | CURRENCY | medium | numeric, 17% coverage; no currency sibling and no known fixed currency → flag |
 | revenue          | BIGINT            | —          | propose | amount_in_cur (currency: EUR) | CURRENCY | high | monetary, always euros, no per-row currency field → fixed literal, not a flag |
 | dt_published     | CHARACTER VARYING | —          | propose | functional_date (format: yyyymmdd) | DATETIME | high | values like 20251019, min/max are 8-digit ints |
@@ -257,15 +263,22 @@ Rules for the report:
    each amount's `linked_field` — or, for a fixed-constant currency / unit, the
    amount's literal `currency` / `unit_of_measure` attribute (no paired field).
 8. **Verify** the edited structure still loads:
-   `nld structure info --name <s> --namespace <ns>`. If the structure layers map
-   onto another structure, re-validate with `nld structure model validate`.
+   `nld structure info --name <s> --namespace <ns>`, then check the
+   characterisations against the catalogue with
+   `nld structure validate --name <s> --namespace <ns>` — it flags any
+   characterisation that is neither built-in nor project-declared, any attribute
+   outside the definition's `allowed_attributes`, and any single-per-structure
+   definition used on more than one field. If the structure layers map onto
+   another structure, re-validate with `nld structure model validate`.
 
 ---
 
 ## Cross-references
 
 - Characterisation catalogue & rules: `field-characterisation.md`
-  (§3 in-code, §4 **common characterisations**) via the `guide-structures` skill.
+  (§3 in-code, §4 **common characterisations**, §6 effective catalogue /
+  project-declared definitions / `nld structure validate`) via the
+  `guide-structures` skill.
 - The data profile this skill consumes: `how-to-profile-a-structure` and
   `guide-structure-audit` skills.
 - Writing characterisations in YAML: `structure-design.md`

@@ -1,0 +1,6 @@
+name: amount_in_cur
+description: "Monetary amount expressed in a currency. Carries either a linked_field naming its single currency field, or a literal currency when the currency is a fixed constant."
+applicable_to_single_field_per_structure: false
+allowed_attributes:
+    - linked_field
+    - currency

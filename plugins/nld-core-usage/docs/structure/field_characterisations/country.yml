@@ -1,0 +1,5 @@
+name: country
+description: "A country code from a standard referential. Carries a standard (e.g. iso_3166)."
+applicable_to_single_field_per_structure: false
+allowed_attributes:
+    - standard

@@ -1,0 +1,6 @@
+name: amount_in_uom
+description: "Numeric amount expressed in a unit of measure (not a currency). Carries either a linked_field naming its single uom field, or a literal unit_of_measure when the unit is a fixed constant."
+applicable_to_single_field_per_structure: false
+allowed_attributes:
+    - linked_field
+    - unit_of_measure

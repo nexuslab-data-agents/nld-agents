@@ -1,0 +1,3 @@
+name: longitude
+description: "Geographic longitude in decimal degrees."
+applicable_to_single_field_per_structure: false

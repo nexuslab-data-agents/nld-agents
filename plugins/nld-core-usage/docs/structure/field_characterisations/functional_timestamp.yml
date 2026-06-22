@@ -1,0 +1,3 @@
+name: functional_timestamp
+description: "Business-meaningful timestamp (e.g. delivery received at, order created at), as opposed to a technical record timestamp."
+applicable_to_single_field_per_structure: false

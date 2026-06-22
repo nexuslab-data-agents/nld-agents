@@ -1,0 +1,3 @@
+name: reporting_ordering
+description: "Field used as the default ordering key for reporting layers."
+applicable_to_single_field_per_structure: false

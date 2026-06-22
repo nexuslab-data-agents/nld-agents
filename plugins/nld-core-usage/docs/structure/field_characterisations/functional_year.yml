@@ -1,0 +1,3 @@
+name: functional_year
+description: "Business-meaningful year stored as an integer (e.g. a company creation year), as opposed to a full date."
+applicable_to_single_field_per_structure: false

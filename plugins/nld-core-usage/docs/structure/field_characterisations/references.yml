@@ -1,0 +1,6 @@
+name: references
+description: "The single field characterisation for references: a value that references a referential / controlled list of values (a coded enumeration / nomenclature) or another structure, as opposed to free text. Carries an optional referential (the referential or target name) and an optional multi_value."
+applicable_to_single_field_per_structure: false
+allowed_attributes:
+    - referential
+    - multi_value

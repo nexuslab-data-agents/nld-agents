@@ -1,0 +1,3 @@
+name: snapshot_date
+description: "Date identifying the snapshot the row belongs to (e.g. stock snapshot date)."
+applicable_to_single_field_per_structure: true

@@ -1,0 +1,5 @@
+name: currency
+description: "Currency code (e.g. EUR, USD). Qualifies the amount fields listed in linked_fields."
+applicable_to_single_field_per_structure: false
+allowed_attributes:
+    - linked_fields
