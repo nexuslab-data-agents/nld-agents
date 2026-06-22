@@ -99,9 +99,9 @@ For each field, walk these in order:
 
 4. **Read the rule from name + type.** Use the naming prefix and data type to
    form the candidate characterisation(s):
-   - `cd_` / `id_` code or identifier → a reference (`tec_external_reference` /
-     `func_external_reference`) or `reporting_technical_info` if it is just a
-     stable id exposed for reporting.
+   - `cd_` / `id_` code or identifier → `references` (a reference to another
+     structure or a controlled list) or `reporting_technical_info` if it is just
+     a stable id exposed for reporting.
    - `ds_` description / free text → `free_text`.
    - amount / `nb_` / numeric measure → `amount_in_uom` or `quantity`
      (with a paired `uom`), or `amount_in_cur` (with a paired `currency`).
@@ -115,9 +115,10 @@ For each field, walk these in order:
    - ratio / proportion → `percentage` with a `base` attribute (`100` for a
      0–100 scale, `1` for a 0–1 fraction); the audit `min`/`max` bounds confirm
      the base.
-   - value drawn from a controlled list / enumeration / nomenclature →
-     `referenced` (with an optional `referential` attribute naming the list,
-     and `multi_value: true` when several codes are concatenated).
+   - value drawn from a controlled list / enumeration / nomenclature, or a
+     reference to another structure → `references` (with an optional
+     `referential` attribute naming the list or target, and `multi_value: true`
+     when several codes are concatenated).
    - language code → `language` (`standard: iso_639`); country code → `country`
      (`standard: iso_3166`).
    - `dt_` / `ts_` business time not already a `rec_*` technical timestamp →
@@ -205,7 +206,7 @@ Audit: <audit name> (audited_at <ts>, row_count <n>)   |   or: NO AUDIT — rule
 |-------|-----------|---------|--------|----------|----------|-----------|----------|
 | ts_inserted_at   | TIMESTAMP_TZ      | rec_insert_tst | skip (template) | — | — | — | template field, valid by definition |
 | cd_job_reference | CHARACTER VARYING | primary_key | skip (key) | — | — | — | — |
-| contract_type    | CHARACTER VARYING | —          | propose | referenced (referential: contract_type) | CODE | high | distinct=8, has distribution → value from a controlled list, not free text |
+| contract_type    | CHARACTER VARYING | —          | propose | references (referential: contract_type) | CODE | high | distinct=8, has distribution → value from a controlled list, not free text |
 | ds_salary        | NUMERIC           | —          | propose | amount_in_cur | CURRENCY | medium | numeric, 17% coverage; no currency sibling and no known fixed currency → flag |
 | revenue          | BIGINT            | —          | propose | amount_in_cur (currency: EUR) | CURRENCY | high | monetary, always euros, no per-row currency field → fixed literal, not a flag |
 | dt_published     | CHARACTER VARYING | —          | propose | functional_date (format: yyyymmdd) | DATETIME | high | values like 20251019, min/max are 8-digit ints |

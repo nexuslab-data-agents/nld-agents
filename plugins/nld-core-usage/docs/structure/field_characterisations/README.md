@@ -2,7 +2,7 @@
 
 Ready-to-use `FieldCharacterisationDefinition` files for the **common
 characterisations** described in `../field-characterisation.md` §4. Each `.yml`
-is one definition: a coded semantic role (`free_text`, `referenced`,
+is one definition: a coded semantic role (`free_text`, `references`,
 `amount_in_cur`, …) that a project attaches to a field.
 
 The built-in catalogue shipped in nld-core covers only the technical roles
@@ -21,7 +21,7 @@ namespaces, and overlays them on the built-in catalogue (see
 `../field-characterisation.md` §6).
 
 ```
-cp field_characterisations/referenced.yml \
+cp field_characterisations/references.yml \
    field_characterisations/amount_in_cur.yml \
    <project>/<entity_path>/characterisations/field/
 ```
@@ -57,9 +57,9 @@ allowed_attributes:
 | MEASURE | `uom`, `amount_in_uom`, `quantity`, `duration`, `percentage` |
 | CURRENCY | `currency`, `amount_in_cur` |
 | DATETIME | `functional_timestamp`, `snapshot_date`, `validity_start_timestamp`, `validity_end_timestamp`, `validity_start_date`, `validity_end_date`, `functional_date`, `functional_time`, `functional_year`, `time_period` |
-| FUNCTIONAL | `priority`, `tec_external_reference`, `func_external_reference`, `source_identifier` |
+| FUNCTIONAL | `priority`, `source_identifier` |
 | HIERARCHY | `hierarchy_parent_info`, `hierarchy_child_info` |
 | REPORTING_USAGE | `reporting_technical_info`, `reporting_ordering` |
 | GEO | `latitude`, `longitude`, `zip_code` |
-| CODE | `referenced`, `language`, `country` |
+| CODE | `references`, `language`, `country` |
 | WEB | `url`, `slug` |

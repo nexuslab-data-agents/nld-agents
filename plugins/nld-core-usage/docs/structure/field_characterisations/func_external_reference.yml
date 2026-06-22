@@ -1,3 +1,0 @@
-name: func_external_reference
-description: "Foreign-key style reference to another structure, resolved against the functional key of the target structure."
-applicable_to_single_field_per_structure: false

@@ -109,8 +109,8 @@ The attribute keys recognized today are:
 | `unit_of_measure` | `duration`, `amount_in_uom` (and other unit-bearing measures) | Literal unit the measure is expressed in (e.g. `month`, `year`, `day`, `KG`). Unlike `uom`/`linked_field`, the unit is a literal value carried inline, not a reference to a sibling field. On `amount_in_uom` it is the **fixed-unit** alternative to `linked_field` (mutually exclusive). See §4 MEASURE. |
 | `aggregation_applied_rule` | `duration` (and other aggregated measures) | The aggregation already applied to produce the value (e.g. `min`, `max`, `average`, `sum`). Use when a column is a pre-aggregated measure (e.g. a min / max / average duration). See §4 MEASURE. |
 | `base` | `percentage` | The scale the ratio is expressed on: `100` for a 0–100 percentage, `1` for a 0–1 fraction. See §4 MEASURE. |
-| `referential` | `referenced` | Name of the referential / list of values the field draws from (e.g. `contract_type`). See §4 CODE. |
-| `multi_value` | `referenced` | `true` when the column holds several values concatenated (e.g. comma-separated); default `false`. See §4 CODE. |
+| `referential` | `references` | Name of the referential / list of values (or target) the field references (e.g. `contract_type`). See §4 CODE. |
+| `multi_value` | `references` | `true` when the column holds several values concatenated (e.g. comma-separated); default `false`. See §4 CODE. |
 | `standard` | `language`, `country` | The standard the code follows (e.g. `iso_639`, `iso_3166`). See §4 CODE. |
 | `format` | `functional_date`, `functional_time` | The encoded format of the value (e.g. `yyyymmdd`, `ddmmyyyy`, `hhmmss`, `hhmm`). See §4 DATETIME. |
 
@@ -139,7 +139,7 @@ project needs into its `characterisations/field/` directory (§6.2). See
 | `MEASURE` | Physical measures and amounts expressed in a unit of measure. |
 | `CURRENCY` | Monetary amounts and their currency reference. |
 | `DATETIME` | Functional dates, timestamps, and validity windows (including non-standard string-encoded formats). |
-| `FUNCTIONAL` | Cross-structure references, priorities, and other functional roles. |
+| `FUNCTIONAL` | Source identifiers, priorities, and other functional roles. |
 | `HIERARCHY` | Fields carrying the parent / child references of a hierarchical relationship. |
 | `REPORTING_USAGE` | Fields whose purpose is purely to support reporting layers. |
 | `GEO` | Geographic information — coordinates and postal codes. |
@@ -311,9 +311,7 @@ fields:
 | Name | Description |
 |------|-------------|
 | `priority` | Priority indicator stored as a strictly positive integer, where `1` denotes the highest priority. |
-| `tec_external_reference` | Foreign-key style reference to another structure, resolved against the **technical** key of the target structure. |
-| `func_external_reference` | Foreign-key style reference to another structure, resolved against the **functional** key of the target structure. |
-| `source_identifier` | A stable identifier issued by the source system, exposed as-is. Not a reference to another modelled structure (use `*_external_reference` for that). |
+| `source_identifier` | A stable identifier issued by the source system, exposed as-is. Not a reference to another modelled structure (use `references` for that). |
 
 #### 4.7 HIERARCHY
 
@@ -341,7 +339,7 @@ fields:
 
 | Name | Description |
 |------|-------------|
-| `referenced` | A value drawn from a referential / controlled list of values (a coded enumeration / nomenclature), as opposed to free text. Carries an optional `referential` attribute (the list name) and an optional `multi_value` attribute. |
+| `references` | The single characterisation for references: a value that references a referential / controlled list of values (a coded enumeration / nomenclature) or another structure, as opposed to free text. Carries an optional `referential` attribute (the referential or target name) and an optional `multi_value` attribute. |
 | `language` | A language code from a standard referential. Carries a `standard` attribute (e.g. `iso_639`). |
 | `country` | A country code from a standard referential. Carries a `standard` attribute (e.g. `iso_3166`). |
 
@@ -351,14 +349,14 @@ fields:
     data_type: CHARACTER VARYING
     characterisations:
       - name: contract_type
-        characterisation: referenced
+        characterisation: references
         attributes:
           referential: contract_type
   organization_industry:
     data_type: CHARACTER VARYING
     characterisations:
       - name: organization_industry
-        characterisation: referenced
+        characterisation: references
         attributes:
           referential: industry
           multi_value: true
