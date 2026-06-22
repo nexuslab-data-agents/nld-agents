@@ -12,6 +12,7 @@ characterisations are written in YAML files.
 3. [Default Characterisations Implemented in Code](#3-default-characterisations-implemented-in-code)
 4. [Common Characterisations](#4-common-characterisations)
 5. [Adding a New Characterisation](#5-adding-a-new-characterisation)
+6. [The Effective Catalogue, Project-Declared Definitions, and Validation](#6-the-effective-catalogue-project-declared-definitions-and-validation)
 
 ---
 
@@ -35,11 +36,15 @@ All defined in `core/nld/structure/field/`.
 
 | Class | File | Purpose |
 |-------|------|---------|
-| `FieldCharacterisation` | `field_characterisation.py` | Per-field instance attached to a `Field`. Has a `name`, a `characterisation` type, and an optional `attributes` dict. |
-| `FieldCharacterisationDefinition` | `field_characterisation_def.py` | Declarative metadata for a characterisation type: `description`, `allowed_attributes`, `applicable_to_single_field_per_structure`. |
-| `FieldCharacterisationDefinitionNames` | `field_characterisation_def.py` | `NldStrEnum` of the characterisation type names known to the framework. |
-| `FieldCharacterisationDefinitions` | `field_characterisation_def.py` | Container holding the concrete `FieldCharacterisationDefinition` instances for the names above. |
-| `FieldCharacterisationDefinitionAttributesNames` | `field_characterisation_def.py` | `NldStrEnum` of allowed attribute keys (currently only `ENFORCED`). |
+| `FieldCharacterisation` | `field_characterisation.py` | Per-field instance attached to a `Field`. Has a `name`, a `characterisation` type (lowercased on load), and an optional `attributes` dict. |
+| `FieldCharacterisationDefinition` | `field_characterisation_definition.py` | A namespaced NLD entity (`NldNamedBaseModel`) describing a characterisation type: `description`, `allowed_attributes`, `applicable_to_single_field_per_structure`. The registry loads it as entity type `field_characterisation_definition`. |
+| `FieldCharacterisationDefinitionNames` | `field_characterisation_definition.py` | `NldStrEnum` of the characterisation type names backed by a built-in definition. |
+| `FieldCharacterisationDefinitions` | `field_characterisation_definition.py` | Container holding the concrete built-in `FieldCharacterisationDefinition` instances for the names above. |
+| `FieldCharacterisationDefinitionAttributesNames` | `field_characterisation_definition.py` | `NldStrEnum` of allowed attribute keys (e.g. `enforced`). |
+| `FIELD_CHARACTERISATION_DEFINITIONS` | `field_characterisation_definition.py` | The built-in catalogue: a dict keyed by the lowercase characterisation token, collecting every `FieldCharacterisationDefinition` declared on `FieldCharacterisationDefinitions`. |
+| `NamespacedFieldCharacterisationDefinition` | `field_characterisation_definition.py` | A `FieldCharacterisationDefinition` paired with the namespace it resolves from. |
+| `resolve_field_characterisation_definitions` | `field_characterisation_catalog.py` | Merges the built-in catalogue with project-declared definitions visible from a namespace into the effective catalogue (see §6). |
+| `CharacterisationValidationFinding` | `field_characterisation_catalog.py` | A single field characterisation validation finding: the offending field name, the characterisation token, and a message. |
 
 `FieldCharacterisation` accepts two YAML formats (full object and short
 string) — see section "Field Characterisations" of
@@ -47,10 +52,11 @@ string) — see section "Field Characterisations" of
 
 ### 3. Default Characterisations Implemented in Code
 
-The following characterisations are defined today in
-`core/nld/structure/field/field_characterisation_def.py`. They are the
-ones the framework actively understands; YAML may reference any string,
-but only these are wired into platform behavior.
+The following characterisations are declared as built-in
+`FieldCharacterisationDefinition` instances in
+`core/nld/structure/field/field_characterisation_definition.py`. They form
+the base catalogue every namespace starts from; projects extend it with
+their own definitions (§6).
 
 #### 3.1 Generic constraints
 
@@ -81,7 +87,7 @@ but only these are wired into platform behavior.
 |------|:--------------------:|-------------|
 | `rec_deletion_flag` | Yes | Logical deletion flag (`1` = deleted, `0` = active). |
 | `rec_deletion_tst` | Yes | Timestamp of the logical deletion. |
-| `rec_deletion_user_name` | Yes | User that applied the logical deletion. |
+| `rec_deletion_by` | Yes | User that applied the logical deletion. |
 
 #### 3.5 Upsert behavior
 
@@ -108,22 +114,17 @@ The attribute keys recognized today are:
 | `standard` | `language`, `country` | The standard the code follows (e.g. `iso_639`, `iso_3166`). See §4 CODE. |
 | `format` | `functional_date`, `functional_time` | The encoded format of the value (e.g. `yyyymmdd`, `ddmmyyyy`, `hhmmss`, `hhmm`). See §4 DATETIME. |
 
-> Note: a number of additional names appear as `auto()` placeholders in
-> `FieldCharacterisationDefinitions` (e.g. `rec_insert_user_name`,
-> `rec_archive_flag`, `rec_master_source_*`). These are reserved names
-> with no concrete `FieldCharacterisationDefinition` yet — they should be
-> promoted to full definitions before being used in YAML.
-
 ### 4. Common Characterisations
 
 The following characterisations are the **standard set projects use** to
-attach functional semantics to fields. They are **not yet implemented in
-code** as concrete `FieldCharacterisationDefinition` instances, but they
-are the agreed vocabulary a project should reach for first — before
-inventing an ad-hoc name — when characterising a field. New definitions
-should be added to `FieldCharacterisationDefinitions` (and their names to
-`FieldCharacterisationDefinitionNames`) as the need arises, grouped by the
-category they belong to.
+attach functional semantics to fields. They are the agreed vocabulary a
+project should reach for first — before inventing an ad-hoc name — when
+characterising a field. They are not part of the built-in catalogue (§3);
+a project that uses one makes the framework recognise it by declaring a
+project-level definition for it (§6) or by promoting it into the built-in
+catalogue (§5), grouped by the category it belongs to. A characterisation
+that is neither built-in nor project-declared is reported as unknown by
+`nld structure validate` (§6).
 
 #### 4.1 Categories at a glance
 
@@ -381,13 +382,34 @@ fields:
 
 ### 5. Adding a New Characterisation
 
-When promoting one of the optional characterisations above (or
-introducing a brand-new one), do all of the following so the rest of the
-framework picks it up automatically:
+A characterisation becomes part of the effective catalogue (§6) in one of
+two ways. Declare it as a **project-level definition** when it is specific
+to one project or domain; promote it into the **built-in catalogue** when
+it is a cross-project role that nld-core itself should ship.
+
+**Project-level definition.** Add a YAML file under
+`<entity_path>/characterisations/field/<name>.yml` in the project. The
+file is a `FieldCharacterisationDefinition`:
+
+```yaml
+name: scd_flag
+description: SCD2 current-row flag, project-specific characterisation
+allowed_attributes:
+  - enforced
+applicable_to_single_field_per_structure: true
+```
+
+The registry loads it as a `field_characterisation_definition` entity and
+overlays it on the built-in catalogue for that namespace (§6). No nld-core
+code change is needed.
+
+**Built-in catalogue.** To make a characterisation available to every
+project, do all of the following in nld-core so the rest of the framework
+picks it up automatically:
 
 1. Add the name to `FieldCharacterisationDefinitionNames` in
-   `core/nld/structure/field/field_characterisation_def.py`. Keep the
-   enum value lowercase to match the normalization done in
+   `core/nld/structure/field/field_characterisation_definition.py`. Keep
+   the enum value lowercase to match the normalization done in
    `FieldCharacterisation.normalize_characterisation`.
 2. Add a `FieldCharacterisationDefinition` instance to
    `FieldCharacterisationDefinitions` in the same file. Set
@@ -402,3 +424,55 @@ framework picks it up automatically:
    `.agents/docs/architecture/structure-design.md` (section "Standard
    Field Characterisation Definitions") so the YAML reference stays in
    sync with the code.
+
+### 6. The Effective Catalogue, Project-Declared Definitions, and Validation
+
+#### 6.1 The effective catalogue
+
+The set of characterisations a structure may use in a given namespace is
+the **effective catalogue**:
+`resolve_field_characterisation_definitions(registry, namespace)` starts
+from the built-in catalogue (`FIELD_CHARACTERISATION_DEFINITIONS`, §3) and
+overlays every project-declared definition visible from that namespace. A
+project declaration overrides a built-in of the same (case-insensitive)
+name. Keys are the lowercase characterisation token, matching what fields
+store.
+
+#### 6.2 Project-declared definitions
+
+A project declares a `FieldCharacterisationDefinition` as a YAML file
+under `<entity_path>/characterisations/field/<name>.yml` (entity type
+`field_characterisation_definition`, resolved against parent namespaces).
+Each file carries `name`, `description`, an optional `allowed_attributes`
+list, and `applicable_to_single_field_per_structure`. The registry exposes
+them through:
+
+| Accessor | Returns |
+|----------|---------|
+| `get_field_characterisation_definition_dict(namespace)` | All visible definitions as `NamespacedFieldCharacterisationDefinition`, keyed by name. |
+| `get_field_characterisation_definition(entity_key, namespace)` | One definition by name. |
+| `get_field_characterisation_definition_keys(namespace)` | Names visible from the namespace (parent search included). |
+| `list_field_characterisation_definition_keys(namespace)` | Names declared directly in the namespace. |
+
+#### 6.3 Validation
+
+`nld structure validate` checks field characterisations against the
+effective catalogue:
+
+```
+nld structure validate [--name <structure>] [--namespace <ns>] [--format json]
+```
+
+It validates one structure when `--name` is given, otherwise every
+structure visible from `--namespace`. For each field characterisation it
+checks that:
+
+- the characterisation is a known definition in the effective catalogue,
+- every attribute it carries is listed in the definition's
+  `allowed_attributes`, and
+- a definition marked `applicable_to_single_field_per_structure` appears
+  on at most one field of the structure.
+
+Each problem is reported as a `CharacterisationValidationFinding`. The
+command renders a human-readable summary by default and the full payload
+with `--format json`; it exits non-zero when any structure is invalid.

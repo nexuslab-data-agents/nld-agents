@@ -77,8 +77,26 @@ nld structure list --namespace apec --property layer=raw --tag external_source
 ```
 
 Other `nld structure` subcommands: `info` (single structure detail), `adapt`,
-`deploy plan` / `deploy execute`, `render`. For inter-structure join models, see
-the `guide-structure-model` skill (`nld structure model list/info/validate`).
+`validate`, `deploy plan` / `deploy execute`, `render`. For inter-structure join
+models, see the `guide-structure-model` skill
+(`nld structure model list/info/validate`).
+
+## CLI: validating field characterisations
+
+`nld structure validate` checks every field characterisation against the
+effective catalogue (the built-in definitions merged with project-declared ones
+visible from the structure's namespace):
+
+```
+nld structure validate [--name <structure>] [--namespace <ns>] [--format json]
+```
+
+It flags unknown characterisations, attributes outside a definition's
+`allowed_attributes`, and a single-field-per-structure definition used on more
+than one field; it exits non-zero when any structure is invalid. See
+`field-characterisation.md` §6 for the catalogue resolution and how a project
+declares its own `field_characterisation_definition` under
+`characterisations/field/`.
 
 ## Cross-References
 

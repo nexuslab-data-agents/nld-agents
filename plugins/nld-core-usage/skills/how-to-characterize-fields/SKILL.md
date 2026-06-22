@@ -169,7 +169,12 @@ For each field, walk these in order:
 7. **Prefer the common set, then the in-code set.** Draw names from §4 **common
    characterisations** first; fall back to §3 in-code names where they fit
    (`mandatory`, `unique`). If nothing fits, propose **no characterisation** and
-   say why — an empty proposal is a valid, honest outcome.
+   say why — an empty proposal is a valid, honest outcome. A common-set name that
+   is not a §3 built-in must be backed by a project-level
+   `field_characterisation_definition` (under `characterisations/field/`, see
+   `field-characterisation.md` §6) for `nld structure validate` to accept it;
+   when proposing such a name, note in the report whether the project already
+   declares its definition.
 
 8. **Challenge a characterisation the evidence contradicts.** For an own-field
    that is **already** characterised, if the data profile disagrees with it
@@ -257,15 +262,22 @@ Rules for the report:
    each amount's `linked_field` — or, for a fixed-constant currency / unit, the
    amount's literal `currency` / `unit_of_measure` attribute (no paired field).
 8. **Verify** the edited structure still loads:
-   `nld structure info --name <s> --namespace <ns>`. If the structure layers map
-   onto another structure, re-validate with `nld structure model validate`.
+   `nld structure info --name <s> --namespace <ns>`, then check the
+   characterisations against the catalogue with
+   `nld structure validate --name <s> --namespace <ns>` — it flags any
+   characterisation that is neither built-in nor project-declared, any attribute
+   outside the definition's `allowed_attributes`, and any single-per-structure
+   definition used on more than one field. If the structure layers map onto
+   another structure, re-validate with `nld structure model validate`.
 
 ---
 
 ## Cross-references
 
 - Characterisation catalogue & rules: `field-characterisation.md`
-  (§3 in-code, §4 **common characterisations**) via the `guide-structures` skill.
+  (§3 in-code, §4 **common characterisations**, §6 effective catalogue /
+  project-declared definitions / `nld structure validate`) via the
+  `guide-structures` skill.
 - The data profile this skill consumes: `how-to-profile-a-structure` and
   `guide-structure-audit` skills.
 - Writing characterisations in YAML: `structure-design.md`

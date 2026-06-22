@@ -417,11 +417,13 @@ characterisations:
 | `unique` | Field values must be unique | No |
 | `rec_insert_tst` | Record insert timestamp | Yes |
 | `rec_last_update_tst` | Record last update timestamp | Yes |
+| `rec_previous_layer_update_tst` | Last update timestamp in the previous layer | Yes |
 | `rec_source_insert_tst` | Source insert timestamp | Yes |
 | `rec_source_last_update_tst` | Source last update timestamp | Yes |
 | `rec_source_extraction_tst` | Source extraction timestamp | Yes |
 | `rec_deletion_flag` | Logical deletion flag | Yes |
 | `rec_deletion_tst` | Deletion timestamp | Yes |
+| `rec_deletion_by` | User that applied the logical deletion | Yes |
 | `exclude_from_upsert_update` | Field excluded from UPDATE SET and change detection on upsert | No |
 | `exclude_from_upsert_match` | Field updated but excluded from change detection on upsert | No |
 
