@@ -1,0 +1,5 @@
+name: functional_date
+description: "Functional date stored as a string or integer in a non-standard encoded format. Carries a format giving the layout (e.g. yyyymmdd, ddmmyyyy)."
+applicable_to_single_field_per_structure: false
+allowed_attributes:
+    - format

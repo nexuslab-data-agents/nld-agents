@@ -1,0 +1,3 @@
+name: priority
+description: "Priority indicator stored as a strictly positive integer, where 1 denotes the highest priority."
+applicable_to_single_field_per_structure: false

@@ -1,0 +1,5 @@
+name: uom
+description: "Unit of measure code (e.g. KG, G, CAR, L, mL, M3). Qualifies the amount fields listed in linked_fields."
+applicable_to_single_field_per_structure: false
+allowed_attributes:
+    - linked_fields

@@ -1,0 +1,3 @@
+name: validity_start_date
+description: "Date at which the entry starts being valid."
+applicable_to_single_field_per_structure: true

@@ -1,0 +1,6 @@
+name: referenced
+description: "A value drawn from a referential / controlled list of values (a coded enumeration / nomenclature), as opposed to free text. Carries an optional referential (the list name) and an optional multi_value."
+applicable_to_single_field_per_structure: false
+allowed_attributes:
+    - referential
+    - multi_value

@@ -1,0 +1,3 @@
+name: source_identifier
+description: "A stable identifier issued by the source system, exposed as-is. Not a reference to another modelled structure."
+applicable_to_single_field_per_structure: false

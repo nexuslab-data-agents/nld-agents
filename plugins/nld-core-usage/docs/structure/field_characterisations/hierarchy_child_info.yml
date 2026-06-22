@@ -1,0 +1,3 @@
+name: hierarchy_child_info
+description: "Field carrying the child reference of a hierarchical relationship."
+applicable_to_single_field_per_structure: false

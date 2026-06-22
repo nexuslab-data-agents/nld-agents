@@ -1,0 +1,5 @@
+name: language
+description: "A language code from a standard referential. Carries a standard (e.g. iso_639)."
+applicable_to_single_field_per_structure: false
+allowed_attributes:
+    - standard

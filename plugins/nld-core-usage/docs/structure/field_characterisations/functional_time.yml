@@ -1,0 +1,5 @@
+name: functional_time
+description: "Functional time-of-day stored as a string or integer in a non-standard encoded format. Carries a format giving the layout (e.g. hhmmss, hhmm)."
+applicable_to_single_field_per_structure: false
+allowed_attributes:
+    - format

@@ -1,0 +1,3 @@
+name: reporting_technical_info
+description: "Technical field exposed only for reporting purposes (e.g. a stable unique identifier on a master-data structure)."
+applicable_to_single_field_per_structure: false

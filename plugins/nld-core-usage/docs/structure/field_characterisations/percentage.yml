@@ -1,0 +1,5 @@
+name: percentage
+description: "A ratio / proportion. Carries a base giving the scale - 100 for a 0-100 percentage, 1 for a 0-1 fraction."
+applicable_to_single_field_per_structure: false
+allowed_attributes:
+    - base

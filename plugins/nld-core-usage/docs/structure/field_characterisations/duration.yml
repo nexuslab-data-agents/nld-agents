@@ -1,0 +1,6 @@
+name: duration
+description: "A length of time. Carries a literal unit_of_measure (e.g. month, year) and, when pre-aggregated, an aggregation_applied_rule (e.g. min, max, average)."
+applicable_to_single_field_per_structure: false
+allowed_attributes:
+    - unit_of_measure
+    - aggregation_applied_rule

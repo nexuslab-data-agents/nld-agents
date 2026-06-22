@@ -126,6 +126,11 @@ catalogue (§5), grouped by the category it belongs to. A characterisation
 that is neither built-in nor project-declared is reported as unknown by
 `nld structure validate` (§6).
 
+Ready-made `FieldCharacterisationDefinition` files for the whole common set
+live in `field_characterisations/` next to this document; copy the ones a
+project needs into its `characterisations/field/` directory (§6.2). See
+`field_characterisations/README.md`.
+
 #### 4.1 Categories at a glance
 
 | Category | Purpose |
@@ -444,8 +449,10 @@ A project declares a `FieldCharacterisationDefinition` as a YAML file
 under `<entity_path>/characterisations/field/<name>.yml` (entity type
 `field_characterisation_definition`, resolved against parent namespaces).
 Each file carries `name`, `description`, an optional `allowed_attributes`
-list, and `applicable_to_single_field_per_structure`. The registry exposes
-them through:
+list, and `applicable_to_single_field_per_structure`. The common set (§4) is
+provided ready-made under `field_characterisations/` next to this document —
+copy the needed files into `characterisations/field/` rather than authoring
+them by hand. The registry exposes them through:
 
 | Accessor | Returns |
 |----------|---------|
