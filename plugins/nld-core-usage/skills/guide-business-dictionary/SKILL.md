@@ -49,6 +49,10 @@ The full architectural reference is at
 
 ## Cross-References
 
+- For the **CLI usage and agent guidance** — querying the dictionary from the
+  shell (`find` / `list`), the author-then-verify loop, and the naming discipline
+  ("look before you name", "zero matches is a signal", prefer the canonical name
+  over a synonym) — see the `how-to-use-business-dictionary` skill.
 - The BusinessDictionary inherits from `NldNamedBaseModel` and is wrapped by
   `NldNamespacedBaseModelWrapper` — see the `guide-base-model` skill for the
   base class hierarchy and namespace resolution mechanics.

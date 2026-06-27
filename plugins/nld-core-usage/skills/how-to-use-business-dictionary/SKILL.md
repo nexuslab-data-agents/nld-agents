@@ -233,9 +233,17 @@ runtime does and catch validation errors a grep would miss.
   should become a synonym of an existing one.
 - **CLI-first for discovery and verification.** Use `list` / `find` to
   survey and to confirm edits; do not grep the YAML.
+- **Validate a namespace.** After editing a dictionary YAML, run
+  `nld business dict list --namespace <ns>` (and a `find` on the edited
+  term) — loading the model the way the runtime does catches validation
+  errors a grep would miss. Add a first-class `nld business dict validate`
+  command to check a namespace in one step (`grammatical_class` enum,
+  resolvable `preferred_term` / `related_terms`, well-formed translations,
+  `name` == namespace leaf, no `[]` noise); see the design reference §7
+  "Validation".
 - **Missing a capability? Extend nld-core.** If a needed dictionary
-  operation (a filter, a validation command) is not exposed by the CLI,
-  add it to nld-core (`nld/business/task/` + `nld/cli/business/`) with a
+  operation (a filter, the `validate` command above) is not exposed by the
+  CLI, add it to nld-core (`nld/business/task/` + `nld/cli/business/`) with a
   task-level test rather than working around it with ad-hoc file
   inspection.
 
