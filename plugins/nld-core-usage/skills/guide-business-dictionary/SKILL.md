@@ -33,7 +33,7 @@ Activate this guide when the agent is working on:
 ## Document Resolution
 
 The full architectural reference is at
-`${CLAUDE_PLUGIN_ROOT}/docs/nld-base/nld-business-dictionary-design.md`.
+`${CLAUDE_PLUGIN_ROOT}/docs/nld-base/business-dictionary-design.md`.
 
 ### Key Sections
 
