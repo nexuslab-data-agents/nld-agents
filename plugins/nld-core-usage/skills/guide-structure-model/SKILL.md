@@ -4,8 +4,8 @@ description: >
   Architectural guide for the nld-core StructureModel entity — inter-structure
   links, field mappings, cardinality, namespace resolution, reference semantics
   (NldEntityReference), validation, and the `nld structure model` CLI. Read when
-  working on structure_model definitions, lineage between layers, or the
-  StructureModel code in nld/structure/structure_model/.
+  working on structure_model definitions (same-layer join links between
+  structures) or the StructureModel code in nld/structure/structure_model/.
 user-invocable: false
 ---
 
@@ -17,13 +17,15 @@ structures are linked to each other with validated, field-level mappings.
 ## When to Use
 
 Activate this guide when working on:
-- `structure_model` YAML definitions (lineage between layers/entities)
+- `structure_model` YAML definitions (same-layer join links between structures)
 - `nld/structure/structure_model/` code (model, link, cardinality)
 - The `nld structure model` CLI (list / info / validate)
 - Reasoning about reference resolution (`NldEntityReference`) on load
 
-For the step-by-step authoring workflow (raw ↔ refined), see
-`how-to-model-structure-layers`.
+For the step-by-step authoring workflow + the **same-layer rule** (a
+structure_model links only structures of the *same* layer; cross-layer
+raw→refined lineage lives in the transformation SQL + `StructureAudit`, not a
+structure_model), see `how-to-model-structure-layers`.
 
 ## Models
 
@@ -119,9 +121,10 @@ nld structure model info  --name <model> [--namespace <ns>]
 
 - **Structures** (`guide-structures`) are the endpoints a model links.
 - **Business dictionary** (`guide-business-dictionary`) maps names →
-  canonical *concepts*; a structure model maps *columns across structures*
-  (e.g. raw→refined). They are complementary: dictionary for vocabulary,
-  structure model for lineage.
+  canonical *concepts*; a structure model maps *join keys between same-layer
+  structures*. They are complementary: dictionary for vocabulary, structure
+  model for same-layer joins. (Cross-layer raw→refined lineage lives in the
+  transformation SQL + `StructureAudit`, not a structure model.)
 
 ## Convention: one model per structure, associated structure on the left
 
@@ -135,18 +138,15 @@ structure, right column = a column on the joined table).
 
 ```yaml
 name: refined_web_hr_wttj_job          # the model is about this structure
-description: Known join links for refined_web_hr_wttj_job
 links:
-  company:                             # join to another entity (FK)
+  company:                             # same-layer join to another entity (FK)
     left_structure: wttj.refined_web_hr_wttj_job
-    right_structure: wttj.refined_web_hr_wttj_company
+    right_structure: wttj.refined_web_hr_wttj_company   # both refined
     cardinality: many_to_one
     left_to_right_mappings:
       - cd_organization_reference      # identical on both sides
-  raw:                                 # join to the same row in another layer
-    left_structure: wttj.refined_web_hr_wttj_job
-    right_structure: wttj.raw_web_hr_wttj_jobs
-    cardinality: one_to_one
-    left_to_right_mappings:
-      - {left: cd_job_reference, right: job_reference}
 ```
+
+> Both sides are the **same layer** (`refined`). A link to the structure's own
+> `raw_web_hr_wttj_jobs` source would be **cross-layer lineage**, not a
+> structure_model link — see `how-to-model-structure-layers`.
