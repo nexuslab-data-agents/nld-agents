@@ -29,6 +29,8 @@ Then ask Claude *"how do I make this flow incremental?"* and it routes to the ri
 | `guide-incremental` | `by_key` / `by_source_tst` / `no_increment` strategies, state management |
 | `guide-structures` | Structure definitions, field characterisations, deployment |
 | `guide-structure-audit` | StructureAudit entity — per-structure coverage and value-distribution audits |
+| `guide-governance` | Ownership entities — `structure_owner` (data) / `flow_owner` (technical), lineage resolution, `nld ownership` CLI |
+| `guide-scheduling` | Environment-aware `FlowScheduling` — triggers, predecessors, `nld scheduling` CLI, multi-project catalog |
 | `how-to-profile-a-structure` | Profile (or hand-author), validate, and render a StructureAudit with `nld structure audit` |
 | `how-to-characterize-fields` | Propose field characterisations for one structure from the rules + its audit, report, and confirm before updating |
 | `how-to-trace-flow-lineage` | Trace upstream/downstream structure and flow lineage with `nld flow deps` |

@@ -506,6 +506,8 @@ entities from filesystem, and is held by the execution context.
 | `name` | `str` | Project name |
 | `version` | `str \| None` | Optional version string |
 | `entity_path` | `str` | Relative path to entities folder (default: `"."`) |
+| `environments` | `EnvironmentsConfig` | Named environments (connection profile + variable overrides); active env resolved by `--env` → `NLD__ENVIRONMENT` → `default`. See `guide-scheduling`. |
+| `properties` | `dict[str, Any]` | Free-form key-value metadata the core does not interpret (platform hints). |
 | `entity_registry` | `NldEntityRegistry` | Manages all project entities |
 
 **Loading a project:**
@@ -529,6 +531,17 @@ entity_path: .
 python_additional_paths:
   flows:
     - custom.flows.module
+environments:                  # optional — see guide-scheduling
+  default: prd
+  values:
+    dev:
+      connection_profile: dev
+      variables:
+        schema_name: opendata_dev
+    prd:
+      connection_profile: default
+properties:                    # optional — free-form platform metadata
+  data_domain: clh
 ```
 
 ### 4.5 StandardTask
@@ -627,6 +640,30 @@ entities_root/
 4. File name (without extension) becomes the entity name.
 5. `ResolutionContext` is set up with already-loaded entities before deserialization,
    enabling cross-entity references.
+
+#### Selective / lazy entity loading
+
+`load_entities` accepts an optional `requested_entity_definitions` filter so a
+caller can load only the entity types it needs instead of the whole project.
+`EntityProvider.get_required_entity_definitions` resolves the **transitive
+closure** of a request — it introspects each entity's Pydantic model to follow
+embedded sub-models and `NldEntityReference` targets — so, e.g., loading
+`flows` no longer pulls in unrelated structure models. Every CLI command
+declares the entity types it touches (`structure list` → `structure`,
+`flow *` → `flows`, `business dict *` → `business_dictionary`, …) and loads only
+those. Loading is **incremental**: multiple tasks in one process accumulate
+definitions without reloading.
+
+Two consequences worth remembering:
+
+- **Accessors for a known-but-not-yet-loaded entity type return empty**
+  (empty dict/list) **instead of raising** — matching the behaviour of a type
+  with no files. Do not rely on an accessor raising to detect "not loaded".
+- An `EntityDefinition` (or a project's additional-entity config) flagged
+  `always_load` is loaded even under a selective load. Project-declared
+  additional entities default to `always_load: true`, because tasks resolve them
+  by key independently of any selective scope; set `always_load: false` to opt a
+  custom entity out.
 
 ### 5.3 Namespace Resolution with Search Direction
 
