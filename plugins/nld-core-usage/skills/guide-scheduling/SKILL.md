@@ -5,9 +5,9 @@ description: >
   block in nld_project.yml (EnvironmentsConfig + `--env`/`NLD__ENVIRONMENT`
   resolution), the per-flow, per-environment `FlowScheduling` entity (schedule vs
   flow triggers, predecessors, external/cross-product references), the
-  SchedulingResolver/Validator services, the `nld scheduling` CLI, and the
-  NldProjectCatalog multi-project model. Read when working on scheduling YAML
-  under scheduling/, environment config, or nld/scheduling/ code.
+  SchedulingResolver/Validator services, and the `nld scheduling` CLI. Read when
+  working on scheduling YAML under scheduling/, environment config, or
+  nld/scheduling/ code. For the cross-project catalogue see guide-project-catalog.
 user-invocable: false
 ---
 
@@ -180,39 +180,14 @@ environments:
           nld_project: clh_acquisition_opendata
 ```
 
-## NldProjectCatalog — the multi-project layer
+## Cross-project dependencies
 
-`nld/project/project_catalog.py` adds a cross-project model that sits **above**
-individual projects: it records every nld project on a platform, where it lives,
-and the dependency links between them. This is the structure that gives
-`external` preconditions their meaning (the upstream `nld_project` is a
-catalogued project).
-
-`nld_project_catalog.yml` (loaded with `NldProjectCatalog.from_yaml(folder)`):
-
-```yaml
-projects_base_path: ops/nld/data_products   # optional; default = catalog file's dir
-projects:
-  clh_acquisition_opendata:
-    path: clh/acquisition/opendata           # folder holding that project's nld_project.yml
-    predecessors: []
-  clh_business_dwh:
-    path: clh/business/dwh
-    predecessors:
-      - clh_acquisition_opendata
-```
-
-- `projects` is keyed by project name (a before-validator folds the key into the
-  entry's `name`).
-- A field validator rejects any `predecessor` that is not itself a catalogued
-  project.
-- API: `from_yaml(root)`, `get_entry(name)`, `predecessors_of(name)`,
-  `entry_names`.
-
-The catalog `predecessors` form the **cross-project** dependency DAG (e.g. a
-business project runs after the acquisition projects feeding it); per-flow
-`FlowPrecondition`s with `external: true` express the same dependency at the
-flow grain.
+An `external` precondition's `nld_project` names a project in the platform-level
+**`NldProjectCatalog`** (`nld_project_catalog.yml`) — the cross-project DAG that
+records every project and the predecessor links between them. The catalogue
+expresses the dependency at the *project* grain; a `FlowPrecondition` with
+`external: true` expresses the same dependency at the *flow* grain. See
+**`guide-project-catalog`** for the full model and YAML.
 
 ## Relationship to other entities & layers
 

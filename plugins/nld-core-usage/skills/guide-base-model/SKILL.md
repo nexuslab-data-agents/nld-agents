@@ -1,52 +1,56 @@
 ---
 name: guide-base-model
 description: >
-  Architectural guide for the NldBaseModel hierarchy, Pydantic foundations,
-  entity management system (NldNamespace, NldNamespacedBaseModelWrapper,
-  NldEntityReference), entity registry, YAML/JSON serialization, and the
-  context classes (NldExecutionContext, TaskRequest, Project).
+  Architectural guide for the core nld-core Pydantic layer — the NldBaseModel /
+  NldNamedBaseModel hierarchy, NldNamespace, NldNamespacedBaseModelWrapper,
+  NldEntityReference, the ResolutionContext reference-resolution machinery, and
+  YAML/JSON serialization. Read when working on base model code in
+  nld/pydantic/, namespaces, entity references, or serialization. For the entity
+  registry see guide-entity-registry; for context/Project see guide-project.
 user-invocable: false
 ---
 
-# Guide: Base Model & Entity System
+# Guide: Base Model (Core Pydantic Layer)
 
-Architectural reference for the nld-core Pydantic-based model system — the
-class hierarchy, entity management, namespace resolution, and context classes.
+Architectural reference for the foundational nld-core model system — the class
+hierarchy, namespaces, entity references, and the serialization /
+reference-resolution machinery every entity is built on.
+
+This is one of four guides covering the base layer:
+
+- **`guide-base-model`** (this) — the core Pydantic classes.
+- **`guide-entity-registry`** — entity definitions, providers, registry, loading.
+- **`guide-project`** — execution context, `Project`, task entity consumption.
+- **`guide-project-catalog`** — the multi-project `NldProjectCatalog`.
 
 ## When to Use
 
 Activate this guide when the agent is working on:
 - Pydantic base model code in `nld/pydantic/`
-- Entity loading, serialization, or registry code
-- NldNamespace or NldNamespacedBaseModelWrapper
-- NldEntityReference resolution
-- NldExecutionContext, TaskRequest, or Project classes
+- `NldNamespace` or `NldNamespacedBaseModelWrapper`
+- `NldEntityReference` resolution
+- `ResolutionContext` and string-reference resolution during deserialization
 - YAML/JSON entity serialization (`from_yaml`, `from_dict`, `to_dict`, `write_yaml_file`)
-- Adding a new entity type to the registry
+- Dynamic entity subclass resolution (e.g. connector-specific `Structure`)
 
 ## Document Resolution
 
 The full architectural reference is at
-`${CLAUDE_PLUGIN_ROOT}/docs/nld-base/nld-base-model-design.md`.
+`${CLAUDE_PLUGIN_ROOT}/docs/nld-base/base-model-design.md`.
 
-### Key Sections (721 lines — read by section, not in full)
+### Key Sections
 
 | Task | Section |
 |------|---------|
 | Class hierarchy overview | "1. Class Hierarchy Overview" |
-| Core Pydantic layer | "2. Core Pydantic Layer" (NldBaseModel, NldNamedBaseModel, NldNamespace) |
-| ResolutionContext pattern | "2.3 ResolutionContext" |
-| Namespace and wrappers | "2.4 NldNamespace", "2.5 NldNamespacedBaseModelWrapper" |
+| NldBaseModel / NldNamedBaseModel | "2.1", "2.2" |
+| ResolutionContext | "2.3", and the pattern in "3.2 ResolutionContext Pattern" |
+| Namespaces and wrappers | "2.4 NldNamespace", "2.5 NldNamespacedBaseModelWrapper" |
 | Entity references | "2.6 NldEntityReference" |
-| Entity management (definitions, providers, registry) | "3. Entity Management Layer" |
-| Search direction (children vs parents) | "3.2 Search Direction" |
-| Context classes and entity access | "4. Context Classes & Entity Consumption" |
-| NldExecutionContext | "4.3 NldExecutionContext" |
-| Key patterns (dynamic resolution, filesystem loading) | "5. Key Patterns" |
-| Complete entity access chain example | "5.5 Complete Entity Access Chain" |
+| Dynamic entity class resolution | "3.1 Dynamic Entity Class Resolution" |
 
 ## Cross-References
 
-- For Structure models that inherit from this base system, see the
-  `guide-structures` skill.
-- For Flow tasks that use the execution context, see the `guide-flows` skill.
+- `guide-entity-registry` — how these models are stored, loaded and retrieved.
+- `guide-project` — how a running task consumes entities via the context.
+- For Structure models that inherit from this base system, see `guide-structures`.
