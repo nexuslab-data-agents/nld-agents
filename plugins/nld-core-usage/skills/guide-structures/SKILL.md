@@ -91,9 +91,18 @@ visible from the structure's namespace):
 nld structure validate [--name <structure>] [--namespace <ns>] [--format json]
 ```
 
-It flags unknown characterisations, attributes outside a definition's
-`allowed_attributes`, and a single-field-per-structure definition used on more
-than one field; it exits non-zero when any structure is invalid. See
+It applies three checks (one finding per problem) and exits non-zero when any
+structure is invalid:
+
+- **Unknown characterisation** — the tag is not in the effective catalogue.
+  Message: `Unknown field characterisation '<token>'; not a known definition`.
+- **Disallowed attribute** — an attribute key is outside the definition's
+  `allowed_attributes`. Message: `Attribute '<attr>' not allowed for '<token>'`.
+- **Single-field violation** — a definition marked
+  `applicable_to_single_field_per_structure` appears on more than one field.
+  Message: `'<token>' set on <n> fields, expected at most 1`.
+
+See
 `field-characterisation.md` §6 for the catalogue resolution and how a project
 declares its own `field_characterisation_definition` under
 `characterisations/field/`.

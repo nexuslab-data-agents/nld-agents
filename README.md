@@ -22,13 +22,18 @@ Then ask Claude *"how do I make this flow incremental?"* and it routes to the ri
 
 | Skill | What it does |
 |---|---|
-| `guide-base-model` | NldBaseModel hierarchy, Pydantic foundations, entity management |
+| `guide-base-model` | Core Pydantic layer — NldBaseModel hierarchy, namespaces, entity references, serialization |
+| `guide-entity-registry` | Entity definitions, providers, NldEntityRegistry accessors, filesystem & selective loading |
+| `guide-project` | Project container, execution context, TaskRequest, StandardTask, task→entity access |
+| `guide-project-catalog` | `NldProjectCatalog` — multi-project catalogue and cross-project predecessor DAG |
 | `guide-business-dictionary` | Namespaced business vocabulary for naming tables/fields |
 | `guide-connections` | Connector engine architecture (PostgreSQL, BigQuery, Snowflake, DuckDB) |
 | `guide-flows` | SQLFlowTask/DataFlowTask lifecycle, write strategies, dependency graph |
 | `guide-incremental` | `by_key` / `by_source_tst` / `no_increment` strategies, state management |
 | `guide-structures` | Structure definitions, field characterisations, deployment |
 | `guide-structure-audit` | StructureAudit entity — per-structure coverage and value-distribution audits |
+| `guide-governance` | Ownership entities — `structure_owner` (data) / `flow_owner` (technical), lineage resolution, `nld ownership` CLI |
+| `guide-scheduling` | Environment-aware `FlowScheduling` — triggers, predecessors, environments, `nld scheduling` CLI |
 | `how-to-profile-a-structure` | Profile (or hand-author), validate, and render a StructureAudit with `nld structure audit` |
 | `how-to-characterize-fields` | Propose field characterisations for one structure from the rules + its audit, report, and confirm before updating |
 | `how-to-trace-flow-lineage` | Trace upstream/downstream structure and flow lineage with `nld flow deps` |
