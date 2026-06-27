@@ -303,3 +303,42 @@ let `examples` carry the concrete column/table names that realise it.
   a namespaced file should redeclare a term only to specialise it (e.g. to add
   provider-specific `examples` / `translations`); redeclaring it identically to
   a parent is noise.
+
+### Anti-patterns
+
+The recurring mistakes that the rules above exist to prevent:
+
+- ❌ **Multi-word terms when a single word works**, or keeping `_id` / `_name` /
+  `_description` suffixes in the term key (`company_id` instead of `company`).
+- ❌ **Provider- or usage-specific text in a root term's `description`** (a
+  generic `company` term described as "the APEC company"). Such specifics belong
+  in an example's `description`.
+- ❌ **Foreign-language names in `synonyms`** instead of `translations`.
+- ❌ **Loosely-associated words in `synonyms`** instead of `related_terms`
+  (`headcount` / `workforce` under `employee`).
+- ❌ **Collapsing a discouraged near-synonym into `synonyms`** instead of pointing
+  it at the canonical concept with `preferred_term`.
+- ❌ **`examples: []` / `related_terms: []`** — omit the field entirely instead.
+- ❌ **Verifying by grepping the YAML** instead of loading via the CLI
+  (`nld business dict list` / `find`), which would miss model-validation errors.
+- ❌ **Redeclaring a term identically in a child namespace** (pure noise — the
+  walker already inherits it).
+
+### Validation
+
+Authoring is a YAML edit; **discovery and verification go through the CLI**. The
+`list` / `find` commands load the model exactly as the runtime does, so they
+surface validation errors (e.g. an invalid `grammatical_class`) that a `grep`
+would miss. After any edit, run `nld business dict list --namespace <ns>` and
+`nld business dict find --term <name> --synonym --namespace <ns>`, and confirm the
+term resolves from the file you edited (`source_namespace`).
+
+> **First-class validator (`nld business dict validate`).** Add a dedicated
+> `nld business dict validate` command (in `nld/business/task/` +
+> `nld/cli/business/`, with a task-level test) to validate a namespace in one
+> deterministic step: `grammatical_class` is in the allowed enum; every
+> `preferred_term` / `related_terms` reference resolves (or is a deliberate
+> forward reference); each `TermTranslation` is well-formed; the file's `name`
+> equals its namespace leaf; and there is no `examples: []` / `synonyms: []`
+> noise. This is the canonical "missing CLI → extend nld-core" candidate for the
+> dictionary.

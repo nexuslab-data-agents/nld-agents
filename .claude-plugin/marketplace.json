@@ -9,7 +9,7 @@
       "name": "nld-core-usage",
       "source": "./plugins/nld-core-usage",
       "description": "Architectural and how-to skills for using the nld-core library — base model, connections, structures, structure models (inter-layer lineage), structure audits (per-structure data-analysis audits), flows, incremental processing, business dictionary, execution/incremental info accessors, and the incremental-strategy decision guide.",
-      "version": "0.6.0",
+      "version": "0.6.1",
       "author": {
         "name": "NexusLab Data"
       }
