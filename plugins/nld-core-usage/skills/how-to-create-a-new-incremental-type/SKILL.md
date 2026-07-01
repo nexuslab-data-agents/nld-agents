@@ -31,7 +31,7 @@ use.
 |---------|-----------|----------------------------------------|
 | **Logic** | A module-level `FlowIncrementalLogic[ParamsCls]` instance, paired with a `FlowIncrementalDefinition` and a `FlowIncrementalParams` subclass that lists every CLI-visible parameter in `param_definitions`. | `logic_module` |
 | **State manager** | A subclass of `IncrementalStateManager` parameterised by your three state classes and your params class. Owns `init_processing_state`, `update_processing_state`, `create_post_processing_state`, and the `sql_filter_manager` property. | `state_manager_module` |
-| **State models** | Three pydantic models — `FlowState`, `FlowSourceState`, `FlowProcessingState` subclasses — declared in the logic and state-manager generics. Carry the persisted watermark, the per-run source snapshot, and the per-run processing record. | (imported by `logic_module` and `state_manager_module`) |
+| **State models** | Three pydantic models — `FlowState`, `FlowSourceState`, `FlowProcessingState` subclasses — declared in the logic and state-manager generics. Carry the persisted watermark, the per-run source snapshot, and the per-run processing record. The `FlowState` and `FlowProcessingState` subclasses each implement the abstract `render_state_text()` so `nld flow state incremental get-state` can render them; the `FlowProcessingState` subclass also implements `get_display_log()` (and overrides `get_pull_timestamps()` for timestamp strategies). | (imported by `logic_module` and `state_manager_module`) |
 | **Backend package** | A package containing one module per `(backend_type, engine)` pair the type supports. Each module subclasses `IncrementalBackendStateManager[Connector, State, SourceState, ProcessingState]`. The base subclass goes in the file named by the template with `base` as the backend type — `base_with_{engine}.py` by default. | `backend_package` |
 
 The optional `backend_module_template` controls the per-backend filename
@@ -82,7 +82,12 @@ deployment needs the others.
    executor filters task parameters by
    `DataFlowDefinition.get_init_params_keys()`, which sources those
    names from the resolved logic. A parameter missing from
-   `param_definitions` is silently dropped at runtime.
+   `param_definitions` is silently dropped at runtime. Implement
+   `render_state_text()` on both the `FlowState` and the
+   `FlowProcessingState` subclass — it is abstract, so a missing
+   implementation fails at instantiation, and it is what `nld flow
+   state incremental get-state` prints for the type; keep any
+   strategy-specific rendering helpers in the type's own `state.py`.
 
 3. **Decide on planned-state support.** `FlowIncrementalDefinition.supports_planned_state`
    defaults to `False`. Set it `True` on the definition when the
