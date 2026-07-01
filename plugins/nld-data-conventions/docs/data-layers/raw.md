@@ -57,7 +57,15 @@ raw_<prefix>_<entity>               (flat columns from source)
 - Has a deduplicated view `v_raw_<prefix>_<entity>_latest` for downstream consumption
 - **Exclude fields already mapped to technical tracking columns**: if a JSON field was configured as `source_updated_at_field` or `source_inserted_at_field` in the ingestion `json_resource_config`, it is already available as `ts_src_updated_at` / `ts_src_inserted_at` in `raw_json_` and must NOT be duplicated as a business column in `raw_`
 
-**Structure templates**: `raw_standard_tracking` + `raw_dlt_tracking`
+**Structure templates**: `raw_standard_tracking` + `raw_dlt_tracking_excluded_from_upsert_update`
+
+> The `raw_` table is populated by a SQL `UPSERT` flow reading from `raw_json_`.
+> Its `_dlt_id` / `_dlt_load_id` are copied from `raw_json_` and are regenerated
+> on every re-ingestion, so they must be excluded from UPSERT change detection —
+> otherwise a re-ingestion with no business change rewrites every row. The
+> `raw_dlt_tracking_excluded_from_upsert_update` variant tags both dlt fields
+> with `exclude_from_upsert_update`. `raw_json_` itself keeps the plain
+> `raw_dlt_tracking` (see the "raw_json_" section above).
 
 ## Deduplicated Views
 
