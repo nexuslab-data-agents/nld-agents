@@ -71,11 +71,22 @@ In most cases, the functional key and primary key point to the **same field(s)**
 | Layer | Structure Type | Templates |
 |---|---|---|
 | `raw_json_*` | TABLE | `raw_standard_tracking` + `raw_dlt_tracking` |
-| `raw_*` | TABLE | `raw_standard_tracking` + `raw_dlt_tracking` |
+| `raw_*` (loaded from `raw_json_*`) | TABLE | `raw_standard_tracking` + `raw_dlt_tracking_excluded_from_upsert_update` |
 | `v_raw_*_latest` | VIEW | `raw_standard_tracking` |
 | `refined_*` | TABLE | `refined_standard_tracking` |
 | business | TABLE | `nld_standard_tracking` |
 | consumer | VIEW | `nld_standard_tracking` |
+
+> **dlt tracking on the raw layer.** The dlt bookkeeping fields (`_dlt_id`,
+> `_dlt_load_id`) must not drive UPSERT change detection on a `raw_*` table
+> populated by the SQL UPSERT flow: a re-ingestion regenerates `_dlt_load_id`
+> and would otherwise rewrite every row. Use
+> `raw_dlt_tracking_excluded_from_upsert_update` (its dlt fields carry
+> `exclude_from_upsert_update`) for `raw_*` tables loaded from `raw_json_*`.
+> Keep the plain `raw_dlt_tracking` on `raw_json_*` (the dlt ingestion target).
+> When a source has no `raw_json_*` layer and the `raw_*` table is itself the
+> dlt ingestion target (e.g. bulk-file products), keep the plain
+> `raw_dlt_tracking`.
 
 ## Tags
 

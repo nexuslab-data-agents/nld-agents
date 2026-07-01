@@ -146,6 +146,7 @@ This means: "For TABLE structures, read the upstream field tagged `rec_last_upda
 |-------------------|--------------------------------|
 | `raw_standard_tracking` | `ingestion_file_name`, `ingestion_file_row_number`, `rec_source_extraction_tst`, `rec_source_insert_tst`, `rec_source_last_update_tst`, `rec_previous_layer_update_tst`, `rec_insert_tst`, `rec_last_update_tst`, `rec_deletion_flag`, `rec_deletion_tst`, `rec_deletion_by` |
 | `raw_dlt_tracking` | `dlt_load_id`, `dlt_id` |
+| `raw_dlt_tracking_excluded_from_upsert_update` | `dlt_load_id`, `dlt_id` (both also carry `exclude_from_upsert_update`) — for `raw_*` tables loaded from `raw_json_*` |
 | `refined_standard_tracking` | `rec_source_extraction_tst`, `rec_source_insert_tst`, `rec_source_last_update_tst`, `rec_previous_layer_update_tst`, `rec_insert_tst`, `rec_last_update_tst` |
 | `refined_standard_tracking_with_logical_deletion` | Same as `refined_standard_tracking` + `rec_deletion_flag`, `rec_deletion_tst`, `rec_deletion_by` |
 | `nld_standard_tracking` | `rec_source_extraction_tst`, `rec_source_insert_tst`, `rec_source_last_update_tst`, `rec_previous_layer_update_tst`, `rec_insert_tst`, `rec_last_update_tst` |
