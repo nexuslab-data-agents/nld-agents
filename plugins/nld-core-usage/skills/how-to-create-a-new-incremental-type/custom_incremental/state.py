@@ -18,6 +18,11 @@ from nld.flow.incremental.models.referential import (
     IncrementalProcessingStatus,
 )
 from nld.utils.datetime_util import ensure_utc_datetime, get_current_datetime
+from nld.utils.user_display import (
+    format_datetime_for_display,
+    format_datetime_range,
+    format_key_value_lines,
+)
 
 
 class BySourceTstWithDaysFromState(FlowState):
@@ -30,6 +35,20 @@ class BySourceTstWithDaysFromState(FlowState):
         value: datetime.datetime | None,
     ) -> datetime.datetime | None:
         return ensure_utc_datetime(value)
+
+    def render_state_text(self) -> str:
+        pairs: list[tuple[str, str]] = []
+        if self.last_pull_to_timestamp is not None:
+            pairs.append(
+                (
+                    "Last pull to",
+                    format_datetime_for_display(value=self.last_pull_to_timestamp),
+                )
+            )
+        lines = format_key_value_lines(pairs=pairs)
+        if not lines:
+            lines.append("  (empty)")
+        return "\n".join(lines)
 
 
 class BySourceTstWithDaysFromSourceState(FlowSourceState):
@@ -82,6 +101,29 @@ class BySourceTstWithDaysFromProcessingState(FlowProcessingState):
         else:
             range_display = "no range"
         return f"Strategy: {self.strategy} | Range: {range_display}"
+
+    def render_state_text(self) -> str:
+        pairs: list[tuple[str, str]] = []
+        pull_range = format_datetime_range(
+            start=self.pull_from_timestamp,
+            end=self.pull_to_timestamp,
+        )
+        if pull_range is not None:
+            pairs.append(("Pull", pull_range))
+        pairs.append(("Status", str(self.processing_status)))
+        if self.processing_completed_at is not None:
+            pairs.append(
+                (
+                    "Completed at",
+                    format_datetime_for_display(value=self.processing_completed_at),
+                )
+            )
+        if self.process_error_message is not None:
+            pairs.append(("Error", str(self.process_error_message)))
+        lines = format_key_value_lines(pairs=pairs)
+        if not lines:
+            lines.append("  (empty)")
+        return "\n".join(lines)
 
     def to_be_processed(self) -> bool:
         return self.processing_status == IncrementalProcessingStatus.TO_BE_PROCESSED

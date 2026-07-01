@@ -3,14 +3,14 @@ name: how-to-get-incremental-info
 description: >
   Inspect the incremental state of an `nld` flow from the shell using
   the `nld flow state incremental` subcommand group: `get-state` returns
-  what the most recent run persisted (optionally with the authoritative
-  post-processing watermark via `--include-post-processing`), and
-  `compute` resolves the processing state the next run would build —
-  optionally persisting it as a PLANNED plan, which `get-planned` then
-  lists. Use when the user asks "where did the last delta stop?", "which
-  keys still need processing?", "what watermark will the next run resume
-  from?", or "what would the next run actually decide to do?". Stdout
-  renders a concise text
+  the current authoritative state the next run resumes from (or, with
+  `--processing-only`, the transient state the most recent run left
+  behind), and `compute` resolves the processing state the next run
+  would build — optionally persisting it as a PLANNED plan, which
+  `get-planned` then lists. Use when the user asks "where did the last
+  delta stop?", "which keys still need processing?", "what watermark
+  will the next run resume from?", or "what would the next run actually
+  decide to do?". Stdout renders a concise text
   summary by default; pass `--format json` for the full machine-readable
   payload, or `--output` to write JSON to a file.
 user-invocable: true
@@ -26,9 +26,10 @@ user-invocable: true
 
 - **What**: Read or compute the incremental state of a flow via the
   `nld flow state incremental` subcommand group:
-  - `get-state` — read the persisted processing state (current run);
-    with `--include-post-processing`, also the authoritative
-    post-processing state.
+  - `get-state` — read the current authoritative state (the
+    post-processing state the next run resumes from); with
+    `--processing-only`, read the transient processing state the most
+    recent run left behind instead.
   - `compute` — resolve the processing state the next run would build,
     without starting the run; with `--persist`, store the result as a
     PLANNED plan in the planned-state slot.
@@ -57,8 +58,8 @@ skill.
 - The flow must have a `state_backend_connector` configured (inline or
   via the project-level default in `config/flow.yaml`); otherwise the
   CLI raises a clear RuntimeError.
-- `get-state` and `--include-post-processing` need
-  `get_processing_state` / `get_post_processing_state` on the primary
+- `get-state` (default) and `--processing-only` need
+  `read_post_processing_state` / `read_processing_state` on the primary
   backend. PostgreSQL implements both; the other backends inherit a
   `NotImplementedError` default on the live-state read accessors.
 - `compute` (read-only) runs wherever the flow runs — it resolves the
@@ -80,7 +81,7 @@ skill.
 
 ```
 nld flow state incremental get-state --name <flow> [--namespace <ns>]
-                                     [--include-post-processing]
+                                     [--processing-only]
                                      [--format text|json]
                                      [--output] [--override-output-folder-path <dir>]
 ```
@@ -92,7 +93,7 @@ nld flow state incremental get-state --name <flow> [--namespace <ns>]
 | `--name <flow>` | Flow name (required). |
 | `--namespace <ns>` | Namespace of the flow. Optional — the registry resolves it from the project layout when omitted. Pass explicitly when the flow was relocated and you want to read state under a previous namespace. |
 | `--profile-name <profile>` | Optional. Select the credential profile of the state backend connection to read from. |
-| `--include-post-processing` | Also include the authoritative post-processing state in the payload (the value the next run will read as its starting point). |
+| `--processing-only` | Return the transient processing state the most recent run left behind, instead of the current authoritative state. |
 | `--format text\|json` | Stdout rendering. `text` (default) prints a concise human-friendly summary; `json` prints the full machine-readable payload. |
 | `--output` | Write JSON to a fixed file under `output/<timestamp>/`. File output is always JSON, independent of `--format`. |
 | `--override-output-folder-path <dir>` | Write into `<dir>` instead; implies `--output`. |
@@ -101,29 +102,45 @@ nld flow state incremental get-state --name <flow> [--namespace <ns>]
 
 | Invocation | Payload |
 |------------|---------|
-| `get-state` (default) | The current `FlowProcessingState` for the flow's incremental strategy. `{}` when none exists. |
-| `get-state --include-post-processing` | `{"processing_state": ..., "post_processing_state": ...}`. Each wrapper key is omitted entirely when its underlying state is absent. |
+| `get-state` (default) | The current authoritative `FlowState` (post-processing state) for the flow's incremental strategy — the value the next run reads as its starting point. `{}` when none exists. |
+| `get-state --processing-only` | The transient `FlowProcessingState` the most recent run left behind. `{}` when none exists. |
 
 `null` fields are stripped from every payload (`exclude_none=True`).
 
-The shape of the inner state depends on the flow's incremental strategy:
+> **Breaking change (nld-core ≥ the release carrying this flip).** The
+> default `get-state` now returns the **authoritative current state**
+> (previously it returned the processing state). The old
+> `--include-post-processing` flag is gone; use `--processing-only` for
+> the previous default behaviour. The default JSON payload is now the
+> state object itself, not a `{"processing_state", "post_processing_state"}`
+> wrapper.
 
-- **`by_source_tst`** — `BySourceTstProcessingState`:
-  `flow_uid`, `strategy`, `pull_from_timestamp`, `pull_to_timestamp`,
-  `processing_status`, `process_error_message`,
-  `processing_completed_at`. Post-processing is `BySourceTstState`:
+The shape of the state depends on the flow's incremental strategy:
+
+- **`by_source_tst`** — current state is `BySourceTstState`:
   `last_pull_to_timestamp` (the watermark the next run resumes from).
-- **`by_key`** — `ByKeyProcessingState`: `flow_uid`, `strategy`, and
-  `keys: dict[str, ByKeySingleKeyProcessingState]` keyed by source
+  With `--processing-only`, `BySourceTstProcessingState`: `flow_uid`,
+  `strategy`, `pull_from_timestamp`, `pull_to_timestamp`,
+  `processing_status`, `process_error_message`,
+  `processing_completed_at`.
+- **`by_key`** — current state is `ByKeyState`:
+  `keys: dict[str, ByKeySingleKeyState]` with `status`,
+  `last_successfully_processed_at`, `last_processed_at`,
+  `last_process_status`, `last_process_error_message`,
+  `first_processed_at`, `source_deleted_at`, `parameters`. With
+  `--processing-only`, `ByKeyProcessingState`: `flow_uid`, `strategy`,
+  and `keys: dict[str, ByKeySingleKeyProcessingState]` keyed by source
   identifier; each per-key entry carries `processing_status`,
   `process_error_message`, `processing_completed_at`, `parameters`.
-  Post-processing is `ByKeyState`: `keys: dict[str, ByKeySingleKeyState]`
-  with `status`, `last_successfully_processed_at`,
-  `last_processed_at`, `last_process_status`,
-  `last_process_error_message`, `first_processed_at`,
-  `source_deleted_at`, `parameters`.
 - **`no_increment`** — typically empty. The flow has no incremental
   state to inspect.
+
+The text rendering (default `--format text`) labels the default view
+`Current state:` and the `--processing-only` view `Processing state:`.
+For `by_key` flows both views append a **`Sample of last retrieved`**
+section listing the most recently retrieved keys (ordered by their
+last-retrieved timestamp), so you can spot-check what was pulled
+without dumping every key.
 
 ---
 
@@ -132,19 +149,19 @@ The shape of the inner state depends on the flow's incremental strategy:
 ### 1. `by_source_tst`: where will the next delta resume?
 
 ```
-nld flow state incremental get-state --name daily_sales_refresh --include-post-processing
+nld flow state incremental get-state --name daily_sales_refresh
 ```
 
-Read `post_processing_state.last_pull_to_timestamp` — that is the
-exact value `pull_from_timestamp` will take on the next DELTA run.
-`processing_state.pull_from_timestamp` and `pull_to_timestamp` show
-the range the most recent run covered.
+Read `last_pull_to_timestamp` — that is the exact value
+`pull_from_timestamp` will take on the next DELTA run. To see the range
+the most recent run covered, add `--processing-only` and read
+`pull_from_timestamp` / `pull_to_timestamp`.
 
 ### 2. `by_key`: which keys still need processing?
 
 ```
-nld flow state incremental get-state --name customer_enrichment --include-post-processing --format json \
-  | jq '.post_processing_state.keys
+nld flow state incremental get-state --name customer_enrichment --format json \
+  | jq '.keys
         | to_entries
         | map(select(.value.status != "SUCCEEDED"))
         | map({key: .key, status: .value.status, last_error: .value.last_process_error_message})'
@@ -160,19 +177,19 @@ re-triggering work or filing an incident.
 ### 3. `by_key`: what did the most recent run intend to process?
 
 ```
-nld flow state incremental get-state --name customer_enrichment
+nld flow state incremental get-state --name customer_enrichment --processing-only
 ```
 
-Without `--include-post-processing`, you see only the current
-`ByKeyProcessingState` — the keys the most recent run planned to
-process and their per-key outcomes. Compare against (2) to see what
+With `--processing-only`, you see the transient `ByKeyProcessingState`
+— the keys the most recent run planned to process and their per-key
+outcomes. Compare against (2) (the default current state) to see what
 moved during that run.
 
 ### 4. `by_key`: count of pending vs failed vs succeeded keys
 
 ```
-nld flow state incremental get-state --name customer_enrichment --include-post-processing --format json \
-  | jq '.post_processing_state.keys
+nld flow state incremental get-state --name customer_enrichment --format json \
+  | jq '.keys
         | [.[].status]
         | group_by(.)
         | map({status: .[0], count: length})'
@@ -181,19 +198,19 @@ nld flow state incremental get-state --name customer_enrichment --include-post-p
 ### 5. `by_source_tst`: was the latest run a backfill or a delta?
 
 ```
-nld flow state incremental get-state --name daily_sales_refresh --format json \
+nld flow state incremental get-state --name daily_sales_refresh --processing-only --format json \
   | jq '{flow_uid, strategy, processing_status,
          range: [.pull_from_timestamp, .pull_to_timestamp]}'
 ```
 
 `strategy` distinguishes `FULL` / `DELTA` / `BACKFILL` /
-`BACKFILL_DELTA` for the most recent run.
+`BACKFILL_DELTA` for the most recent run. This is a property of the
+transient processing state, so `--processing-only` is required.
 
 ### 6. Capture for downstream analysis
 
 ```
 nld flow state incremental get-state --name daily_sales_refresh \
-  --include-post-processing \
   --override-output-folder-path ./out
 ```
 
@@ -437,20 +454,22 @@ never the authoritative post-processing state — by design, so the
 primary stays the single source of truth for "where the next run
 resumes from".
 
-`get-state --include-post-processing` always reads the primary, so the
-distinction is transparent at the CLI layer. Direct reads against the
-secondary's tables/files would only show processing-state mirrors and
-miss the post-processing state entirely. See `guide-incremental` §4.4
-"Dual State Backend" for the full read/write semantics table.
+`get-state` (default) always reads the post-processing state from the
+primary, so the distinction is transparent at the CLI layer. Direct
+reads against the secondary's tables/files would only show
+processing-state mirrors and miss the post-processing state entirely.
+See `guide-incremental` §4.4 "Dual State Backend" for the full
+read/write semantics table.
 
 ---
 
 ## Guidelines for agents
 
-- **Use `--include-post-processing` whenever the user asks about
-  "next run", "watermark", or "what's pending"** — the post-processing
-  state is the authoritative answer; the processing state alone is
-  about what the *most recent* run did.
+- **Plain `get-state` already answers "next run", "watermark", or
+  "what's pending"** — the default is the authoritative post-processing
+  state. Reach for `--processing-only` only when the user specifically
+  asks what the *most recent* run did (its planned/executed working
+  set), which is transient.
 - **For `by_key` flows, always inspect `keys` per-status** rather than
   reading the top-level `flow_uid`. The interesting signal is per-key.
 - **Empty `{}` is a signal**, not a failure: the flow has no recorded

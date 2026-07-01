@@ -364,6 +364,25 @@ FlowState (base)                    FlowSourceState (base)           FlowProcess
 └── NoIncrementState (empty)        └── NoIncrementSourceState       └── NoIncrementProcessingState
 ```
 
+**State model display contract**
+
+Every state model owns its own operator-facing text rendering so the generic
+`nld flow state` renderer (`nld/flow/task/data_flow_state_renderers.py`) stays
+free of strategy-specific field knowledge. Each strategy implements these
+base-class methods on its own state models:
+
+| Method | Declared on | Purpose |
+|--------|-------------|---------|
+| `render_state_text()` | `FlowState` and `FlowProcessingState` (abstract) | The multi-line text block that `nld flow state incremental get-state` prints — the `FlowState` implementation backs the default current-state view, the `FlowProcessingState` implementation backs `--processing-only` and the `compute` output. |
+| `get_display_log()` | `FlowProcessingState` (abstract) | One-line run summary logged during execution. |
+| `get_pull_timestamps()` | `FlowProcessingState` (base default returns `(None, None)`) | Overridden by timestamp strategies (`by_source_tst`) to expose the pull window; left as the default by strategies without one. |
+
+A new incremental type therefore implements `render_state_text()` on both its
+`FlowState` and its `FlowProcessingState` subclass. Strategy-specific rendering
+helpers — for example `by_key`'s per-status counts and key samples
+(`render_by_key_entries` in `nld/flow/incremental/impl/by_key/state.py`) — live
+in the type's own `state.py`, never in the generic renderer.
+
 ### 2.4 Loading Strategies
 
 | Strategy | Description |
