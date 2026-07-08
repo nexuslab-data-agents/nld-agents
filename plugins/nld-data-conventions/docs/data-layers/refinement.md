@@ -48,6 +48,11 @@ This pattern enables:
 - Debugging: identify transformation issues
 - Downstream flexibility: consumers can choose which version to use
 
+**Ordering rule**: the `_src` column always sits **immediately before** its
+corrected twin — in the structure YAML `fields:` section and in the SELECT
+list alike (original first, corrected right after, as in the examples above) —
+so the pair reads source → transformation at a glance.
+
 ## SQL Transformation Patterns
 
 ### Simple Rename
