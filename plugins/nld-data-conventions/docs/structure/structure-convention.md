@@ -58,7 +58,12 @@ The `fields:` section only contains entity-specific business fields.
 - **Functional key**: The business identifier of the entity. Used by `DEDUPLICATED_SELECT` for deduplication.
 - **Primary key**: The technical unique constraint on the table. Used by `UPSERT` for conflict resolution.
 
-In most cases, the functional key and primary key point to the **same field(s)**.
+On `raw_*` tables the primary key is always the **functional key fields +
+`ts_src_extracted_at`**: the raw layer keeps one record per source extraction,
+so the functional key alone is not unique. `ts_src_extracted_at` carries
+`exclude_from_upsert_match`, so UPSERT conflict matching still happens on the
+functional key alone. On `refined_*` and downstream tables (one record per
+entity), the functional key and primary key point to the **same field(s)**.
 
 ### Choosing the Functional Key
 
