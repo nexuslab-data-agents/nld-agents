@@ -39,6 +39,10 @@ Activate this guide when the agent is:
 - Functional key must always be the first field in the `fields:` section
 - Applies to `raw_*`, `v_raw_*_latest`, `refined_*`, business, and consumer structures
 - Does NOT apply to externally-managed structures (`source_*`, `landing_*`, `raw_json_*`)
+- On `raw_*` tables the `primary_key` is always the functional key fields +
+  `ts_src_extracted_at` (the raw layer keeps one record per extraction, so the
+  functional key alone is not unique; `ts_src_extracted_at` is
+  `exclude_from_upsert_match` so UPSERT still matches on the functional key)
 
 ## Cross-References
 
