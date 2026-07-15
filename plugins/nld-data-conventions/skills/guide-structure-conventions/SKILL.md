@@ -2,8 +2,10 @@
 name: guide-structure-conventions
 description: >
   NLD data conventions for structures — structure characterisations (primary_key,
-  functional_key, unique), field ordering rules, structure templates, and naming
-  conventions for raw, refined, business, and consumer layers.
+  functional_key, unique), field ordering rules, structure templates, and table
+  naming conventions per layer, including the business/consumer table prefixes
+  (r_ referential, f_ fact, m_ mart, w_ working, p_ parameter, t_ technical,
+  dim_/dtm_ consumer, v_ display views).
 user-invocable: false
 ---
 
@@ -16,6 +18,9 @@ ordering, templates, and layer-specific rules.
 
 Activate this guide when the agent is:
 - Creating or modifying structure YAML files
+- Naming a table or view in any layer (business prefixes: `r_` referential,
+  `f_` fact, `m_` mart, `w_` working, `p_` parameter, `t_` technical;
+  consumer: `dim_`/`dtm_`; display views: `v_<table>`)
 - Defining primary keys, functional keys, or unique constraints
 - Ordering fields in a structure definition
 - Working with structure templates (raw_standard_tracking, refined_standard_tracking, etc.)

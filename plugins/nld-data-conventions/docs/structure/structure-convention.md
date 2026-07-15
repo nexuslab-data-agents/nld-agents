@@ -107,14 +107,25 @@ The following naming rules apply to the **business** ("Gold") and **consumer**
 in the [Raw Layer](../data-layers/raw.md) and
 [Refinement Layer](../data-layers/refinement.md) pages.
 
+> **Casing.** Naming formulas are written in uppercase for readability;
+> physical PostgreSQL objects are lowercase (`R_{DOMAIN}_{DESCRIPTION}` →
+> `r_fr_legal_unit_activity`).
+
+> **Domain root entity.** `{DOMAIN}` is a short business sub-domain identifier.
+> The root entity of a domain may omit `{DESCRIPTION}` (`r_video_game`);
+> satellite tables extend the root name (`r_video_game_genre`,
+> `r_video_game_platform`).
+
 ### Business Layer ("Gold")
 
 See [Business Layer](../data-layers/business.md) for the full description.
 
-| Structure type    | Description                                                                                                  | Naming convention                                                          |
-|-------------------|--------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------|
-| Reference table   | Reference / dimension-like data of the Gold layer                                                            | `R_{DOMAIN}_{DESCRIPTION}`                                                 |
-| Fact table        | Transactional / fact data of the Gold layer                                                                  | `F_{DOMAIN}_{DESCRIPTION}`                                                 |
+| Structure type         | Description                                                                                                            | Naming convention                    |
+|------------------------|------------------------------------------------------------------------------------------------------------------------|--------------------------------------|
+| Referential table      | State information: business entities and classification codes — *what things are*. One row per current entity state, updated in place. | `R_{DOMAIN}_{DESCRIPTION}`           |
+| Historical referential | Every past state of a referential entity (SCD type 2), validity-bounded; additive to the `R_` table.                    | `R_{DOMAIN}_{DESCRIPTION}_HISTORY`   |
+| Fact table             | Transactional data: purchase orders, sales orders, account lines, events, observations — *what happened, when, how much*. Append-mostly, aggregated downstream. | `F_{DOMAIN}_{DESCRIPTION}`           |
+| Mart table             | Aggregated data derived from referential and fact tables, losing the source granularity (pre-aggregated business datasets). | `M_{DOMAIN}_{DESCRIPTION}`           |
 
 ### Consumer Layer ("Platinum")
 
@@ -131,7 +142,7 @@ These rules apply to the business **and** consumer layers.
 
 | Structure type        | Description                                                                                                                                                           | Naming convention                                  |
 |-----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------|
-| Display view          | View exposing data of a layer to downstream consumers (typically the next layer). Must reuse the underlying table name; a specific name may be used when the view filters/transforms the data. | Same name as underlying table                      |
-| Temporary work table  | Working table used during a data process, not meant to be persisted.                                                                                                  | `W_{DOMAIN}_{DESCRIPTION}`                         |
-| Parameter table       | Table maintained manually by Data Engineers, for technical or business needs (e.g. a manually-curated unit-of-measure master data).                                   | `P_{DOMAIN}_{DESCRIPTION}` (e.g. `P_CUS_TENANT_DATA_RANGE`, `P_CUS`, `P_UOM`) |
+| Display view          | View exposing a table to downstream consumers (typically the next layer). Prefixes the underlying table name with `V_` (e.g. `V_R_FR_LEGAL_UNIT_ACTIVITY`, `V_F_FR_PROPERTY_VALUES`, `V_DIM_FR_LEGAL_UNIT_ACTIVITY`); a specific name may be used when the view filters or derives from the data (e.g. the audit view `V_R_VIDEO_GAME_UNMATCHED_HLTB`). | `V_<TABLE_NAME>`                                   |
+| Working table         | Temporary table used during processing. **Optional**: transient, may be truncated/rebuilt at every run, has no display view, is never granted to consumers and never consumed downstream. | `W_{DOMAIN}_{DESCRIPTION}`                         |
+| Parameter table       | Table maintained manually by Data Engineers, for technical or business needs: manually-curated master data (e.g. units of measure), seeds carrying a fixed referential, or calculation parametrization (thresholds, rates, mapping values). | `P_{DOMAIN}_{DESCRIPTION}` (e.g. `P_CUS_TENANT_DATA_RANGE`, `P_CUS`, `P_UOM`) |
 | Technical table       | Table for technical needs such as logging or monitoring.                                                                                                              | `T_{DOMAIN}_{DESCRIPTION}` (e.g. `T_LOG_RUN`, `T_LOG_INC`) |

@@ -27,28 +27,41 @@ and follow the layout described in
 
 ## Table Naming
 
-The business layer distinguishes two main kinds of tables:
+The standard business-layer table naming rule — one prefix per table kind:
 
-| Kind            | Description                                                                 | Naming convention            |
-|-----------------|-----------------------------------------------------------------------------|------------------------------|
-| Reference table | Slowly-changing, descriptive data shared across the domain.                 | `R_{DOMAIN}_{DESCRIPTION}`   |
-| Fact table      | Transactional / event-like data describing measurable business activity.    | `F_{DOMAIN}_{DESCRIPTION}`   |
+| Prefix        | Kind                   | Description                                                                                                          |
+|---------------|------------------------|------------------------------------------------------------------------------------------------------------------------|
+| `R_`          | Referential table      | State information: business entities and classification codes — *what things are*. One row per current entity state, updated in place. |
+| `R_*_HISTORY` | Historical referential | Every past state of a referential entity (SCD type 2), validity-bounded; additive to the `R_` table.                    |
+| `F_`          | Fact table             | Transactional data: purchase orders, sales orders, account lines, events, observations — *what happened, when, how much*. |
+| `M_`          | Mart table             | Aggregated data derived from referential and fact tables, losing the source granularity (pre-aggregated business datasets). |
+| `W_`          | Working table          | Temporary table used during processing. **Optional**: transient, never exposed or consumed downstream.                  |
+| `P_`          | Parameter table        | Manually-maintained data: curated master data, seeds carrying a fixed referential, or calculation parametrization.      |
+| `T_`          | Technical table        | Logging / monitoring tables.                                                                                             |
+| `V_<TABLE>`   | Display view           | Exposure surface of a table to the next layer (`V_R_*`, `V_F_*`, `V_M_*`).                                               |
 
-`{DOMAIN}` is a short business sub-domain identifier (e.g. `FR_LEGAL_UNIT`,
-`HR`, `GEO`). `{DESCRIPTION}` is a concise, business-meaningful name.
+Full naming pattern: `{PREFIX}_{DOMAIN}_{DESCRIPTION}`. `{DOMAIN}` is a short
+business sub-domain identifier (e.g. `FR_LEGAL_UNIT`, `HR`, `GEO`,
+`VIDEO_GAME`). `{DESCRIPTION}` is a concise, business-meaningful name. The
+**root entity of a domain may omit `{DESCRIPTION}`** (`r_video_game`);
+satellite tables extend the root name (`r_video_game_genre`,
+`r_video_game_platform`). Formulas are written in uppercase for readability;
+physical PostgreSQL objects are lowercase (`r_fr_legal_unit_activity`).
 
-Auxiliary tables (display views, temporary work tables, parameter tables,
-technical tables) follow the rules listed in
-[Structure Convention — Auxiliary Structures](../structure/structure-convention.md#auxiliary-structures-business--consumer).
+Display views, working tables, parameter tables and technical tables are also
+listed in
+[Structure Convention — Auxiliary Structures](../structure/structure-convention.md#auxiliary-structures-business--consumer),
+shared with the consumer layer.
 
-## Reference vs Fact: How to Choose
+## Table Kinds: How to Choose
 
-Choosing between `R_` and `F_` is primarily a question of **what the rows
-describe**, not of size or refresh cadence.
+Choosing between `R_`, `F_` and `M_` is primarily a question of **what the
+rows describe**, not of size or refresh cadence.
 
-### Reference Table (`R_`)
+### Referential Table (`R_`)
 
-A reference table answers the question **"what is this thing?"**. Each row
+A referential (reference) table answers the question **"what is this
+thing?"**. Each row
 describes a business **entity or concept** that exists independently of any
 event, and that other tables point at to give themselves meaning.
 
@@ -113,7 +126,7 @@ be persisted, a companion **historical reference table** is added, suffixed by
 - The historical table references the same entity identifier as its
   non-historical counterpart so the two can be joined.
 - Display views follow the same rule as other tables: a view exposing the
-  historical table reuses the underlying name (e.g.
+  historical table prefixes the underlying name with `V_` (e.g.
   `V_R_FR_LEGAL_UNIT_HISTORY`).
 
 **Examples**:
@@ -162,6 +175,53 @@ context.
 - `F_FR_LEGAL_UNIT_STATUS_CHANGE` — one row per change of administrative
   status of a legal unit, with the new status and the change date.
 
+### Mart Table (`M_`)
+
+A mart table answers the question **"what does the data say once aggregated?"**.
+It is derived from referential and fact tables by aggregation and **loses the
+source granularity**: a row no longer maps 1:1 to a source entity or event but
+to a group (a time bucket, a category, a geography, …).
+
+**Use a mart table when**:
+
+- The table is built by **aggregating** referentials and/or facts (sums,
+  counts, averages, ratios, rankings) and the source-level rows are not
+  reconstructible from it.
+- The result is a **business-ready dataset** shared inside the domain — the
+  business layer's own aggregates, as opposed to Platinum `DTM_` datamarts
+  which are purpose-built for one specific consumer or use case.
+
+**Examples** (illustrative):
+
+- `M_VIDEO_GAME_GENRE_YEAR` — games released per canonical genre per year.
+- `M_FR_LEGAL_UNIT_ACTIVITY_STAFF` — legal-unit counts aggregated by activity
+  code and staff range.
+
+### Working Table (`W_`)
+
+A working table is a **temporary table used during processing** — an
+intermediate materialisation a flow needs between two steps. Working tables
+are **not mandatory**: most flows go straight from sources to target.
+
+**Conventions**:
+
+- Transient: may be truncated or rebuilt at every run; its content carries no
+  retention guarantee.
+- Never exposed: no display view, no consumer grant, no downstream flow may
+  read it.
+- Excluded from structure audits and business documentation duties.
+
+### Parameter Table (`P_`)
+
+A parameter table holds **manually-maintained data** owned by Data Engineers,
+in one of three shapes:
+
+- **Curated master data** — e.g. a manually-maintained unit-of-measure list.
+- **Seeds carrying a fixed referential** — small, versioned-in-git reference
+  data that no source system provides (e.g. a canonical genre mapping seed).
+- **Calculation parametrization** — thresholds, rates and mapping values that
+  drive flow logic (e.g. `P_CUS_TENANT_DATA_RANGE`).
+
 ### Borderline Cases
 
 - **Daily snapshots of an entity** (e.g. "company state on day D") are
@@ -179,17 +239,22 @@ context.
 
 ### Examples in This Repository
 
-- `R_FR_LEGAL_UNIT_ACTIVITY` — reference list of legal-unit activity codes.
-- `R_FR_LEGAL_UNIT_STAFF_RANGE` — reference list of staff-range buckets.
-- `R_FR_LEGAL_UNIT_CATEGORY` — reference list of legal-unit categories.
-- `V_R_FR_LEGAL_UNIT_ACTIVITY` — display view exposing the reference table.
+- `R_FR_LEGAL_UNIT_ACTIVITY` — referential list of legal-unit activity codes.
+- `R_FR_LEGAL_UNIT_STAFF_RANGE` — referential list of staff-range buckets.
+- `R_FR_LEGAL_UNIT_CATEGORY` — referential list of legal-unit categories.
+- `R_VIDEO_GAME` — unified video game referential (domain root entity, no
+  description part); satellites `R_VIDEO_GAME_GENRE`, `R_VIDEO_GAME_PLATFORM`.
+- `F_FR_PROPERTY_VALUES` — property transaction facts (DVF).
+- `V_R_FR_LEGAL_UNIT_ACTIVITY` — display view exposing the referential table.
 
 ## Display Views
 
-Each business table is typically paired with a display view that exposes it to
-the next layer. The view reuses the underlying table name (e.g.
-`V_R_FR_LEGAL_UNIT_ACTIVITY` for `R_FR_LEGAL_UNIT_ACTIVITY`). When the view
-filters or transforms data, a more specific name may be defined.
+Each business table (except working tables) is typically paired with a
+display view that exposes it to the next layer. The view prefixes the
+underlying table name with `V_` (e.g. `V_R_FR_LEGAL_UNIT_ACTIVITY` for
+`R_FR_LEGAL_UNIT_ACTIVITY`). When the view filters or derives from the data, a
+more specific name may be defined (e.g. the audit view
+`V_R_VIDEO_GAME_UNMATCHED_HLTB`).
 
 ## Templates
 
