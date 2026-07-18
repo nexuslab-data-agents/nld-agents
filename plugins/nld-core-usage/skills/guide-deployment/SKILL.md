@@ -167,7 +167,7 @@ error. Full format: `structure-deployment.md`.
 
 ## Cross-References
 
-- Operational how-tos: `how-to-deploy-structures`, `how-to-deploy-flows`,
+- Operational how-tos: `how-to-deploy-a-project`,
   `how-to-check-deploy-impact`, `how-to-bootstrap-deployment-backend`.
 - Structure definitions and characterisations: `guide-structures`.
 - Flow definitions, write strategies, dependency graph: `guide-flows`.

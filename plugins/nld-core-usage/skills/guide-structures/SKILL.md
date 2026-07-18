@@ -81,7 +81,7 @@ nld structure list --namespace apec --property layer=raw --tag external_source
 ```
 
 Other `nld structure` subcommands: `info` (single structure detail), `adapt`,
-`validate`, `deploy` (see the `how-to-deploy-structures` skill), `render`. For
+`validate`, `deploy` (see the `how-to-deploy-a-project` skill), `render`. For
 inter-structure join models, see the `guide-structure-model` skill
 (`nld structure model list/info/validate`).
 

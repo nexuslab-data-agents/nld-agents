@@ -73,4 +73,4 @@ first flow deploy baselines the current repository state as-is.
 
 - Concepts (drift model, metadata tables, adopt semantics):
   `guide-deployment` skill.
-- Day-to-day deployment: `how-to-deploy-structures`, `how-to-deploy-flows`.
+- Day-to-day deployment: `how-to-deploy-a-project`.

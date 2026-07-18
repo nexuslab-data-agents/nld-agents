@@ -88,6 +88,6 @@ nld structure deploy --preview          # exit 2 => changes pending
 
 - Deployment concepts (drift model, metadata backend, change files):
   `guide-deployment` skill.
-- Applying the changes: `how-to-deploy-structures` and `how-to-deploy-flows`.
+- Applying the changes: `how-to-deploy-a-project`.
 - The dependency graph the expansion runs on: `how-to-trace-flow-lineage`
   (`nld flow deps`).
