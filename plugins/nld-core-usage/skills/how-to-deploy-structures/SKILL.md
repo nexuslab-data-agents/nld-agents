@@ -66,7 +66,10 @@ nld structure deploy --rebuild      # drop and recreate from the assets (destruc
   history) and is the bootstrap path for a database whose tables predate the
   metadata backend — see `how-to-bootstrap-deployment-backend`.
 - `--rebuild` recreates in-scope structures ignoring recorded and live state.
-  The drop has no CASCADE: a dependent view fails it loudly.
+  The drop has no CASCADE: a dependent view fails it loudly. On an empty
+  database this is also the fresh-environment path: one command creates every
+  in-scope structure from the assets, and repopulation is an explicit separate
+  step.
 - Metadata-only edits (descriptions, tags, non-structural characterisations)
   never trip the drift gate and record a `ddl_applied=false` deployment.
 

@@ -18,6 +18,9 @@ This document describes the standard YAML format for defining data structures in
 | `origin` | dict[str, Any] | No | Definition origin and flow relationships (e.g., `creation_method`, `loading_flows`) |
 | `options` | dict[str, Any] | No | Additional options for the structure |
 | `characterisations` | list | No | Structure-level characterisations |
+| `enforce_field_order` | boolean | No | Whether deployment enforces the declared column order on the physical table. Unset falls back to the connector's `enforce_field_order_default` capability (PostgreSQL and Snowflake enforce by default; BigQuery and DuckDB do not). When enforced, an order mismatch triggers a data-preserving REBUILD — see `structure-deployment.md` |
+| `pre_deployment_sql_hook` | list[string] | No | SQL statements run before the structure's deployment DDL. The structure's list overrides a template's; Jinja-rendered with `schema`, `structure_name`, `object_path`, and project variables |
+| `post_deployment_sql_hook` | list[string] | No | SQL statements run after the structure's deployment DDL. Same override and rendering rules as `pre_deployment_sql_hook` |
 | `fields` | dict | Yes | Field definitions (keyed by field name) |
 
 ### Structure Inheritance & Dynamic Class Resolution

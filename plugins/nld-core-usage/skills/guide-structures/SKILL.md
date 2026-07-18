@@ -45,6 +45,7 @@ project-local path. If not found, read the bundled copy.
 | Working with PostgreSQL-specific structures | "PostgreSQLStructure" |
 | Adding field characterisations | "Field Characterisations", "Standard Field Characterisation Definitions" |
 | Understanding tags and metadata | "Tags", "Business Metadata" |
+| Column order enforcement (`enforce_field_order`) and deployment SQL hooks (`pre_deployment_sql_hook` / `post_deployment_sql_hook`) | "Structure Root Properties"; behavior in `structure-deployment.md` |
 | Full YAML example | "Complete Example" |
 
 **structure-deployment.md** — read when working on deployment, DDL, drift

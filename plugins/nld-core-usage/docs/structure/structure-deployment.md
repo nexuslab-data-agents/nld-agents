@@ -96,9 +96,10 @@ CASCADE — a dependent view fails the drop loudly) + CREATE from the asset.
 Structure removal is never destructive: a table whose asset disappeared is
 left in place; only the metadata row can be soft-deleted (`fl_deleted`).
 
-Pre/post hooks: `pre_deployment_sql_hooks` / `post_deployment_sql_hooks` on
-the structure run before/after the DDL, Jinja-rendered with `schema`,
-`structure_name`, `object_path`, plus project variables.
+Pre/post hooks: `pre_deployment_sql_hook` / `post_deployment_sql_hook` on the
+structure (the structure's list overrides a template's) run before/after the
+DDL, Jinja-rendered with `schema`, `structure_name`, `object_path`, plus
+project variables (built-ins cannot be shadowed).
 
 ## Drift gate
 
@@ -126,11 +127,20 @@ and leaves recreation to the next flow deploy.
 
 ## Metadata backend
 
-Tables are auto-created in the metadata schema (`track_timestamps=true`); the
-schema itself must pre-exist. With a project `metadata_backend_connector`,
-that connection's active schema holds the metadata for every target; without
-one, each (connection, schema) target keeps its metadata in the deploy schema
-on its own connector.
+Tables are auto-created (`track_timestamps=true`); the metadata schema itself
+must pre-exist. Where the tables live depends on the configuration and the
+path:
+
+- Without a `metadata_backend_connector`, each (connection, schema) target
+  keeps `_nld_structure_state` / `_nld_structure_history` in its own deploy
+  schema on its own connector; there is no run record and change files are
+  refused.
+- With a `metadata_backend_connector`, the tables are created on that
+  connection. The `nld flow deploy` path pins every target's state/history to
+  the connection's active schema; the `nld structure deploy` path keeps each
+  target's state/history under the target's deploy schema name and writes the
+  run record (`_nld_structure_deployment`) and the change-file applied-log
+  (`_nld_deployment_change`) to the active schema.
 
 - **`_nld_structure_state`** — one row per structure (PK
   `namespace, structure_name`): `object_path`, `structure_type`,

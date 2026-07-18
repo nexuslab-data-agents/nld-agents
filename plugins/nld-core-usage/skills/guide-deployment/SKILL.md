@@ -69,6 +69,59 @@ Shared principles:
   backend on first record (deploy or adopt) and carried across declared
   renames; asset YAML never contains it.
 
+## Development environment patterns
+
+The deploy model serves every environment the same way — what differs is where
+the data comes from:
+
+- **CI / staging / prod**: `nld flow deploy --no-interactive` applies the
+  committed assets; `--preview` in a gate step asserts the target is in sync.
+- **Fresh developer environment**: `nld structure deploy --rebuild` on an
+  empty database creates every in-scope structure from the assets in one shot;
+  repopulation is an explicit separate step (flow executions or a data
+  import).
+- **Snowflake development on production data**: deploy the working tree
+  against a zero-copy clone (or a prod-data-connected dev database) to
+  validate changes on real data shape and volume without copying.
+- **PostgreSQL development**: iterate against locally extracted data, or
+  against a prod-like snapshot imported into the dev database, then deploy
+  normally.
+- **Existing live environment, empty backend**: adopt-all bootstrap
+  (`how-to-bootstrap-deployment-backend`).
+
+Production has no runtime destructive gate and no destructive-confirmation
+flag: destructive changes are caught at review time in the PR preview, and a
+DDL error at apply time fails that structure loudly — its metadata is not
+written, its dependents are skipped, and the run ends `partial`/`failed` with
+the failure recorded.
+
+## Per-connector capabilities
+
+Deployment behavior is parameterized by `ConnectorDeployCapabilities`
+(`nld/connector/base/deploy_capabilities.py`, one subclass per connector):
+
+| Capability | postgresql | bigquery | snowflake | duckdb |
+|---|---|---|---|---|
+| ALTER COLUMN SET/DROP DEFAULT | yes | yes | no — a default change triggers REBUILD | yes |
+| `enforce_field_order_default` | yes | no | yes | no |
+| Declared renames in place (`rename_field` / `rename_structure`) | yes | no — refused | yes | yes |
+| Comparable characterisations | INDEX, PRIMARY_KEY, UNIQUE | PRIMARY_KEY | PRIMARY_KEY, UNIQUE | INDEX, PRIMARY_KEY, UNIQUE |
+| Dependent-view detection | yes | yes | yes | yes |
+| Atomic rebuild swap (single transaction) | yes | no | no | no |
+
+Type comparison folds ANSI aliases for every engine plus connector-specific
+aliases (e.g. Snowflake folds every integer spelling into NUMERIC and maps
+`TIMESTAMP` to `TIMESTAMP_NTZ`). Full table and DDL-builder deltas:
+`structure-deployment.md`.
+
+`reload` directives depend on the flow's incremental **state backend**, not
+the deploy connector: planning a full refresh requires a backend with
+planned-state support (PostgreSQL, Snowflake, and S3 blob storage state
+backends) and a state-tracking incremental type (`by_key`,
+`by_source_tst`). Otherwise the directive records a warning outcome and a
+manual `nld flow execute <flow> --full` is advised; stateless flows record
+`no-op (every run is already a full refresh)`.
+
 ## Metadata backend
 
 `metadata_backend_connector` in `nld_project.yml` names the connection whose
