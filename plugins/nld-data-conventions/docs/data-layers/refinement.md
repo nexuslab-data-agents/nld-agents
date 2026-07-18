@@ -101,6 +101,55 @@ raw_data->'page'->>'slug' AS cd_slug
 , (raw_data->'page'->'metas'->>'title')::text AS ds_page_title
 ```
 
+## Nested Array Handling
+
+When a source column is an **array**, its refined treatment depends on the
+nature of the elements:
+
+### Referential multi-values
+
+Arrays of names/codes that point at a referential (genre lists, platform name
+lists, tag lists) stay on the parent refined table as a **cleaned, sorted jsonb
+array** carrying a `references` characterisation with `multi_value: true`
+towards the referential table:
+
+```sql
+profile_genre AS ds_profile_genre_src,
+(SELECT jsonb_agg(btrim(g) ORDER BY btrim(g))
+   FROM unnest(string_to_array(profile_genre, ',')) AS g
+  WHERE btrim(g) <> '') AS ds_profile_genre
+```
+
+### Metric arrays → dedicated refined table (grain explosion)
+
+Arrays whose elements are **measures/KPIs keyed by a dimension** (per-platform
+completion times, per-region statistics, per-store prices) are actual metric
+data at a finer granularity than the parent — **never** keep them as opaque
+jsonb on the parent refined table. Explode them into an **additional refined
+table at their natural granularity**:
+
+- **Primary key** = parent functional key + the element's dimension key
+  (e.g. `cd_game_id` + `ds_platform_name`).
+- One properly typed, prefixed **KPI column per measure** (`nb_`, `num_`, …),
+  applying the usual cleaning rules (0-means-no-data → NULL, unit conversions).
+- The dimension key carries a `references` characterisation when a matching
+  referential table exists.
+- The child table is a full refined citizen: its own flow YAML (`UPSERT`,
+  `by_source_tst`), its own `v_refined_*` view and scheduling entities; the
+  parent table drops the jsonb column.
+- **Multiple metric arrays sharing the same grain merge into ONE child table**:
+  FULL JOIN on the grain, the fullest-coverage array is authoritative for the
+  shared metrics, the others contribute only their exclusive columns. Guard the
+  primary key with a GROUP BY against duplicate dimension entries inside a
+  single payload array.
+
+Reference implementation: HLTB `individuality` + `platform_data` →
+`refined_video_games_hltb_game_platform_kpi` (nld-lakehouse-isis,
+`clh/acquisition/video_games`).
+
+Only genuinely unstructured, low-analytical-value nests may remain jsonb on the
+parent — document the reason in the structure field description.
+
 ## Tracking Timestamps
 
 Every refined SQL must include these 6 tracking columns at the end of the SELECT:
