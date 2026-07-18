@@ -412,7 +412,7 @@ JSON output (nodes + edges) ◄─┘
 | Backend mixins (S3) | `core/nld/flow/backend/s3_blob_storage/backend_mixin.py` |
 | Structure model | `core/nld/structure/structure/structure.py` |
 | Structure reader (PG) | `core/nld/connector/postgresql/service/structure_reader.py` |
-| DDL operations (PG) | `core/nld/connector/postgresql/postgresql_connector.py` |
+| DDL operations (PG) | `core/nld/connector/postgresql/engine/psycopg2/connector.py` |
 | DDL operations (PG, sqlglot) | `core/nld/connector/postgresql/sqlglot/ddl.py` |
 | DML operations (PG, sqlglot) | `core/nld/connector/postgresql/sqlglot/dml.py` |
 | SQL renderer | `core/nld/structure/service/structure_sql_renderer.py` |

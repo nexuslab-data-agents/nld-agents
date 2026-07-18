@@ -175,25 +175,32 @@ state/history row and a rerun recomputes the same change.
 Declared, reviewable schema directives live in `.deployments/<change_id>.yaml`
 at the project entities root. `change_id` matches
 `^\d{4}-\d{2}-\d{2}_\d{4}(_[a-z0-9][a-z0-9-]*)?$` and must equal the file
-basename; files apply in chronological (change_id) order, exactly once. Each
-entry sets exactly one directive:
+basename; files apply in chronological (change_id) order, exactly once.
 
-| Directive | Keys | Consumed by |
-|-----------|------|-------------|
-| `rename_field` | `structure`, `from`, `to` | structure deploy |
-| `rename_structure` | `from`, `to` | structure deploy |
-| `rename_flow` | `from`, `to` (target table follows the flow name) | flow deploy |
-| `backfill_default` | `structure`, `field`, `value` (one-shot NULL fill) | structure deploy |
-| `reload` | `flow`, `mode` (default `full`) | flow deploy |
+Directives are grouped by the asset they target — `changes.structures` keyed
+by structure full name, `changes.flows` keyed by flow name. A rename is keyed
+by the **pre-rename** name. Each list entry declares one `directive`:
+
+| Group | `directive` | Keys | Effect |
+|-------|-------------|------|--------|
+| `structures` | `rename_field` | `from`, `to` | In-place column rename |
+| `structures` | `rename_structure` | `to` | Table rename (from = group key) |
+| `structures` | `backfill_default` | `field`, `value` | One-shot NULL fill |
+| `flows` | `rename_flow` | `to` | Flow rename; the target table follows the flow name (from = group key) |
+| `flows` | `reload` | `mode` (default `full`) | Planned full refresh, consumed by the next execution |
 
 ```yaml
 change_id: 2026-07-02_1430_rename-order-status
 changes:
-  - rename_field:
-      structure: sales.refined_order
-      from: cd_status
-      to: cd_order_status
+  structures:
+    sales.refined_order:
+      - directive: rename_field
+        from: cd_status
+        to: cd_order_status
 ```
+
+Structure-scoped directives resolve before flow-scoped ones, each group in
+declaration order with the target injected from its group key.
 
 Change files require a configured `metadata_backend_connector`. The applied
 log is the `_nld_deployment_change` table (PK `change_id`, with `applied_at`,

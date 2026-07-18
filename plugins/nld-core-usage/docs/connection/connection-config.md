@@ -89,7 +89,7 @@ NLD__DATA_CONNECTION__SNOW_OPENDATA__USER=OPENDATA_USER
 NLD__DATA_CONNECTION__SNOW_OPENDATA__PASSWORD=OPENDATA_PASSWORD
 
 # Staging profile override
-NLD__DATA_CONNECTION__SNOW_OPENDATA__STAGING__DATABASE=OPENDATA_STAGING
+NLD__DATA_CONNECTION__SNOW_OPENDATA__STAGING__DATABASE_NAME=OPENDATA_STAGING
 
 # Azure connection
 NLD__DATA_CONNECTION__AZURE_OPENDATA__TYPE=azure_blob_storage
@@ -184,28 +184,20 @@ class CustomConfigSource(ConnectionConfigSource):
         pass
 ```
 
-## Default Configuration in NldExecContext
+## Default Configuration in NldExecutionContext
 
-The system is automatically configured in `NldExecContext.init_profiles()`:
+The execution context wires the sources automatically
+(`core/nld/task/context/context.py`): `NldExecutionContext.__init__` calls
+`ConnectionConfigs.from_sources(nld_config_folder_path)`, which builds exactly
+two sources — `TomlConnectionConfigSource(<config folder>/secrets.toml,
+priority=10, required=False)` and
+`EnvironmentConnectionConfigSource("NLD__DATA_CONNECTION", priority=20)`.
 
-```python
-# core/nld/task/context/context.py
-from typing import Optional
-from nld.connector.base.config_source import ConnectionConfigs
-
-@classmethod
-def init_profiles(cls, nld_profile_root_folder_path: Optional[str] = None):
-    profile_root_folder_path = cls.get_profile_root_folder_path(
-        nld_profile_root_folder_path
-    )
-
-    # Load from multiple sources with precedence
-    # 1. secrets.toml (priority: 10)
-    # 2. Environment variables (priority: 20 - higher)
-    connection_configs = ConnectionConfigs.from_sources(profile_root_folder_path)
-
-    # ... rest of initialization
-```
+The config folder resolves in order: `task_request.nld_config_folder_path` →
+env `NLD__CONFIG_FOLDER_PATH` → `<cwd>/.nld`. So the default connection file
+is `.nld/secrets.toml`. The context also loads `.nld/.env` with
+`override=False` — variables already exported (CI, pod secrets) always beat
+the file.
 
 ## Precedence Rules
 
@@ -255,7 +247,7 @@ type = "snowflake"
 account = "base_account"
 
 [staging.myconn]
-database = "staging_db"
+database_name = "staging_db"
 warehouse = "staging_wh"
 ```
 
@@ -274,7 +266,7 @@ config.default_profile = {
 
 # Staging profile
 config.profiles["staging"] = {
-    "database": "staging_db",       # From TOML
+    "database_name": "staging_db",       # From TOML
     "warehouse": "env_wh",          # Overridden by env
     "role": "env_role"              # Added by env
 }
@@ -282,11 +274,30 @@ config.profiles["staging"] = {
 # When getting staging profile parameters (merged with default):
 staging_params = {
     "account": "base_account",      # Inherited from default
-    "database": "staging_db",       # From staging profile
+    "database_name": "staging_db",       # From staging profile
     "warehouse": "env_wh",          # From staging profile
     "role": "env_role"              # From staging profile
 }
 ```
+
+## Per-Connector Credential Fields
+
+TOML keys and env-var parameters must match the credential model fields of the
+connection's `type`:
+
+| `type` | Fields |
+|--------|--------|
+| `postgresql` | `host`, `port`, `user`, `password`, `database_name`, `schema_name`, `sslmode` (`disable`/`allow`/`prefer`/`require`/`verify-ca`/`verify-full`), `sslrootcert` |
+| `bigquery` | `project_id` (required), `dataset_id`, `schema_name`, `location`, `credentials_path`, `api_endpoint`. Auth: service-account JSON via `credentials_path`; Application Default Credentials when unset; anonymous against `api_endpoint` (emulator) |
+| `snowflake` | `account`, `user`, `authenticator` (`snowflake` → requires `password`; `snowflake_jwt` → requires `private_key_path` [+ `private_key_passphrase`]; `programmatic_access_token` → requires `token`), `role`, `warehouse`, `database_name`, `schema_name` |
+| `duckdb` | `database_name` (the database file path — DuckDB is file-based), `schema_name` (default `main`) |
+| `azure_blob_storage` | `storage_account_name`, `sas_token` |
+| `s3_blob_storage` | `endpoint_url`, `region_name`, `access_key_id`, `secret_access_key`, `bucket_name` |
+| `local` | `base_path` |
+
+`schema_name` is the canonical cross-connector field for the active schema
+(`get_active_schema()`); on BigQuery it designates the dataset, falling back
+to `dataset_id`.
 
 ## Selecting a Profile at Connection Time
 
@@ -359,47 +370,6 @@ Run tests:
 pytest tests/unit/connector/base/test_config_sources.py -v
 ```
 
-## Migration Guide
-
-### For Users
-
-No changes required! The system automatically:
-1. Looks for `secrets.toml` in the profile directory
-2. Loads environment variables with `NLD__DATA_CONNECTION` prefix
-3. Merges them with proper precedence
-
-### For Developers
-
-To add a new configuration source:
-
-1. Create a class inheriting from `ConnectionConfigSource`
-2. Implement required methods: `load()`, `is_available()`, `get_priority()`
-3. Return `ConnectionConfigs` object from `load()`
-4. Add to the sources list in your loader
-
-Example:
-```python
-from typing import Optional
-from nld.connector.base.config_source import ConnectionConfigSource, ConnectionConfigs
-
-class VaultConfigSource(ConnectionConfigSource):
-    def __init__(self, vault_url: str, priority: int = 25):
-        self.vault_url = vault_url
-        self.priority = priority
-
-    def is_available(self) -> bool:
-        return self._can_connect_to_vault()
-
-    def get_priority(self) -> int:
-        return self.priority
-
-    def load(self) -> Optional[ConnectionConfigs]:
-        # Fetch from vault and build ConnectionConfigs
-        pass
-```
-
----
-
 ## Part 2: Connector Engine Architecture
 
 ### Terminology
@@ -430,57 +400,104 @@ Connectors follow this directory structure:
 
 ```
 connector/<type>/
-├── __init__.py                      → Plugin (default engine), backward-compat exports
+├── __init__.py                      → Plugin (default engine), package exports
 ├── <type>_credential.py             → shared across all engines
-├── <type>_data_type.py              → shared data type definitions
+├── <type>_structure.py              → connector-specific Structure subclass
+├── connector_definition.py          → data type enum + ConnectorDefinition singleton
 ├── engine/
 │   └── <engine-name>/
 │       ├── __init__.py
 │       ├── connector.py             → engine-specific connector
 │       ├── connection.py            → engine-specific connection wrapper
-│       ├── query_builder.py         → engine-specific query building
+│       ├── query_wrapper.py         → engine-specific query handling
 │       ├── utils.py                 → engine-specific utilities
 │       └── adapter/
 │           ├── pandas/              → DataFrame adapter (engine-specific)
-│           └── pydantic/            → Pydantic model adapter (engine-specific)
-└── service/
-    └── structure_reader.py          → engine-agnostic service
+│           └── pydantic/            → NldBaseModel manager (engine-specific)
+├── service/
+│   ├── structure_reader.py          → catalog extraction (engine-agnostic)
+│   ├── data_profiler.py             → audit-query profiling
+│   ├── deploy_capabilities.py       → ConnectorDeployCapabilities profile
+│   └── structure_diff_ddl_statement_builder.py → deploy DDL statements
+└── sqlglot/
+    ├── ddl.py                       → dialect DDL builder (owns catalog queries)
+    └── dml.py                       → dialect DML builder
 ```
+
+### Connector Definitions
+
+Each connector exposes a `ConnectorDefinition` singleton — its static engine
+facts — via `DataConnector.get_connector_definition()`. The definition lives
+in the connector's `connector_definition.py` together with the engine's data
+type enum (`PostgreSQLDataTypes`, `BigQueryDataTypes`, `SnowflakeDataTypes`,
+`DuckDBDataTypes`) and carries:
+
+- `name` — the connector type string.
+- `accepted_data_types` — the engine type spellings a structure definition may
+  declare (empty means unrestricted).
+- `comparable_data_type_aliases` — engine spellings mapped to their canonical
+  comparable form (consumed by deploy diff/drift type normalization).
+- `fixed_precision_data_types` — types whose precision is fixed by the engine
+  and never reported by the structure readers.
+
+Deployment-specific engine behavior lives separately in
+`ConnectorDeployCapabilities` (`service/deploy_capabilities.py`), reached via
+`get_deploy_capabilities()` — see `structure-deployment.md` for the
+capability matrix. Services consult the definition and capabilities instead
+of hardcoding engine knowledge locally, and structure readers never write
+SQL: every catalog query a reader runs is built by the connector's sqlglot
+DDL builder.
 
 ### PostgreSQL Connector Structure
 
 ```
 nld/connector/postgresql/
 ├── __init__.py                      → Plugin (default: psycopg2 engine)
-├── postgresql_credential.py         → shared across all engines
-├── postgresql_data_type.py          → shared data type definitions
+├── postgresql_credential.py         → PostgreSQLCredential
+├── postgresql_structure.py          → PostgreSQLStructure
+├── connector_definition.py          → PostgreSQLDataTypes + PostgreSQLConnectorDefinition
 ├── engine/
 │   └── psycopg2/
 │       ├── __init__.py
 │       ├── connector.py             → Psycopg2SQLConnector
 │       ├── connection.py            → Psycopg2SQLConnectionWrapper
-│       ├── query_builder.py         → Psycopg2SQLQueryBuilder
-│       ├── utils.py                 → Psycopg2SQLUtil
+│       ├── query_wrapper.py         → engine query handling
+│       ├── utils.py                 → engine utilities
 │       └── adapter/
 │           ├── pandas/
-│           │   ├── dataframe_manager.py → PandasPostgreSQLManager
-│           │   └── structure_mapper.py  → PostgreSQLPandasMapper
+│           │   └── dataframe_manager.py → PandasPostgreSQLManager
 │           └── pydantic/
-│               ├── model_manager.py     → PydanticPostgreSQLManager
-│               └── structure_mapper.py  → PostgreSQLPydanticStructureMapper
-└── service/
-    └── structure_reader.py          → PostgreSQLStructureReader
+│               └── model_manager.py     → NldBaseModelPostgreSQLManager
+├── service/
+│   ├── structure_reader.py          → PostgreSQLStructureReader
+│   ├── data_profiler.py
+│   ├── deploy_capabilities.py       → POSTGRESQL_DEPLOY_CAPABILITIES
+│   └── structure_diff_ddl_statement_builder.py → PostgreSQLStructureDiffDDLStatementBuilder
+└── sqlglot/
+    ├── ddl.py
+    └── dml.py
 ```
 
-### DuckDB as Shared Engine
+### DuckDB Connector
 
-DuckDB is a standalone in-memory SQL engine for Parquet file operations. It has
-no dependency on any specific connector type and lives in a shared location:
+DuckDB is a full connector type (`type = "duckdb"`, file-based: the
+`database_name` credential is the database file path) following the standard
+layout, with its engine under `engine/duckdb_native/`. The package also
+exposes `DuckDBEngine` (`duckdb_engine.py`) — an embedded in-memory SQL
+engine usable for Parquet file operations independently of any named
+connection:
 
 ```
 nld/connector/duckdb/
-├── __init__.py
-└── duckdb_engine.py                 → DuckDBEngine class
+├── __init__.py                      → Plugin (default: duckdb_native engine)
+├── duckdb_credential.py             → DuckDBCredential (database_name, schema_name="main")
+├── duckdb_structure.py
+├── connector_definition.py          → DuckDBDataTypes + DuckDBConnectorDefinition
+├── duckdb_engine.py                 → DuckDBEngine (embedded Parquet/SQL engine)
+├── constants.py                     → DUCKDB_DIALECT
+├── engine/duckdb_native/            → DuckDBSQLConnector, wrapper, adapters
+├── service/                         → reader, profiler, capabilities, deploy DDL builder
+└── sqlglot/                         → dialect DDL/DML builders
 ```
 
 ### Adapter Scoping
@@ -490,7 +507,7 @@ Adapters are scoped to a specific engine because they depend on engine-specific 
 | Adapter | Engine dependency | Specific API used |
 |---------|------------------|-------------------|
 | `PandasPostgreSQLManager` | psycopg2 | `psycopg2.extras.execute_values()` for batch inserts |
-| `PydanticPostgreSQLManager` | psycopg2 | `psycopg2.sql.SQL()`, `sql.Identifier()`, `sql.Literal()` |
+| `NldBaseModelPostgreSQLManager` | psycopg2 | `psycopg2.sql.SQL()`, `sql.Identifier()`, `sql.Literal()` |
 
 If a new engine needs DataFrame or Pydantic model support, it must provide its
 own adapter implementations using that engine's API. Adapters live under the
@@ -555,7 +572,7 @@ classDiagram
         +fetch_table()
     }
 
-    class PydanticPostgreSQLManager {
+    class NldBaseModelPostgreSQLManager {
         +connector: Psycopg2SQLConnector
         +create_table()
         +insert_model()
@@ -564,25 +581,26 @@ classDiagram
     }
 
     Psycopg2SQLConnector --> PandasPostgreSQLManager : used by
-    Psycopg2SQLConnector --> PydanticPostgreSQLManager : used by
+    Psycopg2SQLConnector --> NldBaseModelPostgreSQLManager : used by
 ```
 
 ### Engine Selection
 
-Engine selection happens at the plugin level. The default engine is the primary
-driver (psycopg2 for PostgreSQL).
+Engine selection happens at the plugin level: each connector package's
+`__init__.py` exposes a `Plugin` whose `connector_class` is the default
+engine's connector (psycopg2 for PostgreSQL, duckdb_native for DuckDB).
 
-```python
-# Default: uses psycopg2 engine
-connector = plugin.create_new_connector(name="pg", credentials_dict={...})
+A connection substitutes its own connector class through the
+`custom_connector` config key — a dotted class path that must subclass the
+plugin's connector class:
 
-# Explicit engine: uses custom connector class
-connector = plugin.create_new_connector(
-    name="pg",
-    credentials_dict={...},
-    custom_connector_class=DuckDBPostgreSQLConnector,
-)
+```toml
+[my_postgres]
+type = "postgresql"
+custom_connector = "my_package.connectors.MyTunneledPostgreSQLConnector"
+host = "..."
 ```
 
-For configuration-driven engine selection, the `ConnectionConfig` can include an
-`engine` parameter that the factory resolves to the appropriate connector class.
+`ConnectorFactory` resolves the path at creation time (env-var form:
+`NLD__DATA_CONNECTION__MY_POSTGRES__CUSTOM_CONNECTOR=...`). Additional plugin
+search packages come from `ConnectorFactory(allowed_connector_paths=[...])`.

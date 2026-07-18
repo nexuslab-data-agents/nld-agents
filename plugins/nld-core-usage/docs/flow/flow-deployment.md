@@ -133,13 +133,23 @@ schema-wide prefetched snapshot.
 
 Flow deploy resolves the pending `.deployments/<change_id>.yaml` change files
 (chronological, exactly-once; full format and lifecycle in
-`structure-deployment.md`). The flow-scoped directives:
+`structure-deployment.md`). Flow-scoped directives live under `changes.flows`,
+keyed by flow name (a rename by its pre-rename name):
 
-- `rename_flow {from, to}` — moves the flow's state row (and `uid`) to the new
+```yaml
+change_id: 2026-07-03_1100_reload-flows
+changes:
+  flows:
+    sales.refined_order:
+      - directive: reload
+        mode: full
+```
+
+- `rename_flow` (`to`) — moves the flow's state row (and `uid`) to the new
   name before the flow loop; the physical table follows the flow name, and the
   rename-target structure deploys first to free the old name. A new flow
   reclaiming the old name mints a fresh identity.
-- `reload {flow, mode}` — schedules a deferred full refresh: the executor
+- `reload` (`mode`, default `full`) — schedules a deferred full refresh: the executor
   computes the flow's full-coverage processing state and persists it as a
   PLANNED plan with requestor `deploy:<deployment_id>`. Deploy never runs the
   flow; the next `nld flow execute` consumes the plan (TRUST) and marks it

@@ -148,10 +148,12 @@ when — the audit trail is the backend, not the git history of any artifact.
 
 `.deployments/<change_id>.yaml`, `change_id` = `<date>_<time>[_<slug>]`
 (e.g. `2026-07-02_1430_rename-order-status`), applied in change_id order.
-Directives: `rename_field`, `rename_structure`, `backfill_default` (structure
-deploy) and `rename_flow`, `reload` (flow deploy). Applied files are
-immutable (content-hash checked); unapplied files older than an applied one
-are an out-of-order error. Full format: `structure-deployment.md`.
+Directives are grouped by target asset — `changes.structures.<name>` entries
+declare `rename_field`, `rename_structure`, or `backfill_default`;
+`changes.flows.<name>` entries declare `rename_flow` or `reload` (renames
+keyed by the pre-rename name). Applied files are immutable (content-hash
+checked); unapplied files older than an applied one are an out-of-order
+error. Full format: `structure-deployment.md`.
 
 ## Typical lifecycles
 

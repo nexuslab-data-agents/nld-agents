@@ -35,9 +35,12 @@ When reading the reference doc, focus on the section relevant to your task:
 |------|---------|
 | Understanding config source precedence | Part 1: "Precedence Rules" |
 | Adding a new config source | Part 1: "Adding Custom Sources" |
+| Writing a `secrets.toml` / env vars for a connection type | Part 1: "Per-Connector Credential Fields" |
 | Understanding connector class hierarchy | Part 2: "Class Hierarchy" |
 | Working with PostgreSQL connectors | Part 2: "PostgreSQL Connector Structure" |
-| Understanding engine selection | Part 2: "Engine Selection" |
+| Static engine facts (data type enums, comparable aliases, fixed precision) | Part 2: "Connector Definitions" |
+| DuckDB connector and the embedded `DuckDBEngine` | Part 2: "DuckDB Connector" |
+| Understanding engine selection (`custom_connector`) | Part 2: "Engine Selection" |
 | Selecting a profile when opening a connector (`get_data_connector` / `--profile-name`) | "Selecting a Profile at Connection Time" |
 | Writing tests for connection code | Part 1: "Testing" |
 
