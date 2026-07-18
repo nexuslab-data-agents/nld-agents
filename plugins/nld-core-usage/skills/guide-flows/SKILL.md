@@ -21,8 +21,8 @@ Activate this guide when the agent is working on:
 - Write strategy logic (OVERWRITE, VIEW, INSERT, UPSERT, DELETE_INSERT, UPSERT_LOGICAL_DELETE)
 - SQL query templates and flow YAML definitions
 - Flow dependency graph or deployment logic
-- Flow deployment subsystem in `nld/flow/deploy/` (planner, executor, manifest, deployment metadata backend)
-- CLI commands (`nld flow deps`, `nld flow deploy plan`, `nld flow deploy execute`). Note that `deploy execute` defaults to an in-memory plan; pass `--from-plan` for the manifest-based mode and `--no-interactive` for CI.
+- Flow deployment subsystem in `nld/flow/deploy/` (planner, executor, deployment metadata backend)
+- CLI commands (`nld flow deps`, `nld flow deploy`). `nld flow deploy` computes an in-memory change set against the live target; pass `--preview` to inspect it and `--no-interactive` for CI.
 
 ## Document Resolution
 
@@ -77,16 +77,15 @@ project-local path. If not found, read the bundled copy.
 
 | Task | Section |
 |------|---------|
-| User stories with sequence diagrams (start here for any deploy task) | "1. User stories" |
-| Default in-memory deploy / `--from-plan` review-then-apply / `--manifest-path` / `--plan-only` / `--no-interactive` (CI) / `--no-backfill` / failure recovery / removed flow stories | "1.1" through "1.8" |
-| Three-layer architecture (orchestrator + planner + executor) and high-level internal sequence | "2. Pipeline overview" |
-| Orchestrator `FlowDeployExecuteTask` (CLI flag handling, mutual exclusion, routing decision tree) | "3. Orchestrator — `FlowDeployExecuteTask`" |
-| Planner internal sequence and pipeline detail | "4. Planner — `FlowDeployPlanner`" |
-| Executor internal sequence (manifest resolution, idempotency, interleaved DDL/backfill, cascade-skip) | "5. Executor — `FlowDeployExecutor`" |
-| `DeployManifest` schema (`flows`, `structures`, `links`) | "6. Manifest schema" |
-| Deployment metadata tables in the metadata backend | "7. Metadata backend" |
-| Default mode internals (in-memory plan, `--interactive/--no-interactive`, `--no-backfill` propagation, `--manifest-path` implies `--from-plan`) | "8. Default mode internals — in-memory plan" |
-| CLI option reference for `deploy plan` and `deploy execute` | "9. CLI reference" |
+| CLI options, exit codes (`--preview` exits 2 on pending changes), `--no-interactive` for CI | "1. CLI reference" |
+| Planner → confirm → executor pipeline and the `FlowChangeSet` model | "2. Pipeline" |
+| Definition hash (YAML/SQL/Python components), baselines, `NEW`/`CHANGED`/`UNCHANGED`/`REMOVED` | "3. Change detection" |
+| Scope resolution (`--name`/`--namespace`/`--upstream`/`--downstream`) over the dependency graph | "4. Scope expansion" |
+| Target-structure deployment, drift gate, dependent-view recreation via VIEW flows | "5. Structure orchestration" |
+| Flow-scoped directives: `rename_flow`, `reload` (planned full refresh) | "6. Deployment change files" |
+| `_nld_flow_state` / `_nld_flow_history` / run + per-asset outcome tables | "7. Metadata tables" |
+| Executor ordering, cascade-skip, `success`/`partial`/`failed` runs | "8. Execution order and failure semantics" |
+| `metadata_backend_connector` and the other config keys | "9. Configuration" |
 
 ## Critical Rules
 
@@ -123,6 +122,7 @@ secondary), see `state_backend_connector` in §8.3 of
 - For incremental processing and state management within flows, see the
   `guide-incremental` skill.
 - For structure targets referenced by flows, see the `guide-structures` skill.
-- For structure deployment (DDL diff, schema history) invoked by the flow
-  deploy executor, see the structure deploy section of the
-  `guide-structures` skill.
+- For the deployment system as a whole (drift model, change files, impact
+  analysis, metadata backend) see the `guide-deployment` skill; for the
+  structure-side DDL mechanics invoked by the flow deploy executor, see
+  `structure-deployment.md` in `guide-structures`.

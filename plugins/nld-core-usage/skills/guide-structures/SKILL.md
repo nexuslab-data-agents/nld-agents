@@ -45,9 +45,13 @@ project-local path. If not found, read the bundled copy.
 | Working with PostgreSQL-specific structures | "PostgreSQLStructure" |
 | Adding field characterisations | "Field Characterisations", "Standard Field Characterisation Definitions" |
 | Understanding tags and metadata | "Tags", "Business Metadata" |
+| Column order enforcement (`enforce_field_order`) and deployment SQL hooks (`pre_deployment_sql_hook` / `post_deployment_sql_hook`) | "Structure Root Properties"; behavior in `structure-deployment.md` |
 | Full YAML example | "Complete Example" |
 
-**structure-deployment.md** — read when working on deployment, DDL, or schema history.
+**structure-deployment.md** — read when working on deployment, DDL, drift
+detection, or schema history (`nld structure deploy`). Cross-cutting
+deployment concepts (metadata backend pinning, `.deployments/` change files,
+impact analysis) live in the `guide-deployment` skill.
 
 **field-characterisation.md** — read when working with semantic field roles
 (PRIMARY_KEY, TIMESTAMP, FOREIGN_KEY, etc.) or field-level characterisation
@@ -77,8 +81,8 @@ nld structure list --namespace apec --property layer=raw --tag external_source
 ```
 
 Other `nld structure` subcommands: `info` (single structure detail), `adapt`,
-`validate`, `deploy plan` / `deploy execute`, `render`. For inter-structure join
-models, see the `guide-structure-model` skill
+`validate`, `deploy` (see the `how-to-deploy-a-project` skill), `render`. For
+inter-structure join models, see the `guide-structure-model` skill
 (`nld structure model list/info/validate`).
 
 ## CLI: validating field characterisations
