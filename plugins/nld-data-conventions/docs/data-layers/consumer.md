@@ -49,9 +49,10 @@ technical tables) follow the rules listed in
 
 ## Display Views
 
-Consumer products typically expose their tables through display views (often
-materialised as `v_*` views). The view reuses the underlying table name; when
-it filters or transforms data, a more specific name may be defined.
+Consumer products typically expose their tables through display views. The
+view prefixes the underlying table name with `V_` (e.g.
+`V_DIM_FR_LEGAL_UNIT_ACTIVITY` for `DIM_FR_LEGAL_UNIT_ACTIVITY`); when it
+filters or derives from the data, a more specific name may be defined.
 
 ## Templates
 
