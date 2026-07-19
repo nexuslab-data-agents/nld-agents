@@ -49,6 +49,19 @@ Activate this guide when the agent is:
   functional key alone is not unique; `ts_src_extracted_at` is
   `exclude_from_upsert_match` so UPSERT still matches on the functional key)
 
+**Structure naming by type** — the prefix encodes what a table *is* (a separate
+convention from the column-content prefixes in `guide-field-conventions`; easy to
+miss). See the "Table Naming by Layer" and "Auxiliary Structures" tables in
+`structure-convention.md`:
+- Business (Gold): `R_` referential/reference, `F_` fact, `M_` mart
+- Consumer (Platinum): `DIM_` dimension, `DTM_` datamart
+- Auxiliary (business & consumer): display view = underlying table name prefixed
+  `V_` (`v_<table>`); `W_` work/temporary table; `P_` parameter table
+  (manually-curated master / mapping data, e.g. a cross-source id map); `T_`
+  technical table (logging/monitoring)
+- Raw/refined layers keep their layer prefixes (`raw_`, `refined_`,
+  `v_raw_*_latest`, `v_refined_*`)
+
 ## Cross-References
 
 - For field-level conventions (column naming, characterisations), see the
