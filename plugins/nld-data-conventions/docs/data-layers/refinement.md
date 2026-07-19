@@ -89,6 +89,16 @@ CASE
 END AS nb_employees
 ```
 
+> **A FORMAT regex guards the shape, not the value.** A regex is necessary but
+> insufficient before a `::int` / `::date` / `::numeric` cast. A very long digit
+> string passes `^\d+$` but overflows on `::int` (PostgreSQL `22003`);
+> `^\d{4}-\d{2}-\d{2}$` accepts year `0000` and impossible calendar days
+> (e.g. Feb 31) that pass the regex but throw on `::date` (`22008`). A SINGLE bad
+> row ABORTS the whole batch and fails the flow — worst on a FULL refresh, where
+> every row is re-cast. Also guard the value RANGE / calendar validity, or return
+> NULL on invalid so a bad value becomes NULL instead of failing the flow, e.g.
+> `CASE WHEN d ~ '^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$' AND left(d,4) BETWEEN '1900' AND '2100' THEN d::date END`.
+
 ### Null Coalescing
 ```sql
 coalesce(code_field, '#') AS cd_category

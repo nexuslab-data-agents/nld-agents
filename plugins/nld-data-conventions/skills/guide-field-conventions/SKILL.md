@@ -46,5 +46,11 @@ Activate this guide when the agent is:
 
 ## Cross-References
 
+- The prefixes here name a **column** by its content type (`cd_`, `ds_`, …). The
+  prefix that names a whole **table** by its type — `R_`/`F_`/`M_` (business),
+  `DIM_`/`DTM_` (consumer), `P_` parameter, `W_` work, `T_` technical — is a
+  separate convention. Don't stop at column prefixes: for `p_` (a
+  manually-curated parameter / mapping table) and the rest, see "Structure naming
+  by type" in the `guide-structure-conventions` skill.
 - For structure-level conventions (characterisations, ordering, templates), see
   the `guide-structure-conventions` skill.
