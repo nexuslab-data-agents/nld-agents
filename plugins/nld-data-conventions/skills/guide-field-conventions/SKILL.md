@@ -31,8 +31,9 @@ Activate this guide when the agent is:
 ### Key Topics
 
 **Column naming** — all columns use semantic prefixes:
-- `cd_` (code/identifier), `ds_` (description/string), `dt_` (date), `ts_` (timestamp)
+- `cd_` (code), `ds_` (description/string), `dt_` (date), `ts_` (timestamp)
 - `fl_` (flag/boolean), `nb_` (number/count), `yr_` (year), `id_` (identifier), `num_` (numeric)
+- **`id_` vs `cd_`**: a field is never both. `id_<entity>` = a unique identifier (own id or a foreign key to another id), native type, no trailing `_id`, no `cd_` prefix. `cd_<x>` = a code/slug/category, always VARCHAR. `cd_<x>_id` is invalid — use `id_<x>` (identifier) or `cd_<x>` (code). In a referential the composite key is a code (`cd_genre = 'igdb-31'`) and each source id is `id_igdb_genre`, never `cd_igdb_genre_id`.
 - Source/Landing/Raw layers keep original source names (no prefix, no translation)
 - Refined layer is the translation boundary — all names in English with prefixes
 - Source timestamps must map to template fields (`ts_src_inserted_at`, `ts_src_updated_at`), never custom columns
