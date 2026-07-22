@@ -139,7 +139,7 @@ jsonb on the parent refined table. Explode them into an **additional refined
 table at their natural granularity**:
 
 - **Primary key** = parent functional key + the element's dimension key
-  (e.g. `cd_game_id` + `ds_platform_name`).
+  (e.g. `id_game` + `ds_platform_name`).
 - One properly typed, prefixed **KPI column per measure** (`nb_`, `num_`, …),
   applying the usual cleaning rules (0-means-no-data → NULL, unit conversions).
 - The dimension key carries a `references` characterisation when a matching
