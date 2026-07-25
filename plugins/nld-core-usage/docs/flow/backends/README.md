@@ -9,11 +9,11 @@ by the flow's `state_backend_connector` and a processing engine:
 - **Incremental (state) backend**
   (`core/nld/flow/incremental/impl/<strategy>/backend/`) — stores the
   incremental processing state and post-processing state for the flow's
-  incremental strategy (`by_key`, `by_source_tst`, `no_increment`), and
+  incremental type (`by_key`, `by_source_tst`, `no_increment`), and
   the planned-state slot.
 
 This area documents, per connector, which commands each backend
-supports. For the same matrix organised by incremental strategy, see
+supports. For the same matrix organised by incremental type, see
 [`../incremental/`](../incremental/README.md). For the architecture
 behind these backends, see
 [`../execution-and-incremental-design.md`](../execution-and-incremental-design.md).
@@ -112,11 +112,11 @@ layer; `by_key` and `by_source_tst` opt in) and
 layer; `PostgreSQLIncrementalBackendMixin`,
 `SnowflakeIncrementalBackendMixin`, and `S3IncrementalBackendMixin`
 opt in). `get-planned` and
-`nld flow execute --planned-state-strategy` /
+`nld flow execute --planned-state-policy` /
 `--state-compute-only` read or write the same slot, so they share the
 `compute --persist` column.
 
-| Strategy | Connector / engine | Flow execution | `get-state` | `compute` | `compute --persist` |
+| Type | Connector / engine | Flow execution | `get-state` | `compute` | `compute --persist` |
 |----------|--------------------|:--------------:|:-----------:|:---------:|:-------------------:|
 | `by_key` | `postgresql` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
 | `by_key` | `bigquery` / `pydantic` | ✅ | ❌ | ✅ | ❌ |

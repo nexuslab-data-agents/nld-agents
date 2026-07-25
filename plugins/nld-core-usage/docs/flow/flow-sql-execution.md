@@ -220,7 +220,7 @@ params:
 - `params.target_schema`: the database schema where the table will be created
   (optional, resolved from the connector's `schema_name` credential when omitted)
 - `write_strategy`: the write strategy to use (default: `OVERWRITE`)
-- `incremental`: the incremental strategy name (e.g. `by_source_tst`, `by_key`).
+- `incremental`: the incremental type name (e.g. `by_source_tst`, `by_key`).
   When set, `SQLFlowTask` dynamically resolves the incremental logic and applies
   automatic WHERE clause filtering on the SQL query.
 - `predecessors.<name>.role`: `MASTER` or `SECONDARY`. When no role is set, the
@@ -504,7 +504,7 @@ mandatory-key checks before constructing the task:
 - `self._check_incremental_init_params(init_params)` — covers
   mandatory params from the resolved incremental logic.
 
-When adding a new CLI flag for an incremental strategy, register it in **both**:
+When adding a new CLI flag for an incremental type, register it in **both**:
 - the strategy's `param_definitions` list (e.g. `BY_SOURCE_TST_INCREMENTAL_DEFINITION` in
   `nld/flow/incremental/impl/by_source_tst/logic.py`), and
 - the Click option in `nld/cli/flow/params_flow.py` plus the command decorator
@@ -806,7 +806,7 @@ Dots in the namespace are converted to directory separators. The root namespace
 | `name` | `str` | Yes | Flow name (determines table name and SQL file name) |
 | `task` | `str` | Yes | Python class path (use `nld.flow.sql.SQLFlowTask`) |
 | `data_connectors` | `dict[str, str]` | Yes | Maps connector roles to connection names |
-| `incremental` | `str` | No | Incremental strategy name (e.g. `by_source_tst`, `by_key`). When set, enables automatic SQL query filtering based on the loading strategy. |
+| `incremental` | `str` | No | Incremental type name (e.g. `by_source_tst`, `by_key`). When set, enables automatic SQL query filtering based on the loading strategy. |
 | `predecessors` | `dict[str, DataFlowStructurePredecessor]` | No | Maps predecessor names to structure references. Used for incremental filtering. |
 | `predecessors.<name>.full_path` | `NldEntityReference[Structure]` | Yes | Dot-separated reference to the predecessor structure entity. |
 | `predecessors.<name>.role` | `str` | No | `MASTER` or `SECONDARY`. First predecessor defaults to MASTER when no role is set. |

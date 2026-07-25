@@ -1,6 +1,6 @@
 # by_key — backend availability
 
-Per-key incremental strategy. State models: `ByKeyState`,
+Per-key incremental type. State models: `ByKeyState`,
 `ByKeyProcessingState`. See the
 [incremental availability overview](./README.md) for the command axes
 and legend, and `guide-incremental` for the architecture.
@@ -47,7 +47,7 @@ Backend modules live under `core/nld/flow/incremental/impl/by_key/backend/`.
   `is_planned_processing_state_fresh` to return `True` for every plan:
   a plan may legitimately re-request a key that a later run already
   processed, so the baseline state cannot make a key plan stale. This
-  makes `--planned-state-strategy auto` behave like `trust` for
+  makes `--planned-state-policy auto` behave like `trust` for
   `by_key`.
 
 For the connector-by-connector view, see

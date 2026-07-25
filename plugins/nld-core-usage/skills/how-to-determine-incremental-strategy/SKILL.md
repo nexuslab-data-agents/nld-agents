@@ -1,12 +1,12 @@
 ---
 name: determine-incremental-strategy
-description: Determine the correct incremental strategy (no_increment, by_source_tst, by_key) for a data flow, whether SQL-based or not. Walks through source characteristics, retry semantics, and deletion handling to recommend an incremental type, loading strategy, and IncrementalConfig.
+description: Determine the correct incremental type (no_increment, by_source_tst, by_key) for a data flow, whether SQL-based or not. Walks through source characteristics, retry semantics, and deletion handling to recommend an incremental type, loading strategy, and IncrementalConfig.
 user-invocable: true
 ---
 
-# Analysis: Determine Incremental Strategy
+# Analysis: Determine Incremental Type
 
-Recommend the correct incremental strategy for a data flow.
+Recommend the correct incremental type for a data flow.
 
 The repository supports three incremental types (`no_increment`,
 `by_source_tst`, `by_key`) and four loading strategies (`FULL`, `DELTA`,
@@ -139,7 +139,7 @@ defaults are usually right; only diverge when there is a clear reason.
 
 | Property | Default | Recommend changing when |
 |----------|---------|--------------------------|
-| `strategy` | (required) | Must match the type chosen in Step 3. |
+| `type` | (required) | Must match the type chosen in Step 3. `strategy` is accepted as a deprecated alias. |
 | `persist_initial_processing_state` | `True` | Disable only for very small / very fast flows where the extra write is wasteful. |
 | `immediate_step_persistence` | `True` | Disable when the flow has many short steps and the per-step write cost dominates; accept that intermediate progress is lost on crash. |
 

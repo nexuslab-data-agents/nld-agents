@@ -94,14 +94,14 @@ strategy support on `by_key` and `by_source_tst`; the
 and `S3IncrementalBackendMixin` set backend support so every backend
 built on them inherits it. A
 flow recomputes the processing state whenever either layer is off,
-regardless of the `--planned-state-strategy` value on
+regardless of the `--planned-state-policy` value on
 `nld flow execute`.
 
 Plan-capable strategies that need a baseline-aware freshness check
 override `IncrementalStateManager.is_planned_processing_state_fresh`;
 the base returns `True` for strategies with explicit windows. See
 `execution-and-incremental-design.md` §4.5 for the per-strategy
-overrides and the `nld flow execute --planned-state-strategy`
+overrides and the `nld flow execute --planned-state-policy`
 interaction.
 
 ## Module Layout
@@ -109,7 +109,7 @@ interaction.
 ```
 core/nld/flow/incremental/
 ├── models/                              # leaf layer: data/definition models
-│   ├── state.py                         # FlowState, FlowSourceState, FlowProcessingState; FlowStatePlan, FlowPlannedProcessingState, FlowPlannedProcessingDetailledState
+│   ├── state.py                         # FlowState, FlowSourceState, FlowProcessingState; FlowStatePlan, FlowPlannedProcessingState, FlowPlannedProcessingDetailedState
 │   ├── logic.py                         # FlowIncrementalLogic, FlowIncrementalDefinition, param defs
 │   ├── config.py                        # IncrementalConfig
 │   ├── events.py

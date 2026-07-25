@@ -1,6 +1,6 @@
 # Incremental backend availability
 
-This area summarises, per incremental strategy, which connectors and
+This area summarises, per incremental type, which connectors and
 engines back it and which commands each combination supports. It is the
 strategy-oriented view of the same data presented connector-by-connector
 in [`../backends/`](../backends/README.md).
@@ -9,9 +9,9 @@ For the incremental architecture (state classes, processing lifecycle,
 factory, planned-state slot), see
 [`../execution-and-incremental-design.md`](../execution-and-incremental-design.md).
 
-## Strategies
+## Types
 
-| Strategy | Summary | Detail |
+| Type | Summary | Detail |
 |----------|---------|--------|
 | `by_key` | Per-key state and processing decisions. | [by_key.md](./by_key.md) |
 | `by_source_tst` | Timestamp-window watermark state. | [by_source_tst.md](./by_source_tst.md) |
@@ -35,7 +35,7 @@ Each strategy page reports availability against four axes:
   (`IncrementalBackendStateManager`). When either layer is off the
   CLI returns `persisted=False` instead of attempting the write.
   `nld flow state incremental get-planned` (list PLANNED plans) and
-  `nld flow execute --state-compute-only` / `--planned-state-strategy`
+  `nld flow execute --state-compute-only` / `--planned-state-policy`
   consume the same slot, so they share availability with
   `compute --persist`.
 
@@ -47,7 +47,7 @@ Each strategy page reports availability against four axes:
 
 ## At a glance
 
-| Strategy | Connectors with a backend | `get-state` | `compute --persist` |
+| Type | Connectors with a backend | `get-state` | `compute --persist` |
 |----------|---------------------------|-------------|---------------------|
 | `by_key` | postgresql, bigquery, duckdb, local, s3_blob_storage | postgresql only | postgresql, s3_blob_storage |
 | `by_source_tst` | postgresql, bigquery, snowflake, duckdb, local | postgresql, snowflake | postgresql, snowflake |

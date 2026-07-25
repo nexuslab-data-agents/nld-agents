@@ -293,8 +293,9 @@ flowchart TD
 `nld flow execute` carries two flags that route directly into this
 pipeline:
 
-- `--planned-state-strategy {auto,recompute,trust,strict}` (default
-  `auto`) — selects the branch in `get_incremental_state`:
+- `--planned-state-policy {auto,recompute,trust,strict}` (default
+  `auto`; `--planned-state-strategy` is a deprecated alias) — selects
+  the branch in `get_incremental_state`:
   - `auto` adopts an available plan when
     `is_planned_processing_state_fresh` and falls back to
     `compute_incremental_state` otherwise;

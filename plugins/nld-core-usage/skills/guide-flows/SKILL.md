@@ -71,7 +71,7 @@ project-local path. If not found, read the bundled copy.
 | Init-parameter assembly (4 sources, 2 mandatory checks) | "3. Init-parameter assembly" |
 | Incremental logic resolver and consumers | "4. Incremental logic resolution" |
 | State-manager wiring | "5. State-manager wiring" |
-| `task.run()` pre/post processing orchestration, including the `get_incremental_state` planned-state branch (`--planned-state-strategy`), `post_processing_for_plan`, and the `--state-compute-only` short-circuit | "6. task.run — the actual flow" |
+| `task.run()` pre/post processing orchestration, including the `get_incremental_state` planned-state branch (`--planned-state-policy`), `post_processing_for_plan`, and the `--state-compute-only` short-circuit | "6. task.run — the actual flow" |
 
 **flow-deployment.md** — architecture of the `nld flow deploy` pipeline:
 

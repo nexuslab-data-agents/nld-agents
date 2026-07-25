@@ -80,7 +80,7 @@ for `.../flows/<sub>/<entity>_extraction.yaml`), resolved via `nld_project.yml`.
 nld flow execute --name <flow-name>
 ```
 
-With no extra options this runs the flow's **default incremental strategy**
+With no extra options this runs the flow's **default loading strategy**
 (typically the normal DELTA for incremental types, FULL for `no_increment`).
 **Custom runtime options are available depending on the incremental type** — see
 the matching section below.

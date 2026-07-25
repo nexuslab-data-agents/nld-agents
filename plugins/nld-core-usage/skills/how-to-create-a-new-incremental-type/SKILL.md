@@ -92,7 +92,7 @@ deployment needs the others.
 3. **Decide on planned-state support.** `FlowIncrementalDefinition.supports_planned_state`
    defaults to `False`. Set it `True` on the definition when the
    strategy can produce a `PLANNED` processing state that a later run
-   adopts via `nld flow execute --planned-state-strategy`, and override
+   adopts via `nld flow execute --planned-state-policy`, and override
    `IncrementalStateManager.is_planned_processing_state_fresh` on the
    state manager when a baseline can supersede an earlier plan (the
    base returns `True`; `by_source_tst` checks DELTA /

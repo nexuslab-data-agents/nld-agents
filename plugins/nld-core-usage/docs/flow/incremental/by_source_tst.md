@@ -1,6 +1,6 @@
 # by_source_tst — backend availability
 
-Timestamp-window incremental strategy. State models: `BySourceTstState`
+Timestamp-window incremental type. State models: `BySourceTstState`
 (holds `last_pull_to_timestamp`), `BySourceTstProcessingState`. See the
 [incremental availability overview](./README.md) for the command axes
 and legend, and `guide-incremental` for the architecture.
@@ -45,7 +45,7 @@ Backend modules live under
   plans require that condition *and* equality between the plan's
   `pull_from_timestamp` and the baseline watermark, because DELTA
   derives its window from it. A `None` baseline (first run) treats
-  every plan as fresh. `--planned-state-strategy strict` raises
+  every plan as fresh. `--planned-state-policy strict` raises
   `StalePlannedStateException` when the check fails.
 
 For the connector-by-connector view, see
