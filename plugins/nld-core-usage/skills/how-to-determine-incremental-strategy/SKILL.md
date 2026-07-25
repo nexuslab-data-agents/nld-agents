@@ -139,7 +139,7 @@ defaults are usually right; only diverge when there is a clear reason.
 
 | Property | Default | Recommend changing when |
 |----------|---------|--------------------------|
-| `type` | (required) | Must match the type chosen in Step 3. `strategy` is accepted as a deprecated alias. |
+| `type` | (required) | Must match the type chosen in Step 3. |
 | `persist_initial_processing_state` | `True` | Disable only for very small / very fast flows where the extra write is wasteful. |
 | `immediate_step_persistence` | `True` | Disable when the flow has many short steps and the per-step write cost dominates; accept that intermediate progress is lost on crash. |
 

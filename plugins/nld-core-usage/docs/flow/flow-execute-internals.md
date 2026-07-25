@@ -294,7 +294,7 @@ flowchart TD
 pipeline:
 
 - `--planned-state-policy {auto,recompute,trust,strict}` (default
-  `auto`; `--planned-state-strategy` is a deprecated alias) — selects
+  `auto`) — selects
   the branch in `get_incremental_state`:
   - `auto` adopts an available plan when
     `is_planned_processing_state_fresh` and falls back to

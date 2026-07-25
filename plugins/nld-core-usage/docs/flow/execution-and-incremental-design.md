@@ -313,7 +313,7 @@ Manages different data loading strategies with a pluggable architecture. Determi
 | `FlowIncrementalLogic` | Links definition, parameters, and logic together |
 | `IncrementalStateManager` | Abstract state manager handling four state objects; holds an optional `secondary_incremental_state_backend_manager` that mirrors processing-state writes (post-processing state stays primary-only) |
 | `IncrementalBackendStateManager` | Abstract interface for backend state persistence |
-| `IncrementalConfig` | YAML-level per-flow configuration with `type` (deprecated alias `strategy`), `persist_initial_processing_state`, and `immediate_step_persistence` |
+| `IncrementalConfig` | YAML-level per-flow configuration with `type`, `persist_initial_processing_state`, and `immediate_step_persistence` |
 
 #### Definition vs Config vs Parameters
 
@@ -345,7 +345,7 @@ At runtime:
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `type` | str | (required) | Incremental type name (e.g., `by_key`, `by_source_tst`). `strategy` is accepted as a deprecated alias. |
+| `type` | str | (required) | Incremental type name (e.g., `by_key`, `by_source_tst`) |
 | `persist_initial_processing_state` | bool | `True` | When `True`, processing state is saved to backend immediately after determination |
 | `immediate_step_persistence` | bool | `True` | When `True`, each step is saved to backend immediately after completion. When `False`, steps are saved in a single batch at the end. |
 
@@ -1278,7 +1278,7 @@ it.
 | `base/sql_filter_manager.py` | Abstract SQL filter contract for incremental WHERE-clause injection |
 | `models/logic.py` | Abstract `FlowIncrementalLogic`, `FlowIncrementalDefinition` (with step activation flags), and `FlowIncrementalParamDefinition` |
 | `models/state.py` | Base state classes (`FlowState`, `FlowSourceState`, `FlowProcessingState`) and the planned-state models `FlowStatePlan`, `FlowPlannedProcessingState`, `FlowPlannedProcessingDetailedState` (§4.5) |
-| `models/config.py` | `IncrementalConfig` with `type` (deprecated alias `strategy`), `persist_initial_processing_state`, `immediate_step_persistence` |
+| `models/config.py` | `IncrementalConfig` with `type`, `persist_initial_processing_state`, `immediate_step_persistence` |
 | `models/manifest.py` | `FlowIncrementalTypeManifest` describing a registered incremental type |
 | `backend/plan.py` | `BackendStatePlanRow` and `state_plan_to_row` / `row_to_state_plan` helpers — the backend-agnostic row form of a state plan |
 | `backend/postgresql/backend_mixin.py` | `PostgreSQLIncrementalBackendMixin` — state-plan persistence primitives for the planned-state slot on PostgreSQL |
