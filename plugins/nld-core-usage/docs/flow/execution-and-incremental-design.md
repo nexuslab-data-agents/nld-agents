@@ -766,11 +766,8 @@ Orchestrates both execution and incremental state through a unified facade patte
 
 | Class | Description |
 |-------|-------------|
-| `FlowStateManager` | Central facade combining execution + incremental |
-| `FlowByKeyStateManager` | Concrete implementation for by_key |
-| `FlowBySourceTstStateManager` | Concrete implementation for by_source_tst |
-| `FlowNoIncrementStateManager` | Concrete implementation for no_increment |
-| `FlowStateManagerFactory` | Creates complete FlowStateManager instances |
+| `FlowStateManager` | The single concrete facade combining execution + incremental — used for every incremental type; all per-type behavior lives in the wrapped `IncrementalStateManager` |
+| `FlowStateManagerFactory` | Creates complete FlowStateManager instances; validates the incremental type against the `FlowIncrementalTypeRegistry` |
 
 ### 4.3 FlowStateManager Composition
 
@@ -1346,11 +1343,8 @@ it.
 
 | File | Purpose |
 |------|---------|
-| `manager/base.py` | FlowStateManager facade combining execution + incremental |
-| `manager/by_key.py` | FlowByKeyStateManager |
-| `manager/by_source_tst.py` | FlowBySourceTstStateManager |
-| `manager/no_increment.py` | FlowNoIncrementStateManager |
-| `factory.py` | FlowStateManagerFactory (orchestrator with engine pass-through) |
+| `manager/base.py` | FlowStateManager — the single concrete facade combining execution + incremental (no per-type subclasses) |
+| `factory.py` | FlowStateManagerFactory (orchestrator with engine pass-through; registry-validated) |
 | `config/state_backend_connector.py` | `StateBackendConnector` and `StateBackendConnectorConfig` models, validators, and merge helpers |
 | `state_backend_connector_resolver.py` | `StateBackendConnectorWrapper` resolving primary + optional secondary sides |
 | `events.py` | State lifecycle events |
