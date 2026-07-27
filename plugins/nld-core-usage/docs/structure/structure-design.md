@@ -344,8 +344,49 @@ fields:
 | `precision` | int | No | Precision for numeric types |
 | `default_value` | any | No | Default value for the field |
 | `characterisations` | list | No | Field-level characterisations |
+| `field_template` | string | No | Field template entity name the field is materialised from (see "Field From a Field Template") |
 
 **Note:** Field position is determined by the order of keys in the YAML fields dictionary. There is no explicit `position` attribute.
+
+### Field From a Field Template
+
+A field can be fully based on a `FieldTemplate` entity without going through a
+`StructureTemplate`. Declare the reference with the `field_template` attribute;
+the value is a field template entity name resolved through the namespace
+hierarchy (nearest ancestor namespace wins), like other entity references.
+
+```yaml
+fields:
+  id_account:
+    data_type: VARCHAR(32)
+  ds_src_integrated_filepath:
+    field_template: INGESTION_FILE_PATH
+  ts_loaded_at:
+    field_template: REC_INSERT_TST
+    description: Overridden description
+```
+
+Behavior:
+
+- The field is materialised from the template's embedded `field` definition
+  (data type, length/precision, description, characterisations).
+- Any attribute declared next to `field_template` overrides the template value
+  (e.g. a custom `description`). A declared `data_type` also discards the
+  template's `length`/`precision`, and declared `characterisations` replace
+  the template list entirely.
+- The field name is the `fields` dictionary key, so a template can be reused
+  under a different name. The field position is simply its position in the
+  field list — the template's `relative_position` and
+  `override_existing_field_on_characterisation` attributes only apply to
+  structure templates and are ignored for direct references.
+- The materialised field participates in deployment, diff, and validation
+  exactly like a regular declared field. `nld structure info` shows the field
+  template name in the fields table Template column.
+- The template's `lineage` applies during SQL rendering exactly as for
+  structure-template fields (see "Field Template Lineage"), keyed on the
+  declared field name.
+- An unknown or unresolvable reference fails entity loading with an error
+  listing the available field template names.
 
 ### Field Data Types
 
@@ -436,6 +477,13 @@ Field templates can define lineage rules that control how template fields are
 populated during SQL rendering. The `lineage` attribute on a `FieldTemplate`
 specifies either a raw SQL `expression` or a `source_characterisation` to
 cross-reference in the source structure.
+
+Lineage applies whether the field template reaches the structure through a
+`StructureTemplate` or is referenced directly by a field via `field_template`
+(see "Field From a Field Template"). For a direct reference, the rendered
+expression is aliased to the declared field name, and it takes precedence over
+name-based auto-mapping so the lineage rule is never shadowed by a same-named
+source field.
 
 #### Structure Type Overrides
 
