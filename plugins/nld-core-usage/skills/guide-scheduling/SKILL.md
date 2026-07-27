@@ -6,10 +6,11 @@ description: >
   resolution), the per-flow, per-environment `FlowScheduling` entity (schedule vs
   flow triggers, automatic lineage derivation adjusted by
   additional_predecessors/excluded_predecessors, external/cross-product
-  references), the SchedulingResolver/Validator services, and the `nld
-  scheduling` CLI. Read when working on scheduling YAML under scheduling/,
-  environment config, or nld/scheduling/ code. For the cross-project catalogue
-  see guide-project-catalog.
+  references), the declared `frequency` (intended execution cadence, tracked
+  independently of the cron), the SchedulingResolver/Validator/FrequencyReporter
+  services, and the `nld scheduling` CLI. Read when working on scheduling YAML
+  under scheduling/, environment config, or nld/scheduling/ code. For the
+  cross-project catalogue see guide-project-catalog.
 user-invocable: false
 ---
 
@@ -26,7 +27,7 @@ Activate this guide when working on:
 - `environments` in `nld_project.yml`, the `--env` flag, or `NLD__ENVIRONMENT`
 - `scheduling/` YAML definitions (`FlowScheduling` entities)
 - `nld/scheduling/` code (models, resolver, graph, validator, tasks)
-- The `nld scheduling` CLI (validate / deps)
+- The `nld scheduling` CLI (validate / deps / frequency)
 - Cross-project (`nld_project_catalog.yml`) dependency declarations
 
 ## Environments
@@ -80,10 +81,12 @@ Built-in entity `flow_scheduling` (`folder_name="scheduling"`,
 | `flow` | `NldEntityReference[DataFlowDefinition]` | The scheduled flow — registry-resolved and validated. |
 | `params` | `dict[str, Any]` | Platform-specific knobs (data_sub_product, process_type, runner hints…). The core model never grows an attribute for these. |
 | `environments` | `dict[str, EnvironmentScheduling]` | Per-environment scheduling, keyed by environment name. |
+| `frequency` | `ExecutionFrequency \| None` | Intended execution cadence of the asset, used as the default across environments. See **Execution frequency** below. |
 
 Helpers: `for_environment(env)`, `is_active_in(env)` (present **and** `enabled`
 **and** has a `trigger`), `merged_params(env)` (flow-level `params` overlaid with
-the environment's `params`).
+the environment's `params`), `resolved_frequency(env)` (the env-level
+`frequency`, falling back to the flow-level one).
 
 ### `EnvironmentScheduling`
 
@@ -92,6 +95,7 @@ the environment's `params`).
 | `enabled` | `bool` (default `True`) | Whether the flow is scheduled in this env. |
 | `trigger` | `Trigger \| None` | How it fires (see below). Absent ⇒ not scheduled. |
 | `params` | `dict[str, Any]` | Env-level overrides of the flow-level `params`. |
+| `frequency` | `ExecutionFrequency \| None` | Env-level override of the flow-level `frequency`. |
 
 ### Triggers (`nld/scheduling/models/trigger.py`)
 
@@ -137,6 +141,38 @@ Shape shared by `predecessors`, `additional_predecessors`, and
 | `nld_project` | `str \| None` | For an external predecessor, the upstream **data product** (its nld project name); `name` is then the bare entity name. Only valid when `external: true` (validator enforces this). Consumers resolve `nld_project` to their platform's namespace. |
 | `states` | `list[...]` | Terminal states that satisfy the precondition. Default `["SUCCESS", "WARNING"]`. |
 
+## Execution frequency
+
+`frequency` (`nld/scheduling/models/frequency.py`) is the **intended execution
+cadence** of a scheduled asset — first-class metadata, never read back from the
+trigger. Two reasons it cannot be derived: a flow-triggered asset has no cron at
+all, and a cron says when a run *fires*, not the cadence consumers are promised.
+An asset that declares nothing is reported as undeclared, not given a guessed
+cadence.
+
+`ExecutionFrequency` values, from the most frequent to the least:
+`continuous`, `hourly`, `intraday` (several runs a day, coarser than hourly),
+`daily`, `weekly`, `monthly`, `quarterly`, `yearly`, plus `on_demand` — which
+has no cadence at all and is therefore excluded from every comparison.
+
+Declaration follows the `params` rule: flow-level `frequency` is the default,
+an environment's `frequency` overrides it for that environment only
+(`resolved_frequency(env)`). The resolved value lands on the scheduling graph
+node, so it appears in `nld scheduling deps` (JSON `frequency` attribute and the
+Mermaid node label).
+
+**Consistency rule.** A flow-triggered asset cannot deliver more often than the
+slowest thing it waits for, so `SchedulingFrequencyReporter` compares the
+declared cadence against the **coarsest** cadence among the assets triggering it
+(walking further up when a direct trigger declares nothing). Declaring `hourly`
+behind a `daily` ingestion is flagged as inconsistent. The check is
+environment-scoped: the same declaration can be coherent in prd and inconsistent
+in stg where the ingestion only runs weekly. Schedule-triggered assets have no
+upstream cadence and are never flagged — the cron is not parsed.
+
+Nothing here is a hard failure: `nld scheduling validate` still gates on cycles
+only, and the frequency report warns.
+
 ## Services
 
 In `nld/scheduling/services/`:
@@ -147,22 +183,33 @@ In `nld/scheduling/services/`:
   `NldSchedulingPredecessorError` on a duplicate addition, an exclusion
   absent from the derived lineage, or an external entry in
   `excluded_predecessors`.
-- **`SchedulingGraph`** — the environment's trigger graph.
+- **`SchedulingGraph`** — the environment's trigger graph. Each node carries its
+  trigger kind, cron and resolved `frequency`.
 - **`SchedulingValidator`** — gates on cycles in that graph.
+- **`SchedulingFrequencyReporter`** — builds a `SchedulingFrequencyReport`
+  (`entries`, `undeclared_entries`, `inconsistent_entries`,
+  `count_by_frequency()`); each `SchedulingFrequencyEntry` exposes the declared
+  `frequency`, the `upstream_frequency` it is checked against, `is_declared` and
+  `is_inconsistent`.
 
 ## CLI
 
 ```
-nld scheduling validate --env <env>
-nld scheduling deps     --env <env> [--format json|...] [--flow-name <f>]
-                                    [--namespace <ns>] [--upstream] [--downstream]
+nld scheduling validate  --env <env>
+nld scheduling deps      --env <env> [--format json|...] [--flow-name <f>]
+                                     [--namespace <ns>] [--upstream] [--downstream]
+nld scheduling frequency --env <env> [--frequency <value>]
 ```
 
 - `validate` — checks the environment's scheduling graph is acyclic.
 - `deps` — outputs the scheduling dependency graph for an environment, with the
   usual lineage filters.
+- `frequency` — reports every scheduled asset with its declared cadence, the
+  cadence its triggers allow, and a status (`ok` / `undeclared` /
+  `inconsistent`), plus a per-cadence breakdown. `--frequency` narrows the
+  report to one cadence ("which assets are daily?").
 
-Both are environment-aware (`--env`, same precedence as above).
+All three are environment-aware (`--env`, same precedence as above).
 
 ## Examples
 
@@ -172,6 +219,7 @@ lineage, adjusted), cron in stg:
 ```yaml
 name: flow_a
 flow: clh.business.dwh.flow_a
+frequency: daily          # intended cadence, both environments
 environments:
   prd:
     trigger:
@@ -181,9 +229,10 @@ environments:
       excluded_predecessors:
         - name: clh.business.dwh.flow_noise
   stg:
+    frequency: weekly     # staging refreshes less often
     trigger:
       kind: schedule
-      cron: "0 2 * * *"
+      cron: "0 2 * * 1"
 ```
 
 Disabled in one env, pure automatic derivation (no adjustments) in the other:
