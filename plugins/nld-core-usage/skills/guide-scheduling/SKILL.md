@@ -4,10 +4,12 @@ description: >
   Architectural guide for the nld-core scheduling subsystem — the `environments`
   block in nld_project.yml (EnvironmentsConfig + `--env`/`NLD__ENVIRONMENT`
   resolution), the per-flow, per-environment `FlowScheduling` entity (schedule vs
-  flow triggers, predecessors, external/cross-product references), the
-  SchedulingResolver/Validator services, and the `nld scheduling` CLI. Read when
-  working on scheduling YAML under scheduling/, environment config, or
-  nld/scheduling/ code. For the cross-project catalogue see guide-project-catalog.
+  flow triggers, automatic lineage derivation adjusted by
+  additional_predecessors/excluded_predecessors, external/cross-product
+  references), the SchedulingResolver/Validator services, and the `nld
+  scheduling` CLI. Read when working on scheduling YAML under scheduling/,
+  environment config, or nld/scheduling/ code. For the cross-project catalogue
+  see guide-project-catalog.
 user-invocable: false
 ---
 
@@ -96,12 +98,36 @@ the environment's `params`).
 A discriminated union on `kind`:
 
 - **`ScheduleTrigger`** — `kind: schedule`, `cron: "<expr>"`. Time-based.
-- **`FlowTrigger`** — `kind: flow`, `predecessors: list[FlowPrecondition]`. Runs
-  after upstream schedulings reach a terminal state. **When `predecessors` is
-  empty, the resolver derives them from the flow dependency graph;** an explicit
-  list overrides the derivation.
+- **`FlowTrigger`** — `kind: flow`. Runs after upstream schedulings reach a
+  terminal state. The resolver **always** derives the automatic lineage from
+  the flow dependency graph, then adjusts it:
+
+  ```
+  automatic lineage + additional_predecessors - excluded_predecessors
+  ```
+
+  - `additional_predecessors: list[FlowPrecondition]` — extra dependencies the
+    flow-lineage derivation cannot see (an external/cross-product dependency,
+    or a same-product one the flow graph doesn't express). Same shape as
+    `FlowPrecondition` (`external`/`nld_project` supported). Declaring one
+    already present in the derived lineage is a load-time error
+    (`NldSchedulingPredecessorError`) — it would be a redundant no-op.
+  - `excluded_predecessors: list[NldEntityReference[FlowScheduling]]` — bare
+    references to upstream schedulings to drop from the derived lineage (an
+    upstream flow that shouldn't gate this one). No `external`/`states` shape
+    here: the derived lineage is always local, so there's nothing external to
+    exclude. Declaring one that isn't actually part of the derived lineage is
+    a load-time error.
+  - `predecessors: list[FlowPrecondition]` — **deprecated**. When non-empty it
+    fully replaces the derived lineage exactly as before (ignoring it
+    entirely) and cannot be combined with the two attributes above — full
+    override and additive/subtractive adjustment are different modes, not one
+    three-way model. A `nld scheduling` run logs a warning whenever a trigger
+    still declares it. Existing YAML using it keeps working unchanged.
 
 ### `FlowPrecondition`
+
+Shape shared by `predecessors` and `additional_predecessors`:
 
 | Field | Type | Purpose |
 |-------|------|---------|
@@ -114,8 +140,12 @@ A discriminated union on `kind`:
 
 In `nld/scheduling/services/`:
 
-- **`SchedulingResolver`** — derives a `FlowTrigger`'s predecessors from the flow
-  dependency graph when they are not declared explicitly.
+- **`SchedulingResolver`** — always derives a `FlowTrigger`'s automatic
+  lineage from the flow dependency graph, then applies
+  `additional_predecessors`/`excluded_predecessors` on top of it (or, for the
+  deprecated `predecessors`, a full override instead). Raises
+  `NldSchedulingPredecessorError` on a duplicate addition or an exclusion
+  absent from the derived lineage.
 - **`SchedulingGraph`** — the environment's trigger graph.
 - **`SchedulingValidator`** — gates on cycles in that graph.
 
@@ -135,7 +165,8 @@ Both are environment-aware (`--env`, same precedence as above).
 
 ## Examples
 
-`scheduling/clh/business/dwh/flow_a.yaml` — flow-triggered in prd, cron in stg:
+`scheduling/clh/business/dwh/flow_a.yaml` — flow-triggered in prd (automatic
+lineage, adjusted), cron in stg:
 
 ```yaml
 name: flow_a
@@ -144,15 +175,17 @@ environments:
   prd:
     trigger:
       kind: flow
-      predecessors:
-        - name: clh.business.dwh.flow_b
+      additional_predecessors:
+        - name: clh.business.dwh.flow_external_input
+      excluded_predecessors:
+        - clh.business.dwh.flow_noise
   stg:
     trigger:
       kind: schedule
       cron: "0 2 * * *"
 ```
 
-Disabled in one env, and a cross-product (external) predecessor:
+Disabled in one env, pure automatic derivation (no adjustments) in the other:
 
 ```yaml
 name: flow_c
@@ -163,21 +196,33 @@ params:
 environments:
   prd:
     trigger:
-      kind: flow          # predecessors derived from the flow graph
+      kind: flow          # predecessors derived from the flow graph, unadjusted
   stg:
     enabled: false
 ```
 
 ```yaml
-# an external predecessor lives in another data product
+# an external predecessor lives in another data product — add it since the
+# local flow graph cannot see across products
 environments:
   stg:
     trigger:
       kind: flow
-      predecessors:
+      additional_predecessors:
         - name: some_upstream_scheduling
           external: true
           nld_project: clh_acquisition_opendata
+```
+
+Legacy full override (deprecated — prefer the adjustments above):
+
+```yaml
+environments:
+  prd:
+    trigger:
+      kind: flow
+      predecessors:            # ignores the derived lineage entirely
+        - name: clh.business.dwh.flow_b
 ```
 
 ## Cross-project dependencies
