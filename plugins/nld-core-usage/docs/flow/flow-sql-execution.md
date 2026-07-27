@@ -528,12 +528,16 @@ on multiple source tables in a single query.
 | Incremental | Loading Strategy | Filter Applied |
 |-------------|-----------------|----------------|
 | `no_increment` | FULL | None |
-| `by_source_tst` | FULL | None |
+| `by_source_tst` | FULL | None (the window's lower bound is dropped) |
 | `by_source_tst` | DELTA | `master.tst_col >= start AND master.tst_col < end` |
-| `by_source_tst` | BACKFILL | Same as DELTA |
+| `by_source_tst` | BACKFILL / BACKFILL_DELTA | Same predicate shape as DELTA, over the window the strategy resolved |
 | `by_key` | FULL | None |
 | `by_key` | DELTA | `master.key_field IN ('key1', 'key2', ...)` |
-| `by_key` | BACKFILL | Same as DELTA |
+| `by_key` | BACKFILL / BACKFILL_DELTA | Same predicate shape as DELTA, over the keys the strategy selected |
+
+The filter shape is per incremental type, and so is the *window or key
+set* it is built from — each type resolves its own selection from its own
+runtime params (see `execution-and-incremental-design.md` §2.4.1).
 
 For `by_source_tst`, the timestamp column is resolved from each MASTER predecessor
 structure's `REC_LAST_UPDATE_TST` characterised field. The start and end timestamps
@@ -595,29 +599,37 @@ WHERE customers.customer_id IN ('cust_001', 'cust_002', 'cust_003')
 Execute an SQL flow from the project root:
 
 ```bash
-nld flow execute --flow-name customer_summary
+nld flow execute --name customer_summary
 ```
 
 With a namespace:
 
 ```bash
-nld flow execute --flow-name customer_summary --flow-namespace staging
+nld flow execute --name customer_summary --namespace staging
 ```
 
-With a specific strategy:
+Forcing a full run:
 
 ```bash
-nld flow execute --flow-name customer_summary --strategy FULL
+nld flow execute --name customer_summary --full
 ```
 
 **CLI Parameters:**
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `--flow-name` | Yes | Name of the flow to execute |
-| `--flow-namespace` | No | Dot-separated namespace (e.g. `staging`, `source.raw`) |
-| `--strategy` | No | Loading strategy (FULL, DELTA, BACKFILL). Available strategies depend on the `incremental` configuration. |
+| `--name` | No | Name of the flow to execute (with neither `--name` nor `--namespace`, every flow of the project runs in dependency order) |
+| `--namespace` | No | Dot-separated namespace (e.g. `staging`, `source.raw`) |
+| `--full` | No | Force the FULL loading strategy |
+| `--with-delta` | No | Delta modifier — read only by the incremental types that declare a rule for it (`by_key`); `by_source_tst` declares it but ignores it |
 | `--nld-root-folder-path` | No | Override the project root path |
+
+There is **no `--strategy` option**: the loading strategy is *resolved*
+from the runtime params the flow's incremental type declares
+(`--full`, `--keys`/`--limit` for `by_key`, `--pull-from`/`--pull-to`
+for `by_source_tst`). The type-specific params are passthrough arguments,
+not Click options, so they do not appear in `--help`. See
+`execution-and-incremental-design.md` §2.4.1 for the per-type rules.
 
 The `write_strategy` (write strategy) is configured as a top-level field in the flow
 definition YAML, not as a CLI parameter or flow parameter.
@@ -737,8 +749,9 @@ and computes the processing state (e.g. timestamps for `by_source_tst`, keys for
 1. **Assert connection:** verifies the target connector has an open connection
 2. **Resolve SQL file:** finds the `.sql` file from the project entities structure
 3. **Load SQL content:** reads and validates the file is not empty
-4. **Apply incremental filter:** if the flow definition has an `incremental` strategy
-   and the loading strategy is `DELTA` or `BACKFILL`, the SQL query is modified using
+4. **Apply incremental filter:** if the flow definition has an `incremental` type
+   and the loading strategy bounds the selection (`DELTA`, `BACKFILL`,
+   `BACKFILL_DELTA`), the SQL query is modified using
    sqlglot to add a WHERE clause on the MASTER predecessor table(s). The filtering logic
    is delegated by `_apply_incremental_filter()` to the incremental state manager's
    `apply_sql_filter()` method, which obtains the strategy-specific `IncrementalSqlFilterManager`
@@ -763,9 +776,12 @@ and computes the processing state (e.g. timestamps for `by_source_tst`, keys for
 1. **`post_processing_for_state()`**: saves processing state and creates/saves
    post-processing state
 2. **`post_processing_for_execution()`**: updates and saves the global execution
-   state. Skipped on failure or for the UNIT strategy. For BACKFILL strategy,
-   the execution history is updated but the execution state record is left
-   unchanged so that the next regular run still sees the previous timestamps.
+   state. Skipped on failure. For BACKFILL, the execution history is updated
+   but the execution state record is left unchanged so that the next regular
+   run still sees the previous timestamps — this **execution**-state rule is
+   global (`FULL`, `DELTA`, `BACKFILL_DELTA` only). The **incremental**-state
+   advancement rule is separate and per type: `by_key` advances on all four
+   strategies, `by_source_tst` on all but `BACKFILL`.
 3. **`post_processing_at_end()`**: hook for custom cleanup (no-op by default)
 
 The execution status is set to `SUCCEEDED` or `FAILED` based on whether `run_flow()`

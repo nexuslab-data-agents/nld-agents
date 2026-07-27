@@ -392,7 +392,77 @@ in the type's own `state.py`, never in the generic renderer.
 | `BACKFILL` | Re-process specific keys or ranges |
 | `BACKFILL_DELTA` | Re-process with delta logic |
 
+#### 2.4.1 Loading-strategy rules are per incremental type
+
+The four names above are a shared vocabulary, **not** a shared contract.
+Each incremental type owns three rules, and they legitimately differ
+between types:
+
+1. **Parameter grammar** — which runtime params the type declares and how
+   `resolve_strategy()` maps them to a strategy, including the
+   combinations it rejects.
+2. **Selection semantics** — what each strategy selects for that type.
+3. **State advancement** — which strategies write the authoritative
+   incremental state at post-processing.
+
+Built-in rules:
+
+| Rule | `by_key` | `by_source_tst` | `no_increment` |
+|------|----------|-----------------|----------------|
+| Params declared | `--full`, `--keys`, `--limit`, `--with-delta` | `--full`, `--pull-from`, `--pull-to`, `--with-delta` (declared, **not read**) | none |
+| `FULL` triggered by | `--full` | `--full` | always |
+| `BACKFILL` triggered by | `--keys` and/or `--limit` | `--pull-from` **and** `--pull-to` | — |
+| `BACKFILL_DELTA` triggered by | `--keys`/`--limit` + `--with-delta` | `--pull-from` alone | — |
+| Default (no params) | `DELTA` | `DELTA` | `FULL` |
+| `--full` + `--with-delta` | raises `ValueError` (mutually exclusive) | accepted; `with_delta` has no effect | n/a |
+| State advanced by | `FULL`, `DELTA`, `BACKFILL`, `BACKFILL_DELTA` (**all four**) | `FULL`, `DELTA`, `BACKFILL_DELTA` — **not** `BACKFILL` | no state |
+
+The `BACKFILL` row is the one to remember: replaying an explicit
+`[pull_from, pull_to]` window on `by_source_tst` deliberately leaves the
+watermark untouched, while replaying keys on `by_key` deliberately
+records each key's outcome. Neither is a bug, and neither generalises.
+
+Note that the **execution** state (`ExecutionStateManager`, §5) has its
+own rule, applied to every type: `save_execution_state()` runs for
+`FULL`, `DELTA` and `BACKFILL_DELTA` only. It is independent of the
+incremental state-advancement rule above.
+
+An external incremental type publishes the same three rules for itself
+(see the `how-to-create-a-new-incremental-type` skill).
+
 ### 2.5 Incremental Types
+
+#### 2.5.0 Type axes
+
+A type is designed on axes first; its flat name is a label for a point in
+that space:
+
+| Axis | Question | Values |
+|------|----------|--------|
+| **Anchor** | which side drives the selection decision | source (`by_source_tst`, `by_key`), target, none (`no_increment`) |
+| **Source selection** | is a selection pushed down to the source, and on what basis | none / always-full / partial + basis (key, tst, scope, …) — derived from the anchor |
+| **Dimension** | the unit the type selects and remembers | key, time window, scope, — |
+| **Change detection** | what tells the type something changed | source key inventory, extraction timestamp, functional update timestamp, none |
+
+The anchor determines the source selection: a source-anchored type
+selects **partially**, on the basis of its dimension; a target-anchored
+type reads the source in **full** and decides target-side what to
+(re)load; `no_increment` has **no** selection concept. Pushing a computed
+window down to the source as a read optimisation does not change the
+anchor.
+
+Keep this axis distinct from **source availability** — whether one read
+of the source presents its complete extent (a table: yes; a rotating
+listing: no). Source selection is a property of the type's logic; source
+availability characterises the source content, and it is what decides
+whether absence-based deletion (`UPSERT_LOGICAL_DELETE`, logical-deletion
+tracking) and `OVERWRITE` are safe.
+
+`FlowIncrementalDefinition` declares two of these axes today —
+`source_selection` (`FlowSourceSelection`: `NO_SELECTION` for
+`no_increment`, `BY_KEY`, `BY_SOURCE_TST`) and `target_update_granularity`
+(`FlowTargetUpdateGranularity`: `GENERIC`, `BY_KEY`, `BY_DAY`). They are
+declarative metadata: no runtime logic reads them yet.
 
 #### 2.5.1 by_key
 
@@ -403,19 +473,21 @@ Tracks state at key-level granularity. Each key has its own status, timestamps, 
 | Status | Description |
 |--------|-------------|
 | `NOT_PROCESSED` | Key has never been processed |
-| `SUCCEEDED` | Key was successfully processed |
+| `SUCCEEDED` | Key was successfully processed (terminal for DELTA) |
 | `FAILED` | Key processing failed |
-| `DELETED` | Key was marked for deletion |
+| `DELETED` | Key once succeeded and the source later answered that it no longer exists |
+| `PERMANENTLY_EXCLUDED` | The source authoritatively answered that the key does not exist (terminal for DELTA; `FULL` and explicit `--keys` re-attempt it) |
 
 **Processing Statuses:**
 
 | Status | Description |
 |--------|-------------|
 | `TO_BE_PROCESSED` | Key will be processed in this run |
-| `EXCLUDED` | Key is excluded from processing |
-| `TO_BE_DELETED` | Key will be deleted |
+| `EXCLUDED` | Key is excluded from this run's selection (budget / keys filter); persisted state untouched |
+| `TO_BE_DELETED` | Declared for absence-based deletion; no consumer today |
 | `SUCCEEDED` | Processing completed successfully |
 | `FAILED` | Processing failed |
+| `PERMANENTLY_EXCLUDED` | The run established the source does not expose this key; persisted as `DELETED` if the key once succeeded, else `PERMANENTLY_EXCLUDED` |
 
 **Processing Logic:**
 
@@ -434,6 +506,22 @@ def update_processing_state(self):
         for key in source_state.keys:
             processing_state[key] = TO_BE_PROCESSED
 ```
+
+**Axes:** anchor = source · source selection = partial, by key ·
+dimension = key · change detection = source key inventory.
+
+**Type rules** (see §2.4.1): `--full` alone selects `FULL`;
+`--keys`/`--limit` select `BACKFILL`, and with `--with-delta`
+`BACKFILL_DELTA`; no params selects `DELTA`. `--full` combined with
+`--with-delta` raises a `ValueError` — for this type they are mutually
+exclusive. `BACKFILL` and `BACKFILL_DELTA` require at least one of
+`--keys` / `--limit`. Post-processing merges the per-key outcomes into
+the authoritative state for **all four** strategies, so a key replay
+does update that key's status.
+
+Keys are always selected from the **source inventory**: a key present in
+the state but absent from the inventory is never processed, not even by
+`FULL`.
 
 #### 2.5.2 by_source_tst
 
@@ -460,7 +548,30 @@ def update_processing_state(self):
         processing_state.pull_to_timestamp = current_datetime()
 ```
 
+**Axes:** anchor = source · source selection = partial, by extraction
+timestamp · dimension = time window · change detection = the technical
+extraction timestamp.
+
 **Supported Strategies:** `FULL`, `DELTA`, `BACKFILL`, `BACKFILL_DELTA`
+— all four, resolved as follows.
+
+**Type rules** (see §2.4.1): `--full` selects `FULL`; `--pull-from` *and*
+`--pull-to` select `BACKFILL` over the fixed window; `--pull-from` alone
+selects `BACKFILL_DELTA` (from that bound to now); no params selects
+`DELTA` from the persisted watermark. Under `FULL` / `DELTA` any
+`--pull-from` / `--pull-to` passed is ignored and logged as
+`IncrementalParameterIgnored`.
+
+Two rules specific to this type:
+
+- **`BACKFILL` does not advance the watermark.** Post-processing writes
+  `last_pull_to_timestamp` for `FULL`, `DELTA` and `BACKFILL_DELTA`
+  only — replaying an explicit window must not move the watermark.
+  (`by_key` advances state on all four; the rules are per type.)
+- **`--with-delta` is declared but never read** by
+  `BySourceTstFlowIncrementalParams.resolve_strategy()`: this type
+  expresses BACKFILL_DELTA with `--pull-from` alone. Passing it changes
+  nothing, and unlike `by_key` it does not conflict with `--full`.
 
 **CLI parameters:** `--full`, `--with-delta`, `--pull-from`, `--pull-to`. These
 are declared in `BY_SOURCE_TST_INCREMENTAL_DEFINITION.param_definitions`
@@ -472,6 +583,13 @@ and `resolve_strategy()` will fall back to `DELTA`.
 #### 2.5.3 no_increment
 
 Minimal implementation for full-load scenarios. Does not track historical state.
+
+**Axes:** anchor = none · source selection = none · dimension = none ·
+change detection = none.
+
+**Type rules** (see §2.4.1): no params are declared, every run resolves
+`FULL`, and `tracks_state=False` skips state read and write entirely.
+Target semantics come from the write strategy alone.
 
 #### 2.5.4 Step Activation Flags
 

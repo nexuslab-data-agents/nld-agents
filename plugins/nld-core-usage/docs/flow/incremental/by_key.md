@@ -5,6 +5,26 @@ Per-key incremental type. State models: `ByKeyState`,
 [incremental availability overview](./README.md) for the command axes
 and legend, and `guide-incremental` for the architecture.
 
+## Type rules
+
+Axes: anchor = source · source selection = partial, by key · dimension =
+key · change detection = the source key inventory.
+
+| Rule | `by_key` |
+|------|----------|
+| Params declared | `--full`, `--keys`, `--limit`, `--with-delta` |
+| `FULL` | `--full` — every key the inventory presents (re-attempts terminal keys) |
+| `DELTA` | no params — inventory keys minus terminal ones (`SUCCEEDED`, `PERMANENTLY_EXCLUDED`) |
+| `BACKFILL` | `--keys` and/or `--limit` — exactly that selection, terminal keys included |
+| `BACKFILL_DELTA` | `--keys`/`--limit` + `--with-delta` — that selection minus terminal keys |
+| Rejected | `--full` + `--with-delta` raises; `BACKFILL` / `BACKFILL_DELTA` without `--keys` or `--limit` is refused |
+| State advancement | **all four** strategies merge the run's per-key outcomes into the authoritative state |
+
+Keys are always selected from the **source inventory**: a key present in
+the state but absent from the inventory is never processed, not even by
+`FULL`. These rules belong to this type alone — see the
+[overview](./README.md) for the comparison with `by_source_tst`.
+
 ## Availability by connector / engine
 
 | Connector / engine | Flow execution | `get-state` | `compute` | `compute --persist` |

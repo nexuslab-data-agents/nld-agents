@@ -17,6 +17,26 @@ factory, planned-state slot), see
 | `by_source_tst` | Timestamp-window watermark state. | [by_source_tst.md](./by_source_tst.md) |
 | `no_increment` | Pass-through; persists no incremental state. | [no_increment.md](./no_increment.md) |
 
+## Loading-strategy rules are per type
+
+Backend availability is not the only thing that varies by type: so do the
+**loading-strategy rules**. Each type owns its parameter grammar, what
+each strategy selects, and which strategies advance the persisted state.
+The shared names (`FULL`, `DELTA`, `BACKFILL`, `BACKFILL_DELTA`) do not
+imply shared behaviour.
+
+| Rule | `by_key` | `by_source_tst` | `no_increment` |
+|------|----------|-----------------|----------------|
+| Params | `--full`, `--keys`, `--limit`, `--with-delta` | `--full`, `--pull-from`, `--pull-to` (`--with-delta` declared but never read) | none |
+| `BACKFILL` from | `--keys` / `--limit` | `--pull-from` **and** `--pull-to` | — |
+| `BACKFILL_DELTA` from | `--keys`/`--limit` + `--with-delta` | `--pull-from` alone | — |
+| `--full` + `--with-delta` | raises | accepted, no effect | n/a |
+| State advanced by | all four strategies | `FULL`, `DELTA`, `BACKFILL_DELTA` (**not** `BACKFILL`) | no state |
+
+Full rules and the axis model behind them:
+[`../execution-and-incremental-design.md`](../execution-and-incremental-design.md)
+§2.4.1 and §2.5.0.
+
 ## Command axes
 
 Each strategy page reports availability against four axes:

@@ -5,6 +5,29 @@ Timestamp-window incremental type. State models: `BySourceTstState`
 [incremental availability overview](./README.md) for the command axes
 and legend, and `guide-incremental` for the architecture.
 
+## Type rules
+
+Axes: anchor = source · source selection = partial, by extraction
+timestamp · dimension = time window · change detection = the technical
+extraction timestamp.
+
+| Rule | `by_source_tst` |
+|------|-----------------|
+| Params declared | `--full`, `--pull-from`, `--pull-to`, `--with-delta` (**never read**) |
+| `FULL` | `--full` — window `[None, now]`, the filter drops the lower bound |
+| `DELTA` | no params — `[watermark, now]` |
+| `BACKFILL` | `--pull-from` **and** `--pull-to` — that fixed window |
+| `BACKFILL_DELTA` | `--pull-from` alone — `[from, now]` |
+| Ignored | `--pull-from` / `--pull-to` under `FULL` / `DELTA` (logged as `IncrementalParameterIgnored`); `--with-delta` always |
+| State advancement | `FULL`, `DELTA`, `BACKFILL_DELTA` advance `last_pull_to_timestamp`; **`BACKFILL` does not** |
+
+Two rules are specific to this type and do not generalise:
+
+- Replaying an explicit `[pull_from, pull_to]` window deliberately leaves
+  the watermark untouched (`by_key` records replayed keys instead).
+- `--full` combined with `--with-delta` is accepted here and has no
+  effect; on `by_key` the same combination raises.
+
 ## Availability by connector / engine
 
 | Connector / engine | Flow execution | `get-state` | `compute` | `compute --persist` |

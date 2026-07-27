@@ -87,12 +87,14 @@ the matching section below.
 
 ### Common options (all incremental types)
 
-These are real CLI options and appear in `nld flow execute --help`:
+These are real CLI options and appear in `nld flow execute --help` — but
+what each one *does* is decided by the flow's incremental type, and the
+types deliberately differ:
 
 | Option | Effect |
 |--------|--------|
-| `--full` | Force the **FULL** strategy — process the whole source state, ignoring delta/incremental state. |
-| `--with-delta` | Run a delta pass alongside the requested strategy. |
+| `--full` | Force the **FULL** strategy — process the whole source state, ignoring delta/incremental state. Honoured by every type. |
+| `--with-delta` | Delta modifier. **`by_key`**: combined with `--limit`/`--keys` it selects BACKFILL_DELTA (skipping keys already terminal), and combined with `--full` it **raises**. **`by_source_tst`**: declared but never read — passing it changes nothing (use `--pull-from` alone for a delta-style backfill). **`no_increment`**: not declared. |
 
 > The incremental-specific options below (`--limit`, `--keys`, `--pull-from`,
 > `--pull-to`) are **runtime passthrough parameters** of the incremental logic,
@@ -145,6 +147,13 @@ nld flow execute --name <entity>_extraction \
 > `--days-from`-style backfill exists only in the external custom incremental
 > type (see `how-to-create-a-new-incremental-type`).
 
+> **Watermark rule for this type**: a bounded backfill
+> (`--pull-from` **and** `--pull-to`, i.e. BACKFILL) deliberately leaves
+> `last_pull_to_timestamp` untouched, so the next scheduled run resumes
+> exactly where it did before. `--pull-from` alone (BACKFILL_DELTA), like
+> `--full` and the plain delta run, does advance it. Do not assume this
+> rule for other types — `by_key` records state for every strategy.
+
 ---
 
 ## `by_key`
@@ -172,6 +181,13 @@ nld flow execute --name <entity>_extraction
 
 > **Never combine `--limit` with `--full`** — `--full` wins and processes the
 > whole source state, silently turning a "bounded test" into a full run.
+> Combining `--full` with `--with-delta` raises instead (they are mutually
+> exclusive for this type).
+
+> **State rule for this type**: every strategy — including a `--keys` /
+> `--limit` backfill — merges the run's per-key outcomes into the
+> persisted key state. A bounded test therefore marks the keys it
+> processed as SUCCEEDED, and the next delta run skips them.
 
 ---
 
