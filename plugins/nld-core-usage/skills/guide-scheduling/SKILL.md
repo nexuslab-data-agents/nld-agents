@@ -104,10 +104,10 @@ A discriminated union on `kind`:
 - **`ScheduleTrigger`** — `kind: schedule`, `cron: "<expr>"`. Time-based.
 - **`FlowTrigger`** — `kind: flow`. Runs after upstream schedulings reach a
   terminal state. The resolver **always** derives the automatic lineage from
-  the flow dependency graph, then adjusts it:
+  the flow dependency graph, then unions in `get_all_predecessors()`:
 
   ```
-  automatic lineage + get_all_predecessors() - excluded_predecessors
+  automatic lineage | get_all_predecessors()
   ```
 
   - `additional_predecessors: list[FlowPrecondition]` — extra dependencies the
@@ -116,18 +116,23 @@ A discriminated union on `kind`:
     `FlowPrecondition` (`external`/`nld_project` supported).
   - `predecessors: list[FlowPrecondition]` — the deprecated name for
     `additional_predecessors`. The two are the **same kind of addition and
-    combine** (`FlowTrigger.get_all_predecessors()` returns `predecessors +
-    additional_predecessors`) rather than being separate modes — existing
-    YAML keeps working unchanged, and callers switch to the new name at their
-    own pace. Declaring an addition (from either field) already present in
-    the derived lineage is a load-time error (`NldSchedulingPredecessorError`)
-    — it would be a redundant no-op.
-  - `excluded_predecessors: list[FlowPrecondition]` — upstream schedulings to
-    drop from the derived lineage (an upstream flow that shouldn't gate this
-    one). Same `FlowPrecondition` shape as the additions above, but
-    `external: true` is always a load-time error here: the derived lineage is
-    always local, so there's nothing external to exclude. Declaring one that
-    isn't actually part of the derived lineage is also a load-time error.
+    combine** rather than being separate modes — existing YAML keeps working
+    unchanged, and callers switch to the new name at their own pace.
+  - `excluded_predecessors: list[FlowPrecondition]` — cancels a matching entry
+    (same `name`/`external`/`nld_project`) out of
+    `predecessors`/`additional_predecessors`. This is a **self-contained
+    adjustment of this trigger's own explicit list** — it never reaches into
+    the automatically derived lineage, so excluding something that was never
+    added (or that only exists in the derived lineage) is a silent no-op, not
+    an error. Unlike the old design, `external: true` is allowed here: it
+    cancels a matching external addition.
+
+  `FlowTrigger.get_all_predecessors()` does the actual combining:
+  `predecessors + additional_predecessors`, minus anything matched out by
+  `excluded_predecessors`. The resolver's remaining validation rejects a
+  `get_all_predecessors()` entry that duplicates the derived lineage
+  (`NldSchedulingPredecessorError`) — a redundant no-op that is almost
+  certainly a mistake.
 
 ### `FlowPrecondition`
 
@@ -178,11 +183,11 @@ only, and the frequency report warns.
 In `nld/scheduling/services/`:
 
 - **`SchedulingResolver`** — always derives a `FlowTrigger`'s automatic
-  lineage from the flow dependency graph, then applies
-  `get_all_predecessors()`/`excluded_predecessors` on top of it. Raises
-  `NldSchedulingPredecessorError` on a duplicate addition, an exclusion
-  absent from the derived lineage, or an external entry in
-  `excluded_predecessors`.
+  lineage from the flow dependency graph, then unions in
+  `get_all_predecessors()` (which already nets `predecessors` +
+  `additional_predecessors` against `excluded_predecessors`). Raises
+  `NldSchedulingPredecessorError` only when an entry duplicates the derived
+  lineage.
 - **`SchedulingGraph`** — the environment's trigger graph. Each node carries its
   trigger kind, cron and resolved `frequency`.
 - **`SchedulingValidator`** — gates on cycles in that graph.
@@ -226,13 +231,27 @@ environments:
       kind: flow
       additional_predecessors:
         - name: clh.business.dwh.flow_external_input
-      excluded_predecessors:
-        - name: clh.business.dwh.flow_noise
   stg:
     frequency: weekly     # staging refreshes less often
     trigger:
       kind: schedule
       cron: "0 2 * * 1"
+```
+
+`excluded_predecessors` cancels a matching entry back out — useful when an
+environment- or template-level override needs to drop one addition without
+re-declaring the rest:
+
+```yaml
+environments:
+  prd:
+    trigger:
+      kind: flow
+      additional_predecessors:
+        - name: clh.business.dwh.flow_external_input
+        - name: clh.business.dwh.flow_staging_probe
+      excluded_predecessors:
+        - name: clh.business.dwh.flow_staging_probe   # only relevant in stg
 ```
 
 Disabled in one env, pure automatic derivation (no adjustments) in the other:
