@@ -654,7 +654,7 @@ result = execute_data_flow(
 ### 6.1 High-Level Sequence
 
 ```
-CLI: nld flow execute --flow-name <name>
+CLI: nld flow execute --name <name>
  │
  ▼
 DataFlowExecutionTask.__init__()
