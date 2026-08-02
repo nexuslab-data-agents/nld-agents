@@ -226,10 +226,15 @@ additional_quality_rules:
     rule_class: assets.utils.quality_rules.ColumnPercentageRangeRule
 ```
 
-The registry (`DataQualityRuleRegistry`) seeds the built-ins on import,
-rejects name collisions, and validates that the class subclasses
-`DataQualityRule` and that its `name` matches the manifest. See the
-`how-to-create-a-new-data-quality-check` skill for the full authoring
+The registry (`DataQualityRuleRegistry`) seeds the built-ins on import and
+rejects name collisions eagerly at project load, but only the manifest is
+registered there (`register_manifest`): importing `rule_class`, validating
+that it subclasses `DataQualityRule` with a `name` matching the manifest,
+and instantiating it are deferred to the first `get()`/`has()` lookup of the
+rule name. Loading a project for its metadata (scheduling, catalog info)
+therefore never imports that project's own Python code — mirroring the
+`FlowIncrementalTypeRegistry`/`additional_incremental_types` pattern. See
+the `how-to-create-a-new-data-quality-check` skill for the full authoring
 walkthrough.
 
 ## 8. Critical files

@@ -169,8 +169,9 @@ class ColumnPercentageRangeRule(DataQualityRule):
 
 ## Registration
 
-Declare the rule in the project's `nld_project.yml`; the class is
-imported, instantiated, and registered when the project loads:
+Declare the rule in the project's `nld_project.yml`; project load registers
+the **manifest only** — `rule_class` is imported, validated, and instantiated
+lazily, on the first lookup of the rule name:
 
 ```yaml
 additional_quality_rules:
@@ -178,10 +179,12 @@ additional_quality_rules:
     rule_class: assets.utils.quality_rules.ColumnPercentageRangeRule
 ```
 
-Registration fails loudly when the name collides with a registered rule,
-when `rule_class` is not a `DataQualityRule` subclass, or when the class
-`name` differs from the manifest `name`. `nld project info` lists the
-registered additional rules.
+A name collision with an already registered rule fails loudly at project
+load. Everything that needs the import — `rule_class` not resolvable, not a
+`DataQualityRule` subclass, or a class `name` differing from the manifest
+`name` — fails on first use instead, so loading a project for its metadata
+never requires that project's Python code to be importable. `nld project
+info` lists the registered additional rules.
 
 ## Use It on a Flow
 
