@@ -36,7 +36,11 @@ flowchart TD
   SQL POST hooks. They apply to SQL flows, seed flows, and any
   `DataFlowTask` subclass that overrides `get_data_quality_context()` to
   expose its target connector and table path. Flows without a SQL target
-  (e.g. S3 extractions) skip the step entirely.
+  (e.g. S3 extractions) return None there and skip the step entirely.
+- The task supplies that context **once per run**, when the quality
+  service is created; the service then owns it for the whole run, which
+  is why the baseline captured before the write is readable by the rules
+  after it.
 - A **measurement failure** (broken query, missing table) records a FAILED
   `Data Quality - Measurement` step and logs a warning, but never changes
   the execution status — like the technical-timestamps step, broken check
@@ -106,24 +110,42 @@ counts only (NULL keys never collide), and `column_freshness` treats
 naive timestamps as UTC. NULL policing is `column_not_empty`'s job —
 combine rules when NULLs must also be forbidden.
 
-## 4. Severities and outcomes
+## 4. Status, severity and outcomes
 
-| Severity | Step status | Execution status | Raises |
-|---|---|---|---|
-| passed | SUCCEEDED | — | no |
-| `warning` violated | WARNING | `WARNING` (`SUCCEEDED_WITH_WARNING`) | no |
-| `error` violated | FAILED | `WARNING` | no |
-| `blocking` violated | FAILED | `FAILED` | `DataQualityBlockingViolationException` (42004) |
+A check result carries two orthogonal levels:
 
-- `warning` and `error` never fail the run: the data is already written,
-  the violation is a signal, not a rollback.
+- **`status`** — what the rule found: `valid`, `warning` or `error`. Most
+  rules are binary and only ever report `valid` or `error`, through the
+  `resolve_binary_check_status(is_valid=…)` helper; a rule needing the
+  middle ground — degraded but not broken — reports `warning` itself.
+- **`severity`** — the level the check is *declared* with in the YAML
+  (`warning` | `error` | `blocking`, default `error`). It decides how far
+  a non-valid status escalates.
+
+| Status | Declared severity | Step status | Execution status | Raises |
+|---|---|---|---|---|
+| `valid` | any | SUCCEEDED | — | no |
+| `warning` | any | WARNING | `WARNING` (`SUCCEEDED_WITH_WARNING`) | no |
+| `error` | `warning` | WARNING | `WARNING` | no |
+| `error` | `error` | FAILED | `WARNING` | no |
+| `error` | `blocking` | FAILED | `FAILED` | `DataQualityBlockingViolationException` (42004) |
+
+- A `warning` **status** never fails a step whatever the declared
+  severity: the rule already qualified its finding, so the severity can
+  hold an error back but never escalate a warning.
+- The `warning` and `error` severities never fail the run: the data is
+  already written, the violation is a signal, not a rollback.
 - `blocking` raises only **after every check result is recorded**, so
   diagnostics are never lost. The standard failure semantics then apply:
   batch runs skip transitive dependents, the incremental state does not
   advance (the next run reprocesses the same delta), and the finalized
   FAILED header is persisted to the execution history.
-- A skipped check (e.g. row growth without a baseline) reports passed with
-  the skip reason in its message.
+- A skipped check (e.g. row growth without a baseline) reports the `valid`
+  status with the skip reason in its message.
+
+The two levels are combined once, on the result itself — `is_valid`,
+`is_step_failure` and `is_blocking` — so the step converter and the flow
+task read a decision instead of recomposing the table above.
 
 ## 5. Result recording and display
 
@@ -138,7 +160,7 @@ and never ALTERed:
   "rule": "column_min_value",
   "column": "nb_employees",
   "severity": "error",
-  "passed": false,
+  "status": "error",
   "violation_count": 18,
   "observed": -12,
   "expected": ">= 0",
@@ -157,8 +179,10 @@ and never ALTERed:
 
 `nld flow state execution get-steps` renders the payload in a droppable
 `check` column — `PASS|WARN|FAIL|SKIP [violations=N] [observed=…]
-[expected=…]` — below the execution overview block, and violations are
-logged at run time as `Data quality check violated (<severity>): …`.
+[expected=…]` — below the execution overview block. `WARN` covers both a
+`warning` status and an `error` status held back by a `warning` severity.
+Violations are logged at run time as
+`Data quality check violated (<status>/<severity>): …`.
 
 ## 6. Measurement — one scan, engine-portable
 
@@ -213,11 +237,12 @@ walkthrough.
 | File | Role |
 |---|---|
 | `core/nld/flow/quality/models/config.py` | `DataQualityChecksConfig`, `DataQualityCheckConfig`, severity vocabulary |
-| `core/nld/flow/quality/models/result.py` | `DataQualityCheckResult` (step payload shape) |
+| `core/nld/flow/quality/models/result.py` | `DataQualityCheckResult` (step payload shape), `DataQualityCheckStatus`, the outcome properties |
+| `core/nld/flow/quality/models/context.py` | `DataQualityContext` — target connector, table path, captured baseline |
 | `core/nld/flow/quality/models/manifest.py` | `DataQualityRuleManifest` (`additional_quality_rules` entry) |
 | `core/nld/flow/quality/rules/` | `DataQualityRule` ABC + the six built-in rules |
 | `core/nld/flow/quality/registry.py` | Rule registry singleton |
-| `core/nld/flow/quality/service.py` | Check resolution, measurement, evaluation |
+| `core/nld/flow/quality/service.py` | Check resolution, target context ownership, measurement, evaluation |
 | `core/nld/flow/quality/sql_measures.py` | Measure kinds + portable aggregate query builder |
 | `core/nld/flow/task/data_flow_task.py` | Lifecycle hooks (`get_data_quality_context`, baseline, `run_data_quality_checks`) |
 | `core/nld/flow/exceptions.py` | `DataQualityBlockingViolationException` |

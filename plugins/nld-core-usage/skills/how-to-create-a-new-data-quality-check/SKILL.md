@@ -42,6 +42,12 @@ Rules never issue SQL themselves: they declare `QualityMeasure` entries
 (kind + column + params) and read the measured values back by alias, so
 a rule is engine-agnostic by construction.
 
+The `context` passed to both methods carries the target connector, the
+qualified table path, and the pre-write `baseline_row_count` when the
+rule declared `requires_baseline`. Rules read measured values, not the
+target metadata: everything else about the target comes from the flow
+definition, not from the context.
+
 Available measure kinds: `ROW_COUNT`, `NON_NULL_COUNT`, `DISTINCT_COUNT`,
 `MIN_VALUE`, `MAX_VALUE`, `BELOW_THRESHOLD_COUNT`,
 `ABOVE_THRESHOLD_COUNT`, `EMPTY_STRING_COUNT`, `NOT_IN_SET_COUNT`.
@@ -68,6 +74,7 @@ from nld.flow.quality import (
     DataQualityRule,
     QualityMeasure,
     QualityMeasureKinds,
+    resolve_binary_check_status,
 )
 from nld.flow.quality.sql_measures import (
     build_max_value_alias,
@@ -140,10 +147,10 @@ class ColumnPercentageRangeRule(DataQualityRule):
         above_count = int(measures.get(_build_above_range_alias(column)) or 0)
         violations = below_count + above_count
 
-        passed = violations == 0
+        is_valid = violations == 0
         message = (
             None
-            if passed
+            if is_valid
             else (
                 f"{violations} value(s) outside "
                 f"[{PERCENTAGE_RANGE_MIN}, {PERCENTAGE_RANGE_MAX}]"
@@ -153,9 +160,9 @@ class ColumnPercentageRangeRule(DataQualityRule):
             column=column,
             message=message,
             observed=f"{min_observed} → {max_observed}",
-            passed=passed,
             rule=self.name,
             severity=check.severity,
+            status=resolve_binary_check_status(is_valid=is_valid),
             violation_count=violations,
         )
 ```
@@ -189,6 +196,18 @@ quality_checks:
 
 ## Result Conventions
 
+- `status` is what the rule found, on three levels — `VALID`, `WARNING`,
+  `ERROR`. A binary rule maps its boolean through
+  `resolve_binary_check_status(is_valid=…)`, which never yields the
+  intermediate level. Report `DataQualityCheckStatus.WARNING` explicitly
+  only when the rule can distinguish a degraded result from a broken one
+  (e.g. inside a tolerance band): a `warning` status records a WARNING
+  step and never fails the execution, whatever severity the check
+  declares.
+- Never read `check.severity` to decide the status. The severity is the
+  *declared* escalation level and is passed through untouched; the flow
+  combines it with the status on its own (`is_step_failure`,
+  `is_blocking`).
 - Set `violation_count` to the number of rows not matching the check —
   it is persisted with the step and rendered as `violations=N`.
 - Do not repeat the column name in the message (it is in the step name)
@@ -196,8 +215,9 @@ quality_checks:
 - Set `expected` only when it carries run-specific information the rule
   name does not imply (a configured threshold, an allowed set, a
   baseline).
-- Report an unevaluable check as `passed=True, skipped=True` with the
-  skip reason in `message` — never fail a run for missing inputs.
+- Report an unevaluable check as `status=DataQualityCheckStatus.VALID,
+  skipped=True` with the skip reason in `message` — never fail a run for
+  missing inputs.
 
 ## Testing
 

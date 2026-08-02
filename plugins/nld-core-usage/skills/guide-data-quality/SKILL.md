@@ -5,7 +5,8 @@ description: >
   post-write quality step of the flow execution lifecycle, the flow-level
   `quality_checks` YAML block, the six built-in rules (row_count_growth,
   column_not_empty, column_min_value, column_unique, column_freshness,
-  value_in_set), the warning/error/blocking severity escalation, result
+  value_in_set), the valid/warning/error result status and its escalation
+  through the declared warning/error/blocking severity, result
   persistence as DATA_QUALITY execution steps, the single-scan
   engine-portable measurement query, and the `additional_quality_rules`
   extension point.
@@ -25,8 +26,9 @@ Activate this guide when the agent is working on:
 - The `quality_checks` block of a flow definition YAML
 - The data quality lifecycle hooks on `DataFlowTask`
   (`get_data_quality_context`, baseline capture, `run_data_quality_checks`)
-- Check severities and their execution outcomes (`warning`, `error`,
-  `blocking`) or `DataQualityBlockingViolationException`
+- Check result statuses (`valid`, `warning`, `error`), the declared
+  severities they escalate through (`warning`, `error`, `blocking`), or
+  `DataQualityBlockingViolationException`
 - The `DATA_QUALITY` steps shown by `nld flow state execution get-steps`
 - Registering external rules through `additional_quality_rules`
 
@@ -49,7 +51,7 @@ project-local path. If not found, read the bundled copy.
 | Where the step runs in `task.run()` | "1. Lifecycle placement" |
 | The `quality_checks` YAML block and shorthands | "2. Configuration — flow level only" |
 | Built-in rules and their params | "3. Built-in rules" |
-| Severity escalation and execution outcomes | "4. Severities and outcomes" |
+| Result status, severity escalation and outcomes | "4. Status, severity and outcomes" |
 | Step payload shape and CLI display | "5. Result recording and display" |
 | Portable measurement SQL and measure kinds | "6. Measurement — one scan, engine-portable" |
 | External rule registration | "7. Extensibility" |
@@ -59,11 +61,18 @@ project-local path. If not found, read the bundled copy.
 - **Flow-level configuration only.** No check runs without a
   `quality_checks` block on the flow definition: there are no derived
   defaults and no project- or namespace-level check configuration.
-- **Only `blocking` fails the execution.** `warning` and `error`
-  violations complete the run with the `WARNING` status (WARNING and
-  FAILED step respectively); a `blocking` violation raises
-  `DataQualityBlockingViolationException` after every check result is
-  recorded, marking the execution FAILED and leaving the incremental
+- **Status and severity are orthogonal.** The result `status` is what the
+  rule found (`valid` | `warning` | `error`, most rules being binary and
+  emitting only the first and last); the declared `severity` is how far a
+  non-valid status escalates. A `warning` status never fails a step
+  whatever the severity — a rule that qualifies its own finding is never
+  escalated. Read the combination off `is_valid`, `is_step_failure` and
+  `is_blocking` rather than recomposing it.
+- **Only `blocking` fails the execution.** The `warning` and `error`
+  severities complete the run with the `WARNING` status (WARNING and
+  FAILED step respectively); an `error` status on a `blocking` check
+  raises `DataQualityBlockingViolationException` after every check result
+  is recorded, marking the execution FAILED and leaving the incremental
   state untouched.
 - **Payloads live in step metadata.** Check results are persisted in the
   step `metadata` dict under the `DATA_QUALITY` category — never as new
