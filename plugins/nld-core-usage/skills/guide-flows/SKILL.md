@@ -4,7 +4,7 @@ description: >
   Architectural guide for the nld-core flow system — SQLFlowTask and DataFlowTask
   lifecycle, write strategies (OVERWRITE, VIEW, INSERT, UPSERT, DELETE_INSERT,
   UPSERT_LOGICAL_DELETE), SQL execution, query automation, incremental filtering,
-  and the flow dependency graph.
+  post-write data quality checks, and the flow dependency graph.
 user-invocable: false
 ---
 
@@ -121,6 +121,8 @@ secondary), see `state_backend_connector` in §8.3 of
 
 - For incremental processing and state management within flows, see the
   `guide-incremental` skill.
+- For the post-write data quality checks (the `quality_checks` block,
+  severities, DATA_QUALITY steps), see the `guide-data-quality` skill.
 - For structure targets referenced by flows, see the `guide-structures` skill.
 - For the deployment system as a whole (drift model, change files, impact
   analysis, metadata backend) see the `guide-deployment` skill; for the
