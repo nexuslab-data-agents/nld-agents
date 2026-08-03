@@ -8,8 +8,8 @@
     {
       "name": "nld-core-usage",
       "source": "./plugins/nld-core-usage",
-      "description": "Architectural and how-to skills for using the nld-core library — base model, entity registry, project & execution context, project catalog (multi-project), connections, structures, structure models (inter-layer lineage), structure audits (per-structure data-analysis audits), flows, incremental processing, business dictionary, governance/ownership (structure & flow owners), environment-aware flow scheduling, execution/incremental info accessors, and the incremental-strategy decision guide.",
-      "version": "0.8.0",
+      "description": "Architectural and how-to skills for using the nld-core library — base model, entity registry, project & execution context, project catalog (multi-project), connections, structures, structure models (inter-layer lineage), structure audits (per-structure data-analysis audits), flows, incremental processing, data quality checks, business dictionary, governance/ownership (structure & flow owners), environment-aware flow scheduling, execution/incremental info accessors, and the incremental-strategy decision guide.",
+      "version": "0.8.2",
       "author": {
         "name": "NexusLab Data"
       }

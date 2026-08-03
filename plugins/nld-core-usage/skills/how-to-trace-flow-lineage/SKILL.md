@@ -71,6 +71,7 @@ Consequences:
 ```
 nld flow deps [--structure-name <s> | --flow-name <f>] [--namespace <ns>]
               [--upstream] [--downstream] [--format json|mermaid]
+              [--override-output-folder-path <dir>]
 ```
 
 | Option | Purpose |
@@ -81,6 +82,7 @@ nld flow deps [--structure-name <s> | --flow-name <f>] [--namespace <ns>]
 | `--upstream` | Keep only the **upstream** lineage of the focus node (its sources). |
 | `--downstream` | Keep only the **downstream** lineage (its consumers). |
 | `--format json\|mermaid` | Output format. `json` (default) for machine reading; `mermaid` for a diagram. |
+| `--override-output-folder-path <dir>` | Write the graph file into this folder instead of a timestamped folder under `output/`. Gives programmatic callers a deterministic path. |
 
 Direction rules:
 
@@ -93,6 +95,9 @@ Direction rules:
 Output: the command **writes a file** to a timestamped folder under `output/`
 (`output/<timestamp>/flow_dependency_graph.json` or `.mmd`) and logs the exact
 path. There is no stdout dump — open the written file to read the graph.
+Pass `--override-output-folder-path <dir>` to choose the folder yourself
+(the file name stays fixed) — useful when a script consumes the graph and
+must not parse the logged path or glob for the newest folder.
 
 ---
 

@@ -9,11 +9,11 @@ by the flow's `state_backend_connector` and a processing engine:
 - **Incremental (state) backend**
   (`core/nld/flow/incremental/impl/<strategy>/backend/`) — stores the
   incremental processing state and post-processing state for the flow's
-  incremental strategy (`by_key`, `by_source_tst`, `no_increment`), and
+  incremental type (`by_key`, `by_source_tst`, `no_increment`), and
   the planned-state slot.
 
 This area documents, per connector, which commands each backend
-supports. For the same matrix organised by incremental strategy, see
+supports. For the same matrix organised by incremental type, see
 [`../incremental/`](../incremental/README.md). For the architecture
 behind these backends, see
 [`../execution-and-incremental-design.md`](../execution-and-incremental-design.md).
@@ -103,8 +103,8 @@ JSON column) and rehydrate them on read.
 `compute` (preview) resolves the next run's processing state in memory
 from `retrieve_current_state`, so it is available wherever the flow
 runs. `get-state` needs the `read_processing_state` /
-`read_post_processing_state` accessors; for `by_source_tst` they are
-implemented on PostgreSQL and Snowflake, and for `by_key` on PostgreSQL.
+`read_post_processing_state` accessors; for `by_source_tst` and
+`by_key` they are implemented on PostgreSQL and Snowflake.
 `compute --persist` needs the planned-state write surface, gated on
 both `FlowIncrementalDefinition.supports_planned_state` (strategy
 layer; `by_key` and `by_source_tst` opt in) and
@@ -112,11 +112,11 @@ layer; `by_key` and `by_source_tst` opt in) and
 layer; `PostgreSQLIncrementalBackendMixin`,
 `SnowflakeIncrementalBackendMixin`, and `S3IncrementalBackendMixin`
 opt in). `get-planned` and
-`nld flow execute --planned-state-strategy` /
+`nld flow execute --planned-state-policy` /
 `--state-compute-only` read or write the same slot, so they share the
 `compute --persist` column.
 
-| Strategy | Connector / engine | Flow execution | `get-state` | `compute` | `compute --persist` |
+| Type | Connector / engine | Flow execution | `get-state` | `compute` | `compute --persist` |
 |----------|--------------------|:--------------:|:-----------:|:---------:|:-------------------:|
 | `by_key` | `postgresql` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
 | `by_key` | `bigquery` / `pydantic` | ✅ | ❌ | ✅ | ❌ |
@@ -125,6 +125,7 @@ opt in). `get-planned` and
 | `by_key` | `local` / `duckdb` | ✅ | ❌ | ✅ | ❌ |
 | `by_key` | `s3_blob_storage` / `pydantic` | ✅ | ❌ | ✅ | ✅ |
 | `by_key` | `s3_blob_storage` / `duckdb` | ✅ | ❌ | ✅ | ✅ |
+| `by_key` | `snowflake` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
 | `by_source_tst` | `postgresql` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
 | `by_source_tst` | `bigquery` / `pydantic` | ✅ | ❌ | ✅ | ❌ |
 | `by_source_tst` | `snowflake` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
@@ -132,7 +133,7 @@ opt in). `get-planned` and
 | `by_source_tst` | `local` / `pydantic` | ✅ | ❌ | ✅ | ❌ |
 | `no_increment` | any / `pydantic`, `duckdb` | ✅ (no-op) | ❌ | ✅ (empty) | — |
 
-`by_key` has no Snowflake backend; `by_source_tst` has no S3 backend and
+`by_source_tst` has no S3 backend and
 no DuckDB-engine backend. `no_increment` is a connector-agnostic
 pass-through: it persists no state, so `get-state` has nothing to read
 and there is no planned-state slot.

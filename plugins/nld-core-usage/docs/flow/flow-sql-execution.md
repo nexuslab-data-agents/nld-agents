@@ -220,7 +220,7 @@ params:
 - `params.target_schema`: the database schema where the table will be created
   (optional, resolved from the connector's `schema_name` credential when omitted)
 - `write_strategy`: the write strategy to use (default: `OVERWRITE`)
-- `incremental`: the incremental strategy name (e.g. `by_source_tst`, `by_key`).
+- `incremental`: the incremental type name (e.g. `by_source_tst`, `by_key`).
   When set, `SQLFlowTask` dynamically resolves the incremental logic and applies
   automatic WHERE clause filtering on the SQL query.
 - `predecessors.<name>.role`: `MASTER` or `SECONDARY`. When no role is set, the
@@ -370,9 +370,25 @@ Two field characterisations control which columns participate in the upsert:
 | `exclude_from_upsert_update` | No | No | Insert-only fields (e.g., `REC_INSERT_TST`) |
 | `exclude_from_upsert_match` | Yes | No | Updated but shouldn't trigger diff (e.g., `REC_LAST_UPDATE_TST`, `REC_SOURCE_EXTRACTION_TST`) |
 
-These characterisations are resolved in `_get_upsert_field_params()` and threaded
-through the connector's `upsert_from_query()` method via the `exclude_from_update`,
-`expression_overrides`, and `exclude_from_match` parameters.
+These characterisations are resolved by
+`nld/flow/utils/lifecycle_field_resolution.py` — the single source of
+truth for the record-lifecycle timestamp policy — and threaded through
+the connector's `upsert_from_query()` method via the
+`exclude_from_update`, `expression_overrides`, and `exclude_from_match`
+parameters. `resolve_upsert_field_params()` excludes the
+`rec_insert_tst` field (`ts_inserted_at`) from `UPDATE SET`
+(insert-only) and overrides the `rec_last_update_tst` field
+(`ts_updated_at`) with `CURRENT_TIMESTAMP` on update.
+
+The seed write strategies (bulk `VALUES` insert of a seed CSV) share
+the same policy module: on insert the technical tracking timestamp
+columns — absent from the CSV — are populated with `CURRENT_TIMESTAMP`,
+and on UPSERT `ts_inserted_at` stays out of `UPDATE SET` while
+`ts_updated_at` refreshes, with change-detection honoured via
+`exclude_from_upsert_match`. The characterisation-aware bulk-insert
+path is implemented for PostgreSQL and DuckDB (shared sqlglot builder);
+Snowflake and BigQuery accept the parameters for signature
+compatibility only.
 
 Requires: `target_structure` with a primary key defined.
 
@@ -387,6 +403,11 @@ DELETE FROM schema.table WHERE (pk_col) IN (SELECT pk_col FROM (SELECT ...) AS _
 INSERT INTO schema.table (col1, col2, ...) SELECT ...;
 ```
 
+The delete form is engine-specific with matching semantics for non-NULL
+keys: PostgreSQL uses the tuple-`IN` shown above, BigQuery a correlated
+`EXISTS`, and Snowflake a `DELETE ... USING` join — Snowflake's
+documented idiom for key-based deletes.
+
 Requires: `target_structure` with a primary key defined.
 
 ### 3.7 UPSERT_LOGICAL_DELETE
@@ -398,6 +419,13 @@ deleted by setting the deletion flag column to `TRUE`. The deletion flag
 column is resolved dynamically from the target structure using the
 `rec_deletion_flag` field characterisation.
 
+The logical-delete step is delegated to the connector's
+`mark_absent_rows_deleted` method — the strategy layer holds no raw
+SQL. The connector's DML builder renders an engine-portable
+`NOT EXISTS` UPDATE (a multi-column tuple `NOT IN` is unsupported
+against a subquery on BigQuery), guarded so already-flagged rows are
+skipped and reruns do not rewrite the whole table:
+
 ```sql
 -- Step 1: Upsert with change detection (same as UPSERT strategy)
 INSERT INTO schema.table (col1, col2, ...)
@@ -405,10 +433,20 @@ SELECT ...
 ON CONFLICT (pk_col) DO UPDATE SET col2 = EXCLUDED.col2, ...
 WHERE (table.col2 IS DISTINCT FROM EXCLUDED.col2 OR ...);
 
--- Step 2: Mark absent rows as deleted
+-- Step 2: Mark absent rows as deleted (mark_absent_rows_deleted)
 UPDATE schema.table SET <deletion_flag_column> = TRUE
-WHERE (pk_col) NOT IN (SELECT pk_col FROM (SELECT ...) AS _src);
+WHERE COALESCE(<deletion_flag_column>, FALSE) = FALSE
+AND NOT EXISTS (
+  SELECT 1 FROM (SELECT ...) AS _src
+  WHERE _src.pk_col = schema.table.pk_col
+);
 ```
+
+The already-flagged guard is spelled `COALESCE(flag, FALSE) = FALSE`
+rather than `IS NOT TRUE` because Snowflake has no `IS [NOT] TRUE`
+predicate. Identifiers stay unquoted by default (suits PostgreSQL and
+Snowflake); BigQuery overrides the builder to backtick-quote all
+identifiers.
 
 Requires: `target_structure` with a primary key defined and exactly one field with
 the `rec_deletion_flag` characterisation.
@@ -431,7 +469,7 @@ The connector methods used by the strategies are defined on `SQLDataConnector`:
 | `create_or_replace_view` | VIEW | Create or replace a view |
 | `upsert_from_query` | UPSERT, UPSERT_LOGICAL_DELETE | Insert or update from SELECT |
 | `delete_from_query` | DELETE_INSERT | Delete matching keys from subquery |
-| `execute_query` | UPSERT_LOGICAL_DELETE | Execute raw SQL for logical delete |
+| `mark_absent_rows_deleted` | UPSERT_LOGICAL_DELETE | Flag target rows absent from the query as logically deleted |
 
 ---
 
@@ -504,7 +542,7 @@ mandatory-key checks before constructing the task:
 - `self._check_incremental_init_params(init_params)` — covers
   mandatory params from the resolved incremental logic.
 
-When adding a new CLI flag for an incremental strategy, register it in **both**:
+When adding a new CLI flag for an incremental type, register it in **both**:
 - the strategy's `param_definitions` list (e.g. `BY_SOURCE_TST_INCREMENTAL_DEFINITION` in
   `nld/flow/incremental/impl/by_source_tst/logic.py`), and
 - the Click option in `nld/cli/flow/params_flow.py` plus the command decorator
@@ -528,12 +566,16 @@ on multiple source tables in a single query.
 | Incremental | Loading Strategy | Filter Applied |
 |-------------|-----------------|----------------|
 | `no_increment` | FULL | None |
-| `by_source_tst` | FULL | None |
+| `by_source_tst` | FULL | None (the window's lower bound is dropped) |
 | `by_source_tst` | DELTA | `master.tst_col >= start AND master.tst_col < end` |
-| `by_source_tst` | BACKFILL | Same as DELTA |
+| `by_source_tst` | BACKFILL / BACKFILL_DELTA | Same predicate shape as DELTA, over the window the strategy resolved |
 | `by_key` | FULL | None |
 | `by_key` | DELTA | `master.key_field IN ('key1', 'key2', ...)` |
-| `by_key` | BACKFILL | Same as DELTA |
+| `by_key` | BACKFILL / BACKFILL_DELTA | Same predicate shape as DELTA, over the keys the strategy selected |
+
+The filter shape is per incremental type, and so is the *window or key
+set* it is built from — each type resolves its own selection from its own
+runtime params (see `execution-and-incremental-design.md` §2.4.1).
 
 For `by_source_tst`, the timestamp column is resolved from each MASTER predecessor
 structure's `REC_LAST_UPDATE_TST` characterised field. The start and end timestamps
@@ -595,29 +637,37 @@ WHERE customers.customer_id IN ('cust_001', 'cust_002', 'cust_003')
 Execute an SQL flow from the project root:
 
 ```bash
-nld flow execute --flow-name customer_summary
+nld flow execute --name customer_summary
 ```
 
 With a namespace:
 
 ```bash
-nld flow execute --flow-name customer_summary --flow-namespace staging
+nld flow execute --name customer_summary --namespace staging
 ```
 
-With a specific strategy:
+Forcing a full run:
 
 ```bash
-nld flow execute --flow-name customer_summary --strategy FULL
+nld flow execute --name customer_summary --full
 ```
 
 **CLI Parameters:**
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `--flow-name` | Yes | Name of the flow to execute |
-| `--flow-namespace` | No | Dot-separated namespace (e.g. `staging`, `source.raw`) |
-| `--strategy` | No | Loading strategy (FULL, DELTA, BACKFILL). Available strategies depend on the `incremental` configuration. |
+| `--name` | No | Name of the flow to execute (with neither `--name` nor `--namespace`, every flow of the project runs in dependency order) |
+| `--namespace` | No | Dot-separated namespace (e.g. `staging`, `source.raw`) |
+| `--full` | No | Force the FULL loading strategy |
+| `--with-delta` | No | Delta modifier — read only by the incremental types that declare a rule for it (`by_key`); `by_source_tst` declares it but ignores it |
 | `--nld-root-folder-path` | No | Override the project root path |
+
+There is **no `--strategy` option**: the loading strategy is *resolved*
+from the runtime params the flow's incremental type declares
+(`--full`, `--keys`/`--limit` for `by_key`, `--pull-from`/`--pull-to`
+for `by_source_tst`). The type-specific params are passthrough arguments,
+not Click options, so they do not appear in `--help`. See
+`execution-and-incremental-design.md` §2.4.1 for the per-type rules.
 
 The `write_strategy` (write strategy) is configured as a top-level field in the flow
 definition YAML, not as a CLI parameter or flow parameter.
@@ -642,7 +692,7 @@ result = execute_data_flow(
 ### 6.1 High-Level Sequence
 
 ```
-CLI: nld flow execute --flow-name <name>
+CLI: nld flow execute --name <name>
  │
  ▼
 DataFlowExecutionTask.__init__()
@@ -737,8 +787,9 @@ and computes the processing state (e.g. timestamps for `by_source_tst`, keys for
 1. **Assert connection:** verifies the target connector has an open connection
 2. **Resolve SQL file:** finds the `.sql` file from the project entities structure
 3. **Load SQL content:** reads and validates the file is not empty
-4. **Apply incremental filter:** if the flow definition has an `incremental` strategy
-   and the loading strategy is `DELTA` or `BACKFILL`, the SQL query is modified using
+4. **Apply incremental filter:** if the flow definition has an `incremental` type
+   and the loading strategy bounds the selection (`DELTA`, `BACKFILL`,
+   `BACKFILL_DELTA`), the SQL query is modified using
    sqlglot to add a WHERE clause on the MASTER predecessor table(s). The filtering logic
    is delegated by `_apply_incremental_filter()` to the incremental state manager's
    `apply_sql_filter()` method, which obtains the strategy-specific `IncrementalSqlFilterManager`
@@ -763,9 +814,12 @@ and computes the processing state (e.g. timestamps for `by_source_tst`, keys for
 1. **`post_processing_for_state()`**: saves processing state and creates/saves
    post-processing state
 2. **`post_processing_for_execution()`**: updates and saves the global execution
-   state. Skipped on failure or for the UNIT strategy. For BACKFILL strategy,
-   the execution history is updated but the execution state record is left
-   unchanged so that the next regular run still sees the previous timestamps.
+   state. Skipped on failure. For BACKFILL, the execution history is updated
+   but the execution state record is left unchanged so that the next regular
+   run still sees the previous timestamps — this **execution**-state rule is
+   global (`FULL`, `DELTA`, `BACKFILL_DELTA` only). The **incremental**-state
+   advancement rule is separate and per type: `by_key` advances on all four
+   strategies, `by_source_tst` on all but `BACKFILL`.
 3. **`post_processing_at_end()`**: hook for custom cleanup (no-op by default)
 
 The execution status is set to `SUCCEEDED` or `FAILED` based on whether `run_flow()`
@@ -806,7 +860,7 @@ Dots in the namespace are converted to directory separators. The root namespace
 | `name` | `str` | Yes | Flow name (determines table name and SQL file name) |
 | `task` | `str` | Yes | Python class path (use `nld.flow.sql.SQLFlowTask`) |
 | `data_connectors` | `dict[str, str]` | Yes | Maps connector roles to connection names |
-| `incremental` | `str` | No | Incremental strategy name (e.g. `by_source_tst`, `by_key`). When set, enables automatic SQL query filtering based on the loading strategy. |
+| `incremental` | `str` | No | Incremental type name (e.g. `by_source_tst`, `by_key`). When set, enables automatic SQL query filtering based on the loading strategy. |
 | `predecessors` | `dict[str, DataFlowStructurePredecessor]` | No | Maps predecessor names to structure references. Used for incremental filtering. |
 | `predecessors.<name>.full_path` | `NldEntityReference[Structure]` | Yes | Dot-separated reference to the predecessor structure entity. |
 | `predecessors.<name>.role` | `str` | No | `MASTER` or `SECONDARY`. First predecessor defaults to MASTER when no role is set. |

@@ -41,6 +41,7 @@ project-local path. If not found, read the bundled copy.
 | Task | Section |
 |------|---------|
 | Writing a Structure YAML | "Structure Root Properties", "Field Definition" |
+| Defining a field directly from a field template | "Field From a Field Template", "Field Template Lineage" |
 | Understanding dynamic class resolution | "Structure Inheritance & Dynamic Class Resolution" |
 | Working with PostgreSQL-specific structures | "PostgreSQLStructure" |
 | Adding field characterisations | "Field Characterisations", "Standard Field Characterisation Definitions" |

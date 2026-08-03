@@ -5,6 +5,18 @@ state. State classes are empty. See the
 [incremental availability overview](./README.md) for the command axes
 and legend, and `guide-incremental` for the architecture.
 
+## Type rules
+
+Axes: anchor = none · source selection = none · dimension = none ·
+change detection = none.
+
+No runtime params are declared, every run resolves `FULL`, and
+`tracks_state=False` skips the state read and write entirely. Any
+incremental param passed on the command line (`--limit`, `--keys`,
+`--pull-from`, `--pull-to`, `--with-delta`) is dropped before it reaches
+the task. What happens to the target comes from the write strategy
+alone.
+
 ## Availability by engine
 
 `no_increment` has a single connector-agnostic backend implemented on

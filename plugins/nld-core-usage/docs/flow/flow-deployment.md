@@ -87,9 +87,16 @@ row appended, a stable `uid` minted. From then on the `deployment_id` chain
 records its `target_structure_hash` and the hashes of its declared
 predecessor structures.
 
-**Removal is safe:** a previously deployed flow absent from the current scope
-is `REMOVED` — recorded, nothing dropped, the target table survives. Cleanup
+**Removal is safe:** a previously deployed flow absent from the project is
+`REMOVED` — recorded, nothing dropped, the target table survives. Cleanup
 of the physical table is a deliberate manual step.
+
+The removal sweep runs only when the scope covers the full extent being
+compared: an unscoped deploy sees the whole project, and a `--namespace`
+deploy keeps it because the previously-deployed set is filtered by the same
+subtree rule. A deploy scoped by `--name` or `--upstream`/`--downstream`
+sees only a subset of the project, so the sweep is skipped — deployed flows
+outside the scope are not (wrongly) reported as `REMOVED`.
 
 ## 4. Scope expansion
 

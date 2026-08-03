@@ -40,7 +40,7 @@ user-invocable: true
   watermark holds, or what the next run *would* process if launched
   against the live source. Also use as a first step when debugging
   "why did the flow not pick up X?".
-- **Why**: The CLI resolves the flow's incremental strategy
+- **Why**: The CLI resolves the flow's incremental type
   automatically (`by_source_tst` / `by_key` / `no_increment`), targets
   the **primary** state backend, and emits schema-stable JSON. Reading
   the underlying tables/files directly works as a fallback but
@@ -102,7 +102,7 @@ nld flow state incremental get-state --name <flow> [--namespace <ns>]
 
 | Invocation | Payload |
 |------------|---------|
-| `get-state` (default) | The current authoritative `FlowState` (post-processing state) for the flow's incremental strategy — the value the next run reads as its starting point. `{}` when none exists. |
+| `get-state` (default) | The current authoritative `FlowState` (post-processing state) for the flow's incremental type — the value the next run reads as its starting point. `{}` when none exists. |
 | `get-state --processing-only` | The transient `FlowProcessingState` the most recent run left behind. `{}` when none exists. |
 
 `null` fields are stripped from every payload (`exclude_none=True`).
@@ -115,7 +115,7 @@ nld flow state incremental get-state --name <flow> [--namespace <ns>]
 > state object itself, not a `{"processing_state", "post_processing_state"}`
 > wrapper.
 
-The shape of the state depends on the flow's incremental strategy:
+The shape of the state depends on the flow's incremental type:
 
 - **`by_source_tst`** — current state is `BySourceTstState`:
   `last_pull_to_timestamp` (the watermark the next run resumes from).
@@ -321,7 +321,7 @@ the same backends that accept `--persist` back this listing.
 
 ### Consuming a plan from `nld flow execute`
 
-`nld flow execute --planned-state-strategy` selects how the next run
+`nld flow execute --planned-state-policy` selects how the next run
 treats a `PLANNED` plan in the slot. Choices:
 
 | Value | Behaviour |
@@ -378,7 +378,7 @@ when the CLI is unavailable.
 
 ### PostgreSQL (fully supported)
 
-Each incremental strategy stores both a current processing state and a
+Each incremental type stores both a current processing state and a
 post-processing state in two separate tables:
 
 | Strategy | Processing state table | Post-processing state table |
@@ -403,11 +403,11 @@ where flow_namespace = 'source.raw'
 
 ### Snowflake
 
-`by_source_tst` is fully supported: `read_processing_state` /
+`by_source_tst` and `by_key` are fully supported: `read_processing_state` /
 `read_post_processing_state` back `get-state`, and
 `SnowflakeIncrementalBackendMixin` opts into `supports_planned_state`,
 so `compute --persist` and `get-planned` work. The table names match
-the PostgreSQL section above. `by_key` has no Snowflake backend.
+the PostgreSQL section above.
 
 ### BigQuery / DuckDB
 
@@ -503,7 +503,7 @@ read/write semantics table.
   Backend (Primary + Optional Secondary)" — what mirrors and what
   doesn't — and §4.5 "Planned-state slot" — strategy/backend opt-in,
   per-strategy freshness, storage layout, and the
-  `--planned-state-strategy` interaction.
+  `--planned-state-policy` interaction.
 - For execution state (separate from incremental state):
   `how-to-get-execution-info`.
 - For choosing or configuring an incremental type for a *new* flow:

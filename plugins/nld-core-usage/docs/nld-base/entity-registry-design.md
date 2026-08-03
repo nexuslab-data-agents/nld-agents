@@ -126,7 +126,7 @@ type. This is the primary interface used by application code to access entities.
 | `field_template` | `FieldTemplate` | `templates/field_template` | parents | Structure Configuration |
 | `structure_adapter` | `StructureAdapter` | `templates/structure_adapter` | parents | Structure Configuration |
 | `flows` | `DataFlowDefinition` | `flows` | children | Data Flow |
-| `scheduling` | `FlowScheduling` | `scheduling` | children | Data Flow |
+| `scheduling` | `FlowTask` | `scheduling` | children | Data Flow |
 | `business_dictionary` | `BusinessDictionary` | `business/dictionary` | parents | Vocabulary |
 | `structure_owner` | `StructureOwner` | `governance/structure` | parents | Governance |
 | `flow_owner` | `FlowOwner` | `governance/flow` | parents | Governance |
@@ -154,7 +154,7 @@ Type-specific subclasses of `NldNamespacedBaseModelWrapper` that provide strong 
 for entity retrieval results — e.g. `NamespacedOrganisation` (wraps `Organisation`),
 `NamespacedField`, `NamespacedFieldAdapter`, `NamespacedFieldTemplate`,
 `NamespacedStructureAdapter`, `NamespacedStructure`, `NamespacedDataFlowDefinition`,
-and the equivalents for the newer entities (`NamespacedFlowSchedulingModel`,
+and the equivalents for the newer entities (`NamespacedFlowTaskModel`,
 `NamespacedStructureOwner`, `NamespacedFlowOwner`).
 
 ---

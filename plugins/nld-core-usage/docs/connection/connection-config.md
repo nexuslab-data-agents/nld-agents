@@ -344,9 +344,9 @@ surface the implicit default alongside named profiles.
 `--profile-name` selects the profile on the subcommands that open a
 connector:
 
-- `nld connection debug`, `nld connection export-env-var`, and
-  `nld connection get-structure` open the named connection under the
-  selected profile.
+- `nld connection debug`, `nld connection export-env-var`,
+  `nld connection get-structure`, and `nld connection export-query-csv`
+  open the named connection under the selected profile.
 - `nld flow state` read subcommands (`execution get-state`,
   `execution get-history`, `execution get-steps`,
   `incremental get-state`, `incremental get-planned`) select the
@@ -355,6 +355,32 @@ connector:
 Omitting the flag uses the default profile. `nld connection list` takes
 no `--profile-name`; it reports each connection's selectable profiles
 via `get_available_profile_names()`.
+
+### Exporting Query Results to CSV
+
+`nld connection export-query-csv` executes a read-only SELECT against a
+named connection and writes the result to a CSV file:
+
+```bash
+nld connection export-query-csv --connection-name my_conn \
+    --query "SELECT * FROM users" --output-file users.csv
+
+nld connection export-query-csv --connection-name my_conn \
+    --query-file users.sql --delimiter ";"
+```
+
+The query is passed inline (`--query`) or read from a `.sql` file
+(`--query-file`); `--output-file` defaults to `query_result.csv`,
+`--delimiter` to a comma, and `--no-header` suppresses the header row.
+Only SELECT (or WITH) statements are accepted — statement type is
+checked via the sqlglot utils (`assert_select_query`), so the command
+cannot mutate the connected database.
+
+The command is backed by `export_query_to_csv` on the connector base —
+an abstract method each connector implements with its native export
+path for efficiency: psycopg2 `COPY` for PostgreSQL, Arrow fetch for
+Snowflake, native `COPY TO` for DuckDB, and the client's
+`to_dataframe` materialization for BigQuery.
 
 ## Testing
 

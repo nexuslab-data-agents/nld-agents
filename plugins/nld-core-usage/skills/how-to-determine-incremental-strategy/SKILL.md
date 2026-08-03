@@ -1,12 +1,12 @@
 ---
 name: determine-incremental-strategy
-description: Determine the correct incremental strategy (no_increment, by_source_tst, by_key) for a data flow, whether SQL-based or not. Walks through source characteristics, retry semantics, and deletion handling to recommend an incremental type, loading strategy, and IncrementalConfig.
+description: Determine the correct incremental type (no_increment, by_source_tst, by_key) for a data flow, whether SQL-based or not. Walks through source characteristics, retry semantics, and deletion handling to recommend an incremental type, loading strategy, and IncrementalConfig.
 user-invocable: true
 ---
 
-# Analysis: Determine Incremental Strategy
+# Analysis: Determine Incremental Type
 
-Recommend the correct incremental strategy for a data flow.
+Recommend the correct incremental type for a data flow.
 
 The repository supports three incremental types (`no_increment`,
 `by_source_tst`, `by_key`) and four loading strategies (`FULL`, `DELTA`,
@@ -14,6 +14,23 @@ The repository supports three incremental types (`no_increment`,
 either reprocessing the whole dataset on every run or silently missing
 records. This skill walks the analysis end-to-end and produces a concrete
 recommendation.
+
+The four strategy names are a shared vocabulary, **not** a shared
+contract: each incremental type defines its own parameter grammar, its
+own selection semantics per strategy, and its own rule for which
+strategies advance the persisted state. Always read the rules of the type
+you are recommending (Step 4) instead of generalising from another type.
+
+Two axes drive the choice and are easy to confuse:
+
+- **Source selection** — how the type selects at the source (no
+  selection / always full / partial, and on what basis). It follows from
+  the type's anchor: source-anchored types select partially on their
+  dimension, target-anchored types read the source in full.
+- **Source availability** — whether one read of the source presents its
+  complete extent (a table: yes; a rotating listing, a windowed API: no).
+  This characterises the *source*, not the type, and it is what decides
+  whether absence-based deletion and `OVERWRITE` are safe.
 
 ## Architectural Context
 
@@ -75,7 +92,7 @@ surrounding code, ask the user in **one** consolidated question:
 | Approximate volume per run and total dataset size | Decides whether full reload is acceptable. |
 | Does the source ever logically delete records, and must deletions propagate downstream? | Only `by_key` tracks logical deletion (`tracks_logical_deletion`). |
 | Are per-item retries needed (one bad key should not block the others)? | Argues for `by_key`. |
-| Does the user need backfill semantics (re-run a specific date / key range)? | `by_key` supports `BACKFILL` and `BACKFILL_DELTA`; `by_source_tst` supports only `FULL` / `DELTA`. |
+| Does the user need backfill semantics (re-run a specific date / key range)? | Both stateful types support all four loading strategies, with **different rules**: `by_key` backfills a key selection (`--keys` / `--limit`) and records each outcome in state; `by_source_tst` backfills an explicit `[--pull-from, --pull-to]` window and deliberately leaves the watermark untouched. See Step 4. |
 | Backend in use (s3_blob_storage, postgresql, local) and engine (pydantic, duckdb) | Not all incremental + backend + engine combinations exist. See `guide-incremental` section 2.7. |
 
 ### Step 3: Apply the decision tree
@@ -111,7 +128,10 @@ Walk the following decision tree in order. Stop at the first matching rule.
      for non-SQL flows the `run_flow()` must use them.
    - Per-key retry and logical deletion are **not** required.
 
-   Note: `by_source_tst` only supports `FULL` and `DELTA` strategies.
+   Note: `by_source_tst` supports all four loading strategies. Its
+   `BACKFILL` is a fixed `[--pull-from, --pull-to]` window replay that
+   does **not** move the watermark; `BACKFILL_DELTA` (`--pull-from`
+   alone) does.
 
 4. **Otherwise, escalate to the user.** Do not pick a strategy if the
    facts in Step 2 are inconsistent (e.g. a SQL flow over a source with
@@ -125,12 +145,18 @@ the chosen incremental type:
 
 | Incremental type | Default strategy | Notes |
 |------------------|------------------|-------|
-| `no_increment`   | `FULL`           | Only strategy that makes sense. |
-| `by_source_tst`  | `DELTA`          | Use `FULL` only for the very first run or full refresh. |
-| `by_key`         | `DELTA`          | `BACKFILL` / `BACKFILL_DELTA` are operator-triggered for replays. |
+| `no_increment`   | `FULL`           | Only strategy that makes sense; no params are declared. |
+| `by_source_tst`  | `DELTA`          | Use `FULL` only for the very first run or full refresh. `BACKFILL` (`--pull-from` + `--pull-to`) replays a window **without** moving the watermark; `BACKFILL_DELTA` (`--pull-from` alone) moves it. `--with-delta` is declared but never read. |
+| `by_key`         | `DELTA`          | `BACKFILL` (`--keys` / `--limit`) and `BACKFILL_DELTA` (same + `--with-delta`) are operator-triggered replays; **all four** strategies advance the per-key state. `--full` + `--with-delta` raises. |
+
+**The rules above are per type, not global.** Never carry a rule from one
+incremental type to another when advising the user — check the type's own
+page under `docs/flow/incremental/`, or §2.4.1 of
+`execution-and-incremental-design.md`.
 
 If the user already mentioned needing backfills, also call out the
-relevant CLI flags (`--full`, `--keys`, `--limit`).
+relevant CLI flags (`--full`, `--keys`, `--limit`, `--pull-from`,
+`--pull-to`) — and which of them exist for the chosen type.
 
 ### Step 5: Recommend `IncrementalConfig` settings
 
@@ -139,7 +165,7 @@ defaults are usually right; only diverge when there is a clear reason.
 
 | Property | Default | Recommend changing when |
 |----------|---------|--------------------------|
-| `strategy` | (required) | Must match the type chosen in Step 3. |
+| `type` | (required) | Must match the type chosen in Step 3. |
 | `persist_initial_processing_state` | `True` | Disable only for very small / very fast flows where the extra write is wasteful. |
 | `immediate_step_persistence` | `True` | Disable when the flow has many short steps and the per-step write cost dominates; accept that intermediate progress is lost on crash. |
 

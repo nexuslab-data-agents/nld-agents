@@ -61,6 +61,31 @@ Consult them when asked whether a backend supports `get-state`,
 
 ## Critical Rules
 
+### Loading-strategy rules belong to the incremental type, never to the framework
+
+`FULL` / `DELTA` / `BACKFILL` / `BACKFILL_DELTA` are a shared vocabulary,
+not a shared contract. Each type owns three rules — its parameter
+grammar (`resolve_strategy()`), what each strategy selects, and which
+strategies advance the persisted state — and the built-ins deliberately
+differ:
+
+| Rule | `by_key` | `by_source_tst` |
+|------|----------|-----------------|
+| `BACKFILL` from | `--keys` / `--limit` | `--pull-from` **and** `--pull-to` |
+| `BACKFILL_DELTA` from | `--keys`/`--limit` + `--with-delta` | `--pull-from` alone |
+| `--full` + `--with-delta` | raises `ValueError` | accepted, no effect (`--with-delta` is declared but never read) |
+| State advanced by | all four strategies | `FULL`, `DELTA`, `BACKFILL_DELTA` — **not** `BACKFILL` |
+
+Never "fix" one type to match another, and never state one of these rules
+as a general rule in code comments, error messages, or docs. When adding
+a type, define and publish its own rules table. Full details in
+`execution-and-incremental-design.md` §2.4.1 and the per-type pages under
+`docs/flow/incremental/`.
+
+The execution state has its own, genuinely global rule
+(`save_execution_state()` runs for `FULL`, `DELTA`, `BACKFILL_DELTA`);
+do not confuse it with the per-type incremental-state rule above.
+
 ### CLI parameters must be registered on the strategy definition
 
 CLI flags such as `--full`, `--with-delta`, `--pull-from`, `--pull-to` only
@@ -94,14 +119,14 @@ strategy support on `by_key` and `by_source_tst`; the
 and `S3IncrementalBackendMixin` set backend support so every backend
 built on them inherits it. A
 flow recomputes the processing state whenever either layer is off,
-regardless of the `--planned-state-strategy` value on
+regardless of the `--planned-state-policy` value on
 `nld flow execute`.
 
 Plan-capable strategies that need a baseline-aware freshness check
 override `IncrementalStateManager.is_planned_processing_state_fresh`;
 the base returns `True` for strategies with explicit windows. See
 `execution-and-incremental-design.md` §4.5 for the per-strategy
-overrides and the `nld flow execute --planned-state-strategy`
+overrides and the `nld flow execute --planned-state-policy`
 interaction.
 
 ## Module Layout
@@ -109,7 +134,7 @@ interaction.
 ```
 core/nld/flow/incremental/
 ├── models/                              # leaf layer: data/definition models
-│   ├── state.py                         # FlowState, FlowSourceState, FlowProcessingState; FlowStatePlan, FlowPlannedProcessingState, FlowPlannedProcessingDetailledState
+│   ├── state.py                         # FlowState, FlowSourceState, FlowProcessingState; FlowStatePlan, FlowPlannedProcessingState, FlowPlannedProcessingDetailedState
 │   ├── logic.py                         # FlowIncrementalLogic, FlowIncrementalDefinition, param defs
 │   ├── config.py                        # IncrementalConfig
 │   ├── events.py

@@ -1,9 +1,32 @@
 # by_source_tst — backend availability
 
-Timestamp-window incremental strategy. State models: `BySourceTstState`
+Timestamp-window incremental type. State models: `BySourceTstState`
 (holds `last_pull_to_timestamp`), `BySourceTstProcessingState`. See the
 [incremental availability overview](./README.md) for the command axes
 and legend, and `guide-incremental` for the architecture.
+
+## Type rules
+
+Axes: anchor = source · source selection = partial, by extraction
+timestamp · dimension = time window · change detection = the technical
+extraction timestamp.
+
+| Rule | `by_source_tst` |
+|------|-----------------|
+| Params declared | `--full`, `--pull-from`, `--pull-to`, `--with-delta` (**never read**) |
+| `FULL` | `--full` — window `[None, now]`, the filter drops the lower bound |
+| `DELTA` | no params — `[watermark, now]` |
+| `BACKFILL` | `--pull-from` **and** `--pull-to` — that fixed window |
+| `BACKFILL_DELTA` | `--pull-from` alone — `[from, now]` |
+| Ignored | `--pull-from` / `--pull-to` under `FULL` / `DELTA` (logged as `IncrementalParameterIgnored`); `--with-delta` always |
+| State advancement | `FULL`, `DELTA`, `BACKFILL_DELTA` advance `last_pull_to_timestamp`; **`BACKFILL` does not** |
+
+Two rules are specific to this type and do not generalise:
+
+- Replaying an explicit `[pull_from, pull_to]` window deliberately leaves
+  the watermark untouched (`by_key` records replayed keys instead).
+- `--full` combined with `--with-delta` is accepted here and has no
+  effect; on `by_key` the same combination raises.
 
 ## Availability by connector / engine
 
@@ -45,7 +68,7 @@ Backend modules live under
   plans require that condition *and* equality between the plan's
   `pull_from_timestamp` and the baseline watermark, because DELTA
   derives its window from it. A `None` baseline (first run) treats
-  every plan as fresh. `--planned-state-strategy strict` raises
+  every plan as fresh. `--planned-state-policy strict` raises
   `StalePlannedStateException` when the check fails.
 
 For the connector-by-connector view, see

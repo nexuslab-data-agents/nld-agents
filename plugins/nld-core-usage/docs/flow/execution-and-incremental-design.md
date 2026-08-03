@@ -152,7 +152,7 @@ sequenceDiagram
         Note right of Task: get_incremental_state()<br/>Skipped entirely when<br/>tracks_state = False.
 
         alt tracks_state = True
-            alt supports_planned_state AND backend_supports_planned_state<br/>AND --planned-state-strategy ≠ RECOMPUTE
+            alt supports_planned_state AND backend_supports_planned_state<br/>AND --planned-state-policy ≠ RECOMPUTE
                 Task->>StateManager: get_planned_processing_state()
                 StateManager->>Incr: get_planned_processing_state()
                 Incr->>IncrBE: read_state_plan + read_planned_processing_state
@@ -291,7 +291,7 @@ sequenceDiagram
   matching `supports_planned_state` ClassVar on
   `IncrementalBackendStateManager`). When both are `True`,
   `get_incremental_state` consults the planned-state slot per
-  `--planned-state-strategy`; otherwise it always falls through to
+  `--planned-state-policy`; otherwise it always falls through to
   `compute_incremental_state`. A consumed plan is transitioned to
   `COMPLETED` in `post_processing_for_plan` after a successful run; a
   failed run leaves it `PLANNED` so the next run can retry it.
@@ -313,7 +313,7 @@ Manages different data loading strategies with a pluggable architecture. Determi
 | `FlowIncrementalLogic` | Links definition, parameters, and logic together |
 | `IncrementalStateManager` | Abstract state manager handling four state objects; holds an optional `secondary_incremental_state_backend_manager` that mirrors processing-state writes (post-processing state stays primary-only) |
 | `IncrementalBackendStateManager` | Abstract interface for backend state persistence |
-| `IncrementalConfig` | YAML-level per-flow configuration with `strategy`, `persist_initial_processing_state`, and `immediate_step_persistence` |
+| `IncrementalConfig` | YAML-level per-flow configuration with `type`, `persist_initial_processing_state`, and `immediate_step_persistence` |
 
 #### Definition vs Config vs Parameters
 
@@ -322,7 +322,7 @@ These three classes serve distinct roles in the incremental architecture:
 | Class | Scope | Set by | When resolved | Purpose |
 |-------|-------|--------|---------------|---------|
 | `FlowIncrementalDefinition` | Per incremental **type** | Python code (class-level constant) | At import time | Declares the incremental type's capabilities: state classes, step activation flags, partial persistence support. Shared by all flows using the same incremental type. |
-| `IncrementalConfig` | Per **flow** | YAML flow definition | At flow definition load | Per-flow behavioral settings: which strategy to use, whether to persist initial state or steps immediately. Different flows using the same incremental type can have different configs. |
+| `IncrementalConfig` | Per **flow** | YAML flow definition | At flow definition load | Per-flow behavioral settings: which incremental type to use, whether to persist initial state or steps immediately. Different flows using the same incremental type can have different configs. |
 | `FlowIncrementalParams` | Per **execution** | CLI flags / runtime params | At task construction | Runtime parameters for a single execution: `--full` flag, backfill keys, limits. Resolved into a loading strategy (FULL, DELTA, BACKFILL). |
 
 **How they compose:**
@@ -345,7 +345,7 @@ At runtime:
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `strategy` | str | (required) | Loading strategy name (e.g., `by_key`, `by_source_tst`) |
+| `type` | str | (required) | Incremental type name (e.g., `by_key`, `by_source_tst`) |
 | `persist_initial_processing_state` | bool | `True` | When `True`, processing state is saved to backend immediately after determination |
 | `immediate_step_persistence` | bool | `True` | When `True`, each step is saved to backend immediately after completion. When `False`, steps are saved in a single batch at the end. |
 
@@ -392,7 +392,77 @@ in the type's own `state.py`, never in the generic renderer.
 | `BACKFILL` | Re-process specific keys or ranges |
 | `BACKFILL_DELTA` | Re-process with delta logic |
 
+#### 2.4.1 Loading-strategy rules are per incremental type
+
+The four names above are a shared vocabulary, **not** a shared contract.
+Each incremental type owns three rules, and they legitimately differ
+between types:
+
+1. **Parameter grammar** — which runtime params the type declares and how
+   `resolve_strategy()` maps them to a strategy, including the
+   combinations it rejects.
+2. **Selection semantics** — what each strategy selects for that type.
+3. **State advancement** — which strategies write the authoritative
+   incremental state at post-processing.
+
+Built-in rules:
+
+| Rule | `by_key` | `by_source_tst` | `no_increment` |
+|------|----------|-----------------|----------------|
+| Params declared | `--full`, `--keys`, `--limit`, `--with-delta` | `--full`, `--pull-from`, `--pull-to`, `--with-delta` (declared, **not read**) | none |
+| `FULL` triggered by | `--full` | `--full` | always |
+| `BACKFILL` triggered by | `--keys` and/or `--limit` | `--pull-from` **and** `--pull-to` | — |
+| `BACKFILL_DELTA` triggered by | `--keys`/`--limit` + `--with-delta` | `--pull-from` alone | — |
+| Default (no params) | `DELTA` | `DELTA` | `FULL` |
+| `--full` + `--with-delta` | raises `ValueError` (mutually exclusive) | accepted; `with_delta` has no effect | n/a |
+| State advanced by | `FULL`, `DELTA`, `BACKFILL`, `BACKFILL_DELTA` (**all four**) | `FULL`, `DELTA`, `BACKFILL_DELTA` — **not** `BACKFILL` | no state |
+
+The `BACKFILL` row is the one to remember: replaying an explicit
+`[pull_from, pull_to]` window on `by_source_tst` deliberately leaves the
+watermark untouched, while replaying keys on `by_key` deliberately
+records each key's outcome. Neither is a bug, and neither generalises.
+
+Note that the **execution** state (`ExecutionStateManager`, §5) has its
+own rule, applied to every type: `save_execution_state()` runs for
+`FULL`, `DELTA` and `BACKFILL_DELTA` only. It is independent of the
+incremental state-advancement rule above.
+
+An external incremental type publishes the same three rules for itself
+(see the `how-to-create-a-new-incremental-type` skill).
+
 ### 2.5 Incremental Types
+
+#### 2.5.0 Type axes
+
+A type is designed on axes first; its flat name is a label for a point in
+that space:
+
+| Axis | Question | Values |
+|------|----------|--------|
+| **Anchor** | which side drives the selection decision | source (`by_source_tst`, `by_key`), target, none (`no_increment`) |
+| **Source selection** | is a selection pushed down to the source, and on what basis | none / always-full / partial + basis (key, tst, scope, …) — derived from the anchor |
+| **Dimension** | the unit the type selects and remembers | key, time window, scope, — |
+| **Change detection** | what tells the type something changed | source key inventory, extraction timestamp, functional update timestamp, none |
+
+The anchor determines the source selection: a source-anchored type
+selects **partially**, on the basis of its dimension; a target-anchored
+type reads the source in **full** and decides target-side what to
+(re)load; `no_increment` has **no** selection concept. Pushing a computed
+window down to the source as a read optimisation does not change the
+anchor.
+
+Keep this axis distinct from **source availability** — whether one read
+of the source presents its complete extent (a table: yes; a rotating
+listing: no). Source selection is a property of the type's logic; source
+availability characterises the source content, and it is what decides
+whether absence-based deletion (`UPSERT_LOGICAL_DELETE`, logical-deletion
+tracking) and `OVERWRITE` are safe.
+
+`FlowIncrementalDefinition` declares two of these axes today —
+`source_selection` (`FlowSourceSelection`: `NO_SELECTION` for
+`no_increment`, `BY_KEY`, `BY_SOURCE_TST`) and `target_update_granularity`
+(`FlowTargetUpdateGranularity`: `GENERIC`, `BY_KEY`, `BY_DAY`). They are
+declarative metadata: no runtime logic reads them yet.
 
 #### 2.5.1 by_key
 
@@ -403,19 +473,21 @@ Tracks state at key-level granularity. Each key has its own status, timestamps, 
 | Status | Description |
 |--------|-------------|
 | `NOT_PROCESSED` | Key has never been processed |
-| `SUCCEEDED` | Key was successfully processed |
+| `SUCCEEDED` | Key was successfully processed (terminal for DELTA) |
 | `FAILED` | Key processing failed |
-| `DELETED` | Key was marked for deletion |
+| `DELETED` | Key once succeeded and the source later answered that it no longer exists |
+| `PERMANENTLY_EXCLUDED` | The source authoritatively answered that the key does not exist (terminal for DELTA; `FULL` and explicit `--keys` re-attempt it) |
 
 **Processing Statuses:**
 
 | Status | Description |
 |--------|-------------|
 | `TO_BE_PROCESSED` | Key will be processed in this run |
-| `EXCLUDED` | Key is excluded from processing |
-| `TO_BE_DELETED` | Key will be deleted |
+| `EXCLUDED` | Key is excluded from this run's selection (budget / keys filter); persisted state untouched |
+| `TO_BE_DELETED` | Declared for absence-based deletion; no consumer today |
 | `SUCCEEDED` | Processing completed successfully |
 | `FAILED` | Processing failed |
+| `PERMANENTLY_EXCLUDED` | The run established the source does not expose this key; persisted as `DELETED` if the key once succeeded, else `PERMANENTLY_EXCLUDED` |
 
 **Processing Logic:**
 
@@ -434,6 +506,22 @@ def update_processing_state(self):
         for key in source_state.keys:
             processing_state[key] = TO_BE_PROCESSED
 ```
+
+**Axes:** anchor = source · source selection = partial, by key ·
+dimension = key · change detection = source key inventory.
+
+**Type rules** (see §2.4.1): `--full` alone selects `FULL`;
+`--keys`/`--limit` select `BACKFILL`, and with `--with-delta`
+`BACKFILL_DELTA`; no params selects `DELTA`. `--full` combined with
+`--with-delta` raises a `ValueError` — for this type they are mutually
+exclusive. `BACKFILL` and `BACKFILL_DELTA` require at least one of
+`--keys` / `--limit`. Post-processing merges the per-key outcomes into
+the authoritative state for **all four** strategies, so a key replay
+does update that key's status.
+
+Keys are always selected from the **source inventory**: a key present in
+the state but absent from the inventory is never processed, not even by
+`FULL`.
 
 #### 2.5.2 by_source_tst
 
@@ -460,7 +548,30 @@ def update_processing_state(self):
         processing_state.pull_to_timestamp = current_datetime()
 ```
 
+**Axes:** anchor = source · source selection = partial, by extraction
+timestamp · dimension = time window · change detection = the technical
+extraction timestamp.
+
 **Supported Strategies:** `FULL`, `DELTA`, `BACKFILL`, `BACKFILL_DELTA`
+— all four, resolved as follows.
+
+**Type rules** (see §2.4.1): `--full` selects `FULL`; `--pull-from` *and*
+`--pull-to` select `BACKFILL` over the fixed window; `--pull-from` alone
+selects `BACKFILL_DELTA` (from that bound to now); no params selects
+`DELTA` from the persisted watermark. Under `FULL` / `DELTA` any
+`--pull-from` / `--pull-to` passed is ignored and logged as
+`IncrementalParameterIgnored`.
+
+Two rules specific to this type:
+
+- **`BACKFILL` does not advance the watermark.** Post-processing writes
+  `last_pull_to_timestamp` for `FULL`, `DELTA` and `BACKFILL_DELTA`
+  only — replaying an explicit window must not move the watermark.
+  (`by_key` advances state on all four; the rules are per type.)
+- **`--with-delta` is declared but never read** by
+  `BySourceTstFlowIncrementalParams.resolve_strategy()`: this type
+  expresses BACKFILL_DELTA with `--pull-from` alone. Passing it changes
+  nothing, and unlike `by_key` it does not conflict with `--full`.
 
 **CLI parameters:** `--full`, `--with-delta`, `--pull-from`, `--pull-to`. These
 are declared in `BY_SOURCE_TST_INCREMENTAL_DEFINITION.param_definitions`
@@ -472,6 +583,13 @@ and `resolve_strategy()` will fall back to `DELTA`.
 #### 2.5.3 no_increment
 
 Minimal implementation for full-load scenarios. Does not track historical state.
+
+**Axes:** anchor = none · source selection = none · dimension = none ·
+change detection = none.
+
+**Type rules** (see §2.4.1): no params are declared, every run resolves
+`FULL`, and `tracks_state=False` skips state read and write entirely.
+Target semantics come from the write strategy alone.
 
 #### 2.5.4 Step Activation Flags
 
@@ -486,7 +604,7 @@ steps that have no meaningful work for a given incremental type.
 | `tracks_state` | All state steps: retrieve incremental state, determine/save processing state, post-processing for state | `True` | `False` | `True` | `True` |
 | `tracks_logical_deletion` | Determine logically deleted entries (only evaluated when `tracks_state` is `True`) | `True` | `False` | `False` | `True` |
 | `requires_source_state_retrieval` | Call `retrieve_source_state()` (only evaluated when `tracks_state` is `True`) | `False` | `False` | `False` | `True` |
-| `supports_planned_state` | Strategy can produce a `PLANNED` precomputed plan-time detailed state (consumed by `--planned-state-strategy` on `nld flow execute`, written by `nld flow state incremental compute --persist`) | `False` | `False` | `True` | `True` |
+| `supports_planned_state` | Strategy can produce a `PLANNED` precomputed plan-time detailed state (consumed by `--planned-state-policy` on `nld flow execute`, written by `nld flow state incremental compute --persist`) | `False` | `False` | `True` | `True` |
 
 Each incremental definition overrides only the flags whose default does
 not match. `tracks_state` and `tracks_logical_deletion` default to
@@ -513,7 +631,7 @@ def get_incremental_state(self) -> None:
         self.compute_incremental_state()
         return
 
-    # Honour --planned-state-strategy (PlannedStateStrategy.{AUTO, TRUST,
+    # Honour --planned-state-policy (PlannedStatePolicy.{AUTO, TRUST,
     # RECOMPUTE, STRICT}); RECOMPUTE skips the planned-state slot, AUTO
     # adopts a fresh plan and falls back to compute, TRUST adopts the
     # plan as-is, STRICT fails when no plan exists or the plan is stale.
@@ -766,11 +884,8 @@ Orchestrates both execution and incremental state through a unified facade patte
 
 | Class | Description |
 |-------|-------------|
-| `FlowStateManager` | Central facade combining execution + incremental |
-| `FlowByKeyStateManager` | Concrete implementation for by_key |
-| `FlowBySourceTstStateManager` | Concrete implementation for by_source_tst |
-| `FlowNoIncrementStateManager` | Concrete implementation for no_increment |
-| `FlowStateManagerFactory` | Creates complete FlowStateManager instances |
+| `FlowStateManager` | The single concrete facade combining execution + incremental — used for every incremental type; all per-type behavior lives in the wrapped `IncrementalStateManager` |
+| `FlowStateManagerFactory` | Creates complete FlowStateManager instances; validates the incremental type against the `FlowIncrementalTypeRegistry` |
 
 ### 4.3 FlowStateManager Composition
 
@@ -892,7 +1007,7 @@ a plan never touches the live slot, and a recomputing run never
 reads the planned slot. The writers are `nld flow state incremental
 compute --persist` and the equivalent `nld flow execute
 --state-compute-only` short-circuit; `nld flow execute
---planned-state-strategy` controls how a subsequent run consumes the
+--planned-state-policy` controls how a subsequent run consumes the
 plan (see the `how-to-get-incremental-info` skill).
 
 **Two-layer opt-in.** Planned-state engagement is gated on both the
@@ -906,7 +1021,7 @@ that flow.
 
 `FlowStateManager.backend_supports_planned_state` exposes the backend
 layer to callers; `True` requires a primary incremental backend that
-opts in. `nld flow execute --planned-state-strategy`,
+opts in. `nld flow execute --planned-state-policy`,
 `nld flow state incremental compute --persist`, and
 `nld flow state incremental get-planned` all check the AND of the two
 layers and emit a "not supported" notice when the result is `False`,
@@ -917,7 +1032,7 @@ instead of letting the backend read raise.
 - `FlowStatePlan` — lifecycle metadata only: `plan_state_uid`,
   `flow_namespace`, `flow_name`, `status`, `strategy`, `computed_at`,
   `status_changed_at`, `requestor`, `executed_by_flow_uid`.
-- `FlowPlannedProcessingDetailledState[ProcessingState]` — the
+- `FlowPlannedProcessingDetailedState[ProcessingState]` — the
   strategy-specific plan-time payload, keyed on `plan_state_uid` so it
   maps 1:1 onto the persisted planned row. It is generic over the live
   processing-state type purely to type its two converters:
@@ -926,9 +1041,9 @@ instead of letting the backend read raise.
   `from_processing_state(plan_state_uid, processing_state)` builds the
   plan-time detail from a freshly computed live state. Each strategy
   extends it with exactly the fields its planned row persists.
-- `FlowPlannedProcessingState[DetailledState]` — extends `FlowStatePlan`
-  with the `detailled_state` payload (a generic bound to
-  `FlowPlannedProcessingDetailledState`); `to_state_plan()` returns the
+- `FlowPlannedProcessingState[DetailedState]` — extends `FlowStatePlan`
+  with the `detailed_state` payload (a generic bound to
+  `FlowPlannedProcessingDetailedState`); `to_state_plan()` returns the
   lifecycle metadata without the payload.
 
 `status` is one of the `IncrementalPlanStatus` values:
@@ -958,8 +1073,8 @@ backend manager):
 | `save_planned_processing_state(processing_flow_state, plan_state_uid, computed_at, requestor=None)` | Build the `PLANNED` plan and persist it. The strategy-specific detailed state — built from the freshly computed live state via `from_processing_state` — is written first; every other `PLANNED` state plan for the flow is then transitioned to `CANCELLED`; finally that state plan is written. |
 | `get_planned_processing_state(plan_state_uid=None)` | Return the named plan, or the latest `PLANNED` plan by `computed_at`, as a `FlowPlannedProcessingState` (or `None`). Assembled from a state plan + its detailed-state payload via `definition.planned_processing_state_class`. |
 | `get_planned_processing_states()` | Return every `PLANNED` state plan for the flow, newest first — backs `nld flow state incremental get-planned`. |
-| `is_planned_processing_state_fresh(planned_processing_state)` | Whether a plan is still consistent with the latest baseline. The default returns `True`; strategies whose processing state derives from the latest incremental state override it (see "Per-strategy freshness" below). Consulted by AUTO and STRICT modes of `--planned-state-strategy`. |
-| `use_planned_processing_state(planned_processing_state)` | Convert the plan's detailed state to the live processing state for this run via `detailled_state.to_processing_state(flow_uid)`, record the plan on the state manager as `used_planned_processing_state`, and propagate its pull timestamps to the current `FlowExecutionInfo` (mirrors `update_processing_state`). |
+| `is_planned_processing_state_fresh(planned_processing_state)` | Whether a plan is still consistent with the latest baseline. The default returns `True`; strategies whose processing state derives from the latest incremental state override it (see "Per-strategy freshness" below). Consulted by AUTO and STRICT modes of `--planned-state-policy`. |
+| `use_planned_processing_state(planned_processing_state)` | Convert the plan's detailed state to the live processing state for this run via `detailed_state.to_processing_state(flow_uid)`, record the plan on the state manager as `used_planned_processing_state`, and propagate its pull timestamps to the current `FlowExecutionInfo` (mirrors `update_processing_state`). |
 | `update_plan_state_to_completed(plan_state_uid, executed_by_flow_uid)` | Transition a consumed plan to `COMPLETED`. Invoked by `DataFlowTask.post_processing_for_plan` on success. |
 | `update_plan_state_to_cancelled(plan_state_uid)` | Transition a `PLANNED` plan to `CANCELLED`. |
 | `used_planned_processing_state` (property) | The plan adopted by `use_planned_processing_state`, or `None`. Drives `post_processing_for_plan` and is also surfaced for renderers. |
@@ -995,12 +1110,12 @@ composed read plus two sets of opt-in primitives:
 | `read_state_plans()` | state-plan primitive | Return every state plan for this flow, any status. |
 | `write_state_plan(state_plan)` | state-plan primitive | Insert or update one state plan. |
 | `read_planned_processing_state(plan_state_uid)` | detailed-state primitive | Read the strategy-specific detailed-state payload for a plan. |
-| `write_planned_processing_state(plan_state_uid, detailled_state)` | detailed-state primitive | Persist the strategy-specific detailed-state payload for a new `PLANNED` plan. |
+| `write_planned_processing_state(plan_state_uid, detailed_state)` | detailed-state primitive | Persist the strategy-specific detailed-state payload for a new `PLANNED` plan. |
 
 The state-plan primitives are provided by the connector mixin (one
 shared implementation per connector type). The detailed-state
 primitives are provided by the per-strategy backend (the table or file
-layout depends on the strategy's `FlowPlannedProcessingDetailledState`
+layout depends on the strategy's `FlowPlannedProcessingDetailedState`
 subtype).
 
 **Lifecycle lives on the state manager, not the backend.**
@@ -1048,7 +1163,7 @@ detailed state lives in its own per-strategy slot keyed by
   per-strategy backend writes the detailed-state payload as a
   per-plan file under `<state-root>/plans/<plan_state_uid>/` — for
   `by_key`, `by_key_planned_processing_state.<ext>` carrying the
-  `ByKeyPlannedProcessingDetailledState` — with the same `file_format`
+  `ByKeyPlannedProcessingDetailedState` — with the same `file_format`
   dispatch (JSON writes the full envelope; parquet writes a per-key
   rows table against `get_by_key_planned_processing_detail_schema()`
   and carries the envelope `flow_uid` / `strategy` in PyArrow schema
@@ -1277,8 +1392,8 @@ it.
 | `base/manager.py` | Abstract `IncrementalStateManager` (owns the planned-state lifecycle, §4.5) and `IncrementalBackendStateManager` (state-plan + processing-state persistence primitives, §4.5) |
 | `base/sql_filter_manager.py` | Abstract SQL filter contract for incremental WHERE-clause injection |
 | `models/logic.py` | Abstract `FlowIncrementalLogic`, `FlowIncrementalDefinition` (with step activation flags), and `FlowIncrementalParamDefinition` |
-| `models/state.py` | Base state classes (`FlowState`, `FlowSourceState`, `FlowProcessingState`) and the planned-state models `FlowStatePlan`, `FlowPlannedProcessingState`, `FlowPlannedProcessingDetailledState` (§4.5) |
-| `models/config.py` | `IncrementalConfig` with `strategy`, `persist_initial_processing_state`, `immediate_step_persistence` |
+| `models/state.py` | Base state classes (`FlowState`, `FlowSourceState`, `FlowProcessingState`) and the planned-state models `FlowStatePlan`, `FlowPlannedProcessingState`, `FlowPlannedProcessingDetailedState` (§4.5) |
+| `models/config.py` | `IncrementalConfig` with `type`, `persist_initial_processing_state`, `immediate_step_persistence` |
 | `models/manifest.py` | `FlowIncrementalTypeManifest` describing a registered incremental type |
 | `backend/plan.py` | `BackendStatePlanRow` and `state_plan_to_row` / `row_to_state_plan` helpers — the backend-agnostic row form of a state plan |
 | `backend/postgresql/backend_mixin.py` | `PostgreSQLIncrementalBackendMixin` — state-plan persistence primitives for the planned-state slot on PostgreSQL |
@@ -1346,11 +1461,8 @@ it.
 
 | File | Purpose |
 |------|---------|
-| `manager/base.py` | FlowStateManager facade combining execution + incremental |
-| `manager/by_key.py` | FlowByKeyStateManager |
-| `manager/by_source_tst.py` | FlowBySourceTstStateManager |
-| `manager/no_increment.py` | FlowNoIncrementStateManager |
-| `factory.py` | FlowStateManagerFactory (orchestrator with engine pass-through) |
+| `manager/base.py` | FlowStateManager — the single concrete facade combining execution + incremental (no per-type subclasses) |
+| `factory.py` | FlowStateManagerFactory (orchestrator with engine pass-through; registry-validated) |
 | `config/state_backend_connector.py` | `StateBackendConnector` and `StateBackendConnectorConfig` models, validators, and merge helpers |
 | `state_backend_connector_resolver.py` | `StateBackendConnectorWrapper` resolving primary + optional secondary sides |
 | `events.py` | State lifecycle events |

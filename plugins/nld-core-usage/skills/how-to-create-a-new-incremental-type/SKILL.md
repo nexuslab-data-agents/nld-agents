@@ -72,11 +72,41 @@ deployment needs the others.
 
 ## Authoring Steps
 
-1. **Pick a name.** `^[a-z][a-z0-9_]*$` is the convention. It must not
-   collide with a built-in or another external type; the registry raises
-   on duplicate registration.
+1. **Place the type on the axes, then pick a name.** Before writing any
+   module, state the type's coordinates — they decide whether you need a
+   new type at all:
 
-2. **Implement the four surfaces.** Use the `custom_incremental/`
+   | Axis | Question | Values |
+   |------|----------|--------|
+   | Anchor | which side drives the selection | source / target / none |
+   | Source selection | is a selection pushed to the source, on what basis | none / always-full / partial + basis — **derived from the anchor** |
+   | Dimension | the unit selected and remembered | key, time window, scope, … |
+   | Change detection | what signals a change | key inventory, extraction tst, functional update tst, none |
+
+   A source-anchored type selects partially on its dimension; a
+   target-anchored type reads the source in full and decides target-side.
+   Keep this separate from **source availability** (whether one read of
+   the source shows its complete extent) — that characterises the source,
+   not the type, and it governs whether absence-based deletion and
+   `OVERWRITE` are legal. If your type's state model matches an existing
+   type and only the filter differs, prefer adding a parameter to that
+   type over creating a new one.
+
+   Name: `^[a-z][a-z0-9_]*$` is the convention, ideally
+   `by_<anchor>_<dimension>`. It must not collide with a built-in or
+   another external type; the registry raises on duplicate registration.
+
+2. **Publish the type's rules.** Every type owns its parameter grammar,
+   its per-strategy selection semantics, and its state-advancement rule —
+   the built-ins deliberately differ from each other (see
+   `guide-incremental`, "Loading-strategy rules belong to the incremental
+   type"). Write the type's rules table next to its code before
+   implementing `resolve_strategy()`, and decide explicitly which
+   strategies `create_post_processing_state` advances state for. Do not
+   copy a rule from `by_key` or `by_source_tst` on the assumption that it
+   is general.
+
+3. **Implement the four surfaces.** Use the `custom_incremental/`
    files as a template. Keep CLI-visible parameters in
    `FlowIncrementalParamDefinition` instances on the definition; the
    executor filters task parameters by
@@ -89,10 +119,10 @@ deployment needs the others.
    state incremental get-state` prints for the type; keep any
    strategy-specific rendering helpers in the type's own `state.py`.
 
-3. **Decide on planned-state support.** `FlowIncrementalDefinition.supports_planned_state`
+4. **Decide on planned-state support.** `FlowIncrementalDefinition.supports_planned_state`
    defaults to `False`. Set it `True` on the definition when the
    strategy can produce a `PLANNED` processing state that a later run
-   adopts via `nld flow execute --planned-state-strategy`, and override
+   adopts via `nld flow execute --planned-state-policy`, and override
    `IncrementalStateManager.is_planned_processing_state_fresh` on the
    state manager when a baseline can supersede an earlier plan (the
    base returns `True`; `by_source_tst` checks DELTA /
@@ -105,7 +135,7 @@ deployment needs the others.
    --state-compute-only`, and `nld flow state incremental get-planned`
    commands gate on the AND of the strategy and backend layers.
 
-4. **Wire the backend.** Place at minimum `base_with_<engine>.py`
+5. **Wire the backend.** Place at minimum `base_with_<engine>.py`
    (abstract) plus one concrete `<backend_type>_with_<engine>.py` per
    supported pair. Each concrete subclass overrides
    `retrieve_current_state`, `get_processing_state`,
@@ -118,7 +148,7 @@ deployment needs the others.
    from `S3Structure`, and the override is shared by execution and
    incremental S3 backends.
 
-5. **Register in `nld_project.yml`.**
+6. **Register in `nld_project.yml`.**
 
    ```yaml
    additional_incremental_types:
@@ -133,7 +163,7 @@ deployment needs the others.
    paths, and templates missing `{backend_type}` or `{engine}`) and
    registers it. A duplicate name raises `NldProjectError`.
 
-6. **Verify registration.**
+7. **Verify registration.**
 
    ```bash
    nld project info
@@ -144,8 +174,8 @@ deployment needs the others.
    any flow definition's `incremental.type:` field once the registration
    succeeds.
 
-7. **Smoke test.** Point a flow's `incremental.type` at the new name,
-   run it with `nld flow run`, and inspect `nld flow state incremental
+8. **Smoke test.** Point a flow's `incremental.type` at the new name,
+   run it with `nld flow execute`, and inspect `nld flow state incremental
    get-state` to confirm the persisted watermark advances as expected.
 
 ## Constraints
