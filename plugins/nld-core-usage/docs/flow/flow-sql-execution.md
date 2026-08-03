@@ -370,9 +370,25 @@ Two field characterisations control which columns participate in the upsert:
 | `exclude_from_upsert_update` | No | No | Insert-only fields (e.g., `REC_INSERT_TST`) |
 | `exclude_from_upsert_match` | Yes | No | Updated but shouldn't trigger diff (e.g., `REC_LAST_UPDATE_TST`, `REC_SOURCE_EXTRACTION_TST`) |
 
-These characterisations are resolved in `_get_upsert_field_params()` and threaded
-through the connector's `upsert_from_query()` method via the `exclude_from_update`,
-`expression_overrides`, and `exclude_from_match` parameters.
+These characterisations are resolved by
+`nld/flow/utils/lifecycle_field_resolution.py` — the single source of
+truth for the record-lifecycle timestamp policy — and threaded through
+the connector's `upsert_from_query()` method via the
+`exclude_from_update`, `expression_overrides`, and `exclude_from_match`
+parameters. `resolve_upsert_field_params()` excludes the
+`rec_insert_tst` field (`ts_inserted_at`) from `UPDATE SET`
+(insert-only) and overrides the `rec_last_update_tst` field
+(`ts_updated_at`) with `CURRENT_TIMESTAMP` on update.
+
+The seed write strategies (bulk `VALUES` insert of a seed CSV) share
+the same policy module: on insert the technical tracking timestamp
+columns — absent from the CSV — are populated with `CURRENT_TIMESTAMP`,
+and on UPSERT `ts_inserted_at` stays out of `UPDATE SET` while
+`ts_updated_at` refreshes, with change-detection honoured via
+`exclude_from_upsert_match`. The characterisation-aware bulk-insert
+path is implemented for PostgreSQL and DuckDB (shared sqlglot builder);
+Snowflake and BigQuery accept the parameters for signature
+compatibility only.
 
 Requires: `target_structure` with a primary key defined.
 
@@ -387,6 +403,11 @@ DELETE FROM schema.table WHERE (pk_col) IN (SELECT pk_col FROM (SELECT ...) AS _
 INSERT INTO schema.table (col1, col2, ...) SELECT ...;
 ```
 
+The delete form is engine-specific with matching semantics for non-NULL
+keys: PostgreSQL uses the tuple-`IN` shown above, BigQuery a correlated
+`EXISTS`, and Snowflake a `DELETE ... USING` join — Snowflake's
+documented idiom for key-based deletes.
+
 Requires: `target_structure` with a primary key defined.
 
 ### 3.7 UPSERT_LOGICAL_DELETE
@@ -398,6 +419,13 @@ deleted by setting the deletion flag column to `TRUE`. The deletion flag
 column is resolved dynamically from the target structure using the
 `rec_deletion_flag` field characterisation.
 
+The logical-delete step is delegated to the connector's
+`mark_absent_rows_deleted` method — the strategy layer holds no raw
+SQL. The connector's DML builder renders an engine-portable
+`NOT EXISTS` UPDATE (a multi-column tuple `NOT IN` is unsupported
+against a subquery on BigQuery), guarded so already-flagged rows are
+skipped and reruns do not rewrite the whole table:
+
 ```sql
 -- Step 1: Upsert with change detection (same as UPSERT strategy)
 INSERT INTO schema.table (col1, col2, ...)
@@ -405,10 +433,20 @@ SELECT ...
 ON CONFLICT (pk_col) DO UPDATE SET col2 = EXCLUDED.col2, ...
 WHERE (table.col2 IS DISTINCT FROM EXCLUDED.col2 OR ...);
 
--- Step 2: Mark absent rows as deleted
+-- Step 2: Mark absent rows as deleted (mark_absent_rows_deleted)
 UPDATE schema.table SET <deletion_flag_column> = TRUE
-WHERE (pk_col) NOT IN (SELECT pk_col FROM (SELECT ...) AS _src);
+WHERE COALESCE(<deletion_flag_column>, FALSE) = FALSE
+AND NOT EXISTS (
+  SELECT 1 FROM (SELECT ...) AS _src
+  WHERE _src.pk_col = schema.table.pk_col
+);
 ```
+
+The already-flagged guard is spelled `COALESCE(flag, FALSE) = FALSE`
+rather than `IS NOT TRUE` because Snowflake has no `IS [NOT] TRUE`
+predicate. Identifiers stay unquoted by default (suits PostgreSQL and
+Snowflake); BigQuery overrides the builder to backtick-quote all
+identifiers.
 
 Requires: `target_structure` with a primary key defined and exactly one field with
 the `rec_deletion_flag` characterisation.
@@ -431,7 +469,7 @@ The connector methods used by the strategies are defined on `SQLDataConnector`:
 | `create_or_replace_view` | VIEW | Create or replace a view |
 | `upsert_from_query` | UPSERT, UPSERT_LOGICAL_DELETE | Insert or update from SELECT |
 | `delete_from_query` | DELETE_INSERT | Delete matching keys from subquery |
-| `execute_query` | UPSERT_LOGICAL_DELETE | Execute raw SQL for logical delete |
+| `mark_absent_rows_deleted` | UPSERT_LOGICAL_DELETE | Flag target rows absent from the query as logically deleted |
 
 ---
 
