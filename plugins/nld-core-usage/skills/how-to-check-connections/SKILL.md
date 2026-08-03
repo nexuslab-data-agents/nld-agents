@@ -227,3 +227,7 @@ parameter in the resolved sources.
 - `nld connection get-structure` extracts a connection's database
   structure (tables, columns, keys) as YAML — a separate `nld
   connection` subcommand outside the scope of this how-to.
+- `nld connection export-query-csv` executes a read-only SELECT
+  (inline `--query` or a `--query-file` .sql file) against a named
+  connection and writes the result to a CSV file — also outside the
+  scope of this how-to.
