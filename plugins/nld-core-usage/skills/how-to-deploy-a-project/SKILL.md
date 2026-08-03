@@ -64,6 +64,10 @@ gate contract. A declined prompt cancels cleanly (exit 0, nothing applied).
 - A flow is `NEW` (no recorded baseline), `CHANGED` (its YAML, SQL, or task
   Python hash differs from the recorded one), `UNCHANGED` (skipped), or
   `REMOVED` (recorded as removed; the target table is never dropped).
+  Removal detection runs only when the scope covers the full extent being
+  compared — unscoped and `--namespace` deploys; a `--name` or
+  `--upstream`/`--downstream` deploy skips it, so out-of-scope flows are
+  never reported as removed.
 - Each changed flow's target structure deploys first: the diff is computed
   against the live target and resolves to `CREATE` (table absent), `ALTER`
   (field/characterisation diffs), or `REBUILD` (order enforcement or an
