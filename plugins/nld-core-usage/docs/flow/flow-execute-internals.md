@@ -2,7 +2,9 @@
 
 This document traces what happens between the user typing
 `nld flow execute --name <flow>` (or `--namespace <ns>`) and the data
-flow task's `run()` returning a `FlowExecutionInfo`. It complements
+flow task's `run()` returning a `FlowExecutionInfo`. When neither
+`--name` nor `--namespace` is given, every flow in the project is
+resolved and executed in dependency order. It complements
 `flow-design.md` (high-level concepts) and `flow-sql-execution.md`
 (SQL-specific write strategies and incremental filtering).
 

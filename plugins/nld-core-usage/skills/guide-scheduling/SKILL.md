@@ -213,12 +213,17 @@ In `nld/scheduling/services/`:
 nld scheduling validate  --env <env>
 nld scheduling deps      --env <env> [--format json|...] [--task-name <t>]
                                      [--namespace <ns>] [--upstream] [--downstream]
+                                     [--override-output-folder-path <dir>]
 nld scheduling frequency --env <env> [--frequency <value>]
 ```
 
 - `validate` — checks the environment's scheduling graph is acyclic.
 - `deps` — outputs the scheduling dependency graph for an environment, with the
-  usual lineage filters.
+  usual lineage filters. The graph file lands in a timestamped folder under
+  `output/` unless `--override-output-folder-path` names the folder to write
+  to — the standard file-output option shared with `nld flow deps` and other
+  file-writing commands, so programmatic callers get a deterministic path
+  instead of parsing stdout.
 - `frequency` — reports every scheduled asset with its declared cadence, the
   cadence its triggers allow, and a status (`ok` / `undeclared` /
   `inconsistent`), plus a per-cadence breakdown. `--frequency` narrows the

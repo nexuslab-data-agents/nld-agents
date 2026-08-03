@@ -85,6 +85,10 @@ With no extra options this runs the flow's **default loading strategy**
 **Custom runtime options are available depending on the incremental type** — see
 the matching section below.
 
+Scope is optional: `--namespace <ns>` runs every flow of a namespace, and
+omitting both `--name` and `--namespace` runs **every flow in the project**,
+in dependency order.
+
 ### Common options (all incremental types)
 
 These are real CLI options and appear in `nld flow execute --help` — but
