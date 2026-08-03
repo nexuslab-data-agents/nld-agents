@@ -403,11 +403,11 @@ where flow_namespace = 'source.raw'
 
 ### Snowflake
 
-`by_source_tst` is fully supported: `read_processing_state` /
+`by_source_tst` and `by_key` are fully supported: `read_processing_state` /
 `read_post_processing_state` back `get-state`, and
 `SnowflakeIncrementalBackendMixin` opts into `supports_planned_state`,
 so `compute --persist` and `get-planned` work. The table names match
-the PostgreSQL section above. `by_key` has no Snowflake backend.
+the PostgreSQL section above.
 
 ### BigQuery / DuckDB
 

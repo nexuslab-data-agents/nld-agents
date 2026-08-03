@@ -21,20 +21,23 @@ list.
 | Strategy | Backend module | Flow execution | `get-state` | `compute` | `compute --persist` |
 |----------|----------------|:--------------:|:-----------:|:---------:|:-------------------:|
 | `by_source_tst` | `impl/by_source_tst/backend/snowflake_with_pydantic.py` | ✅ | ✅ | ✅ | ✅ |
-| `by_key` | — | — | — | — | — |
+| `by_key` | `impl/by_key/backend/snowflake_with_pydantic.py` | ✅ | ✅ | ✅ | ✅ |
 | `no_increment` | shared pass-through base | ✅ (no-op) | ❌ | ✅ (empty) | — |
 
-- **`by_key`** — no Snowflake backend is registered. A `by_key` flow
-  cannot use a Snowflake state backend.
-- **Flow execution** (`by_source_tst`) — `retrieve_current_state`,
+- **Flow execution** — `retrieve_current_state`,
   `write_processing_state`, `write_post_processing_state` are
-  implemented.
-- **`get-state`** (`by_source_tst`) — `read_processing_state` and
-  `read_post_processing_state` read the live-slot tables.
+  implemented; `by_key` adds the partial-state variants for immediate
+  per-key persistence.
+- **`get-state`** — `read_processing_state` and
+  `read_post_processing_state` read the live-slot tables
+  (`by_key`: `_nld_incremental_by_key_state` and
+  `_nld_incremental_by_key_processing_state`).
 - **`compute`** — resolves the next run's processing state in memory
   from `retrieve_current_state`.
-- **`compute --persist`** (`by_source_tst`) — `SnowflakeIncrementalBackendMixin`
+- **`compute --persist`** — `SnowflakeIncrementalBackendMixin`
   persists state plans in `_nld_incremental_plans`, with the
   detailed-state payload in
-  `_nld_incremental_plans_by_source_tst_planned_processing_state`.
+  `_nld_incremental_plans_by_source_tst_planned_processing_state`
+  (`by_source_tst`) or
+  `_nld_incremental_plans_by_key_planned_processing_state` (`by_key`).
   `get-planned` lists the PLANNED plans from the same slot.

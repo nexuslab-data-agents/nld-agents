@@ -36,24 +36,30 @@ the state but absent from the inventory is never processed, not even by
 | `local` / `duckdb` | ✅ | ❌ | ✅ | ❌ |
 | `s3_blob_storage` / `pydantic` | ✅ | ❌ | ✅ | ✅ |
 | `s3_blob_storage` / `duckdb` | ✅ | ❌ | ✅ | ✅ |
-| `snowflake` | — | — | — | — |
+| `snowflake` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
 
 Backend modules live under `core/nld/flow/incremental/impl/by_key/backend/`.
 
 ## Notes
 
-- **Snowflake** — no `by_key` backend is registered; a `by_key` flow
-  cannot use a Snowflake state backend.
 - **Flow execution** — implemented on every registered backend
   (`retrieve_current_state`, `write_processing_state`,
   `write_post_processing_state`, plus the partial-state variants for
   immediate per-key persistence).
 - **`get-state`** — `get_processing_state` /
-  `get_post_processing_state` are implemented on PostgreSQL only.
+  `get_post_processing_state` are implemented on PostgreSQL and
+  Snowflake only.
+- **Snowflake** — `SnowflakeByKeyStateBackendManager`
+  (`impl/by_key/backend/snowflake_with_pydantic.py`) covers the full
+  lifecycle: state rows in `_nld_incremental_by_key_state`, the
+  processing slot in `_nld_incremental_by_key_processing_state`, and
+  planned states via `SnowflakeIncrementalBackendMixin`
+  (`_nld_incremental_plans` +
+  `_nld_incremental_plans_by_key_planned_processing_state`).
 - **`compute --persist`** — available on PostgreSQL (via
   `PostgreSQLIncrementalBackendMixin`, table `_nld_incremental_plans`
   for state plans + `_nld_incremental_plans_by_key_planned_processing_state`
-  for the detailed-state payload) and on S3 (via
+  for the detailed-state payload), on Snowflake (see above), and on S3 (via
   `S3IncrementalBackendMixin`, single index file
   `<state-root>/state_plans.<json|parquet>` for state-plan metadata
   plus per-plan
