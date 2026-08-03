@@ -213,10 +213,15 @@ with out-of-scope directives pending.
 
 Rename resolution is idempotent four-way logic: old exists / new absent ⇒
 in-place `ALTER … RENAME`; new exists / old absent ⇒ no-op (already
-effective); neither ⇒ no-op (CREATE uses the new name); both ⇒ error. A
-structure reclaiming a name a pending rename moves away deploys only after the
-rename target freed it, as a plain CREATE with a fresh identity. On engines
-without in-place rename (BigQuery) declared renames are refused.
+effective); neither ⇒ no-op (CREATE uses the new name); both ⇒ for a
+`rename_structure`, an error — but for a `rename_field` the declared rename
+wins: the occupant column is dropped (surfaced as a leading DROP in the
+preview, its data intentionally replaced) and the rename applied in place,
+preserving the renamed column's data. The freed old name is reclaimed by any
+new column the target declares. A structure reclaiming a name a pending
+rename moves away deploys only after the rename target freed it, as a plain
+CREATE with a fresh identity. On engines without in-place rename (BigQuery)
+declared renames are refused.
 
 `backfill_default` runs after DDL and hooks as
 `UPDATE <schema>.<table> SET <field> = <value> WHERE <field> IS NULL`; it is
@@ -236,7 +241,12 @@ refused when the target structure is a VIEW.
 All engines share the ANSI alias set (`CHARACTER VARYING→VARCHAR`,
 `DECIMAL→NUMERIC`, `INT→INTEGER`, `TIMESTAMP WITHOUT TIME ZONE→TIMESTAMP`)
 plus connector-specific aliases (e.g. Snowflake folds every integer spelling
-into NUMERIC and maps `TIMESTAMP` to `TIMESTAMP_NTZ`).
+into NUMERIC, the character family — `TEXT`, `CHAR`, `STRING` — into VARCHAR,
+and maps `TIMESTAMP` to `TIMESTAMP_NTZ`; Snowflake's INFORMATION_SCHEMA reads
+every character column back as TEXT, so without the alias a VARCHAR asset
+would drift permanently against its own live column). Comparable forms only
+decide **whether** a type changed — a `FieldDiff` carries the declared
+spellings, so rendered DDL keeps the asset's own type spelling.
 
 ## Bootstrap of an existing database
 
