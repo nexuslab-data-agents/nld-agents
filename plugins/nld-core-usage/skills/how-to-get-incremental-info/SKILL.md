@@ -56,8 +56,9 @@ skill.
 
 - Run from a directory with `nld_project.yml`.
 - The flow must have a `state_backend_connector` configured (inline or
-  via the project-level default in `config/flow.yaml`); otherwise the
-  CLI raises a clear RuntimeError.
+  via the namespace-level default in
+  `namespaces.<ns>.flow.default_state_backend_connector` of
+  `nld_project.yml`); otherwise the CLI raises a clear RuntimeError.
 - `get-state` (default) and `--processing-only` need
   `read_post_processing_state` / `read_processing_state` on the primary
   backend. PostgreSQL implements both; the other backends inherit a

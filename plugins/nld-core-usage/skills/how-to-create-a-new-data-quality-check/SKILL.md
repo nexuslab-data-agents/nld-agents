@@ -15,7 +15,7 @@ user-invocable: false
 `nld-core` resolves a data quality rule at runtime by looking up its name
 in `DataQualityRuleRegistry`. Built-in rules live under
 `nld.flow.quality.rules/`; external rules live in any importable package
-and are registered through `additional_quality_rules` in
+and are registered through `flow.additional_quality_rules` in
 `nld_project.yml`. There are no other extension points.
 
 ## When to Use
@@ -174,9 +174,10 @@ the **manifest only** — `rule_class` is imported, validated, and instantiated
 lazily, on the first lookup of the rule name:
 
 ```yaml
-additional_quality_rules:
-  - name: column_percentage_range
-    rule_class: assets.utils.quality_rules.ColumnPercentageRangeRule
+flow:
+  additional_quality_rules:
+    - name: column_percentage_range
+      rule_class: assets.utils.quality_rules.ColumnPercentageRangeRule
 ```
 
 A name collision with an already registered rule fails loudly at project

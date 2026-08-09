@@ -1,11 +1,12 @@
-# Add this entry to the project's nld_project.yml to register the
-# `by_source_tst_with_days_from` incremental type with the
+# Add this entry to the `flow` block of the project's nld_project.yml to
+# register the `by_source_tst_with_days_from` incremental type with the
 # FlowIncrementalTypeRegistry on project load.
 
-additional_incremental_types:
-  - name: by_source_tst_with_days_from
-    logic_module: custom_incremental.logic
-    state_manager_module: custom_incremental.manager
-    backend_package: custom_incremental.backend
-    # backend_module_template: "{backend_type}_with_{engine}"   # default
-    # fallback_to_base_backend: true                            # default
+flow:
+  additional_incremental_types:
+    - name: by_source_tst_with_days_from
+      logic_module: custom_incremental.logic
+      state_manager_module: custom_incremental.manager
+      backend_package: custom_incremental.backend
+      # backend_module_template: "{backend_type}_with_{engine}"   # default
+      # fallback_to_base_backend: true                            # default

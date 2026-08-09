@@ -3,7 +3,7 @@ name: guide-incremental
 description: >
   Architectural guide for the nld-core incremental processing system — built-in
   by_key, by_source_tst, and no_increment types under `impl/`, the
-  FlowIncrementalTypeRegistry plugin point, the `additional_incremental_types`
+  FlowIncrementalTypeRegistry plugin point, the `flow.additional_incremental_types`
   project YAML hook, state management, execution logging, processing lifecycle,
   and backend implementations.
 user-invocable: false
@@ -26,7 +26,7 @@ Activate this guide when the agent is working on:
 - Backend implementations for incremental/execution/state modules
 - Choosing or configuring an incremental type for a flow
 - Registering an external incremental type via
-  `additional_incremental_types` in `nld_project.yml`
+  `flow.additional_incremental_types` in `nld_project.yml`
 
 ## Document Resolution
 
@@ -162,7 +162,8 @@ core/nld/flow/incremental/
 
 Built-in incremental types are seeded into the registry the first time
 `nld.flow.incremental.impl` is imported. External types are added through
-`Project.additional_incremental_types` declared in `nld_project.yml`.
+`Project.flow_config.additional_incremental_types`, declared in the `flow`
+block of `nld_project.yml`.
 
 ## Identifier Vocabulary
 
@@ -172,24 +173,26 @@ The registry key — `by_key`, `by_source_tst`, `no_increment`, or the
 `name` of an external type — is the value bound to `incremental_type`
 at the registry boundary (`incremental_type = manifest.name`). The
 `FlowIncrementalTypeManifest.name` field and the
-`additional_incremental_types[*].name` YAML key keep the literal name
+`flow.additional_incremental_types[*].name` YAML key keep the literal name
 `name`.
 
 ## Registering an External Incremental Type
 
 `FlowIncrementalTypeRegistry` (`nld/flow/incremental/services/registry.py`)
 is the single lookup boundary the factory consults. A project declares
-extra entries in `nld_project.yml` alongside `additional_entities`:
+extra entries in the `flow` block of `nld_project.yml`, alongside the other
+flow-domain extension points:
 
 ```yaml
-additional_incremental_types:
-  - name: by_partition
-    logic_module: my_pkg.incrementals.by_partition.logic
-    state_manager_module: my_pkg.incrementals.by_partition.manager
-    backend_package: my_pkg.incrementals.by_partition.backend
-    # optional:
-    # backend_module_template: "{backend_type}_with_{engine}"
-    # fallback_to_base_backend: true
+flow:
+  additional_incremental_types:
+    - name: by_partition
+      logic_module: my_pkg.incrementals.by_partition.logic
+      state_manager_module: my_pkg.incrementals.by_partition.manager
+      backend_package: my_pkg.incrementals.by_partition.backend
+      # optional:
+      # backend_module_template: "{backend_type}_with_{engine}"
+      # fallback_to_base_backend: true
 ```
 
 `Project.from_dict` validates the entries into `FlowIncrementalTypeManifest`

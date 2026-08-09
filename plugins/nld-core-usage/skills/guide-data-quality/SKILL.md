@@ -8,7 +8,7 @@ description: >
   value_in_set), the valid/warning/error result status and its escalation
   through the declared warning/error/blocking severity, result
   persistence as DATA_QUALITY execution steps, the single-scan
-  engine-portable measurement query, and the `additional_quality_rules`
+  engine-portable measurement query, and the `flow.additional_quality_rules`
   extension point.
 user-invocable: false
 ---
@@ -30,7 +30,7 @@ Activate this guide when the agent is working on:
   severities they escalate through (`warning`, `error`, `blocking`), or
   `DataQualityBlockingViolationException`
 - The `DATA_QUALITY` steps shown by `nld flow state execution get-steps`
-- Registering external rules through `additional_quality_rules`
+- Registering external rules through `flow.additional_quality_rules`
 
 For authoring a new rule, use the `how-to-create-a-new-data-quality-check`
 skill instead.

@@ -114,6 +114,9 @@ entities from filesystem, and is held by the execution context.
 | `entity_path` | `str` | Relative path to entities folder (default: `"."`) |
 | `environments` | `EnvironmentsConfig` | Named environments (connection profile + variable overrides); active env resolved by `--env` → `NLD__ENVIRONMENT` → `default`. See `guide-scheduling`. |
 | `properties` | `dict[str, Any]` | Free-form key-value metadata the core does not interpret (platform hints). |
+| `flow_config` | `FlowProjectConfig` | General flow configuration from the `flow` block: `additional_flow_task_types`, `additional_incremental_types`, `additional_quality_rules`. |
+| `flow_namespace_config` | `FlowNamespaceConfig` | Namespace-scoped flow settings from `namespaces.<ns>.flow`. |
+| `structure_namespace_config` | `StructureNamespaceConfig` | Namespace-scoped structure settings from `namespaces.<ns>.structure`. |
 | `entity_registry` | `NldEntityRegistry` | Manages all project entities |
 
 **Loading a project:**
@@ -137,6 +140,24 @@ entity_path: .
 python_additional_paths:
   flows:
     - custom.flows.module
+flow:                          # optional — general flow configuration
+  additional_flow_task_types:
+    custom: custom.flows.custom_task.CustomFlowTask
+  additional_incremental_types: []
+  additional_quality_rules: []
+namespaces:                    # optional — namespace-scoped settings
+  .:
+    structure:
+      default_connection_name: pg_main
+      database_name: main_db
+      schema_name: public
+    flow:
+      default_state_backend_connector: pg_main
+  source.raw:
+    structure:
+      default_connection_name: pg_main
+      database_name: main_db
+      schema_name: raw
 environments:                  # optional — see guide-scheduling
   default: prd
   values:
@@ -149,6 +170,38 @@ environments:                  # optional — see guide-scheduling
 properties:                    # optional — free-form platform metadata
   data_domain: clh
 ```
+
+### The `namespaces` block
+
+Each key is a namespace (`.` being the root) declaring the settings that apply
+to the entities under it. Two facets exist today, `structure` and `flow`, and a
+namespace may declare either or both.
+
+Resolution walks the namespace hierarchy from the most specific level down to
+the root, and at each level prefers an **exact** key over a **wildcard** one.
+Keys may use shell-style wildcards (`"*.extraction"`); matching level by level
+is what lets a wildcard win over a broader exact key, so with both `.` and
+`"*.extraction"` declared, `apec.extraction` resolves to the wildcard while
+`apec.refinement` falls back to `.`.
+
+| Facet | Fields | Model |
+|-------|--------|-------|
+| `structure` | `default_connection_name`, `database_name`, `schema_name`, `tags` | `StructureNamespaceMapping` |
+| `flow` | `default_state_backend_connector` | `FlowNamespaceMapping` |
+
+The block is transposed at load into one config per facet, reachable on the
+project as `structure_namespace_config` and `flow_namespace_config` (both
+`NamespaceMappingConfig` subclasses, `core/nld/pydantic/namespace_mapping.py`).
+An unknown facet name raises rather than being ignored.
+
+> **Upgrade note (0.1.2a3).** `namespaces` replaces the former
+> `config/structure.yaml` and `config/flow.yaml`, and the top-level
+> `flow` block absorbs `additional_flow_task_types` (previously in
+> `config/flow.yaml`) together with `additional_incremental_types` and
+> `additional_quality_rules` (previously top-level keys). Those files are no
+> longer read, and a project that still carries either one fails to load with an
+> error naming the file — they must be merged into `nld_project.yml` and
+> deleted. `additional_entities` and `python_additional_paths` stay top-level.
 
 ## 5. StandardTask
 

@@ -10,7 +10,7 @@ user-invocable: false
 `FlowIncrementalTypeManifest` in `FlowIncrementalTypeRegistry`. Built-in
 types (`by_key`, `by_source_tst`, `no_increment`) live under
 `nld.flow.incremental.impl/`; external types live in any importable
-package and are registered through `additional_incremental_types` in
+package and are registered through `flow.additional_incremental_types` in
 `nld_project.yml`. There are no other extension points.
 
 ## When to Use
@@ -60,7 +60,7 @@ backfills the last `N` days.
 | `backend/__init__.py` | empty marker. |
 | `backend/base_with_pydantic.py` | abstract `IncrementalBackendStateManager` subclass typed on the three state models. |
 | `backend/postgresql_with_pydantic.py` | concrete PostgreSQL backend persisting state + processing-state rows via the `Psycopg2SQLConnector` `pydantic_manager`. |
-| `nld_project_snippet.yml` | copy-pasteable `additional_incremental_types:` entry. |
+| `nld_project_snippet.yml` | copy-pasteable `flow.additional_incremental_types:` entry. |
 
 Other backends (BigQuery, Snowflake, DuckDB, S3-blob-storage) follow the
 same pattern as `postgresql_with_pydantic.py`: subclass the matching
@@ -151,11 +151,12 @@ deployment needs the others.
 6. **Register in `nld_project.yml`.**
 
    ```yaml
-   additional_incremental_types:
-     - name: by_source_tst_with_days_from
-       logic_module: custom_incremental.logic
-       state_manager_module: custom_incremental.manager
-       backend_package: custom_incremental.backend
+   flow:
+     additional_incremental_types:
+       - name: by_source_tst_with_days_from
+         logic_module: custom_incremental.logic
+         state_manager_module: custom_incremental.manager
+         backend_package: custom_incremental.backend
    ```
 
    `Project.from_dict` validates each entry into a

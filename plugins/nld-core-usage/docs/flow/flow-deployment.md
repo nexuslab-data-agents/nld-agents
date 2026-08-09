@@ -119,8 +119,9 @@ and structures tagged `target_structure_is_managed_by_flow_execution`.
 ## 5. Structure orchestration
 
 Each in-scope flow's target structure resolves its deploy target from
-`config/structure.yaml` (`mappings.<namespace>.{default_connection_name,
-database_name, schema_name, tags}`, hierarchical namespace lookup) and deploys
+the `namespaces` block of `nld_project.yml`
+(`namespaces.<namespace>.structure.{default_connection_name, database_name,
+schema_name, tags}`, hierarchical namespace lookup) and deploys
 through the same `StructureDeployManager` machinery as
 `nld structure deploy` — one manager per (connection, schema) with a
 schema-wide prefetched snapshot.
@@ -203,8 +204,8 @@ flow gets no state/history row, so the next run recomputes the same change.
 | Key | Where | Role |
 |---|---|---|
 | `metadata_backend_connector` | `nld_project.yml` | Connection whose active schema hosts all deploy metadata; required for `nld flow deploy` and for change files |
-| `mappings.<ns>.{default_connection_name, database_name, schema_name}` | `config/structure.yaml` | Deploy target per structure namespace |
-| `additional_flow_task_types` | `config/flow.yaml` | Task-class resolution feeding the Python hash |
+| `namespaces.<ns>.structure.{default_connection_name, database_name, schema_name}` | `nld_project.yml` | Deploy target per structure namespace |
+| `flow.additional_flow_task_types` | `nld_project.yml` | Task-class resolution feeding the Python hash |
 | `external_source`, `target_structure_is_managed_by_flow_execution` | structure tags | Exclude a structure from deployment |
 
 ## 10. Cross-references
