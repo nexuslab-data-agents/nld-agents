@@ -204,8 +204,8 @@ The four runtime surfaces an external type must expose are described in
 the `how-to-create-a-new-incremental-type` skill, which ships a complete
 `by_source_tst_with_days_from` reference implementation.
 
-`nld project info` lists every registered incremental type alongside
-additional entities and python paths.
+`nld project info` lists every registered incremental type in its
+`Flow configuration` block, alongside the rest of the project configuration.
 
 ## Cross-References
 
