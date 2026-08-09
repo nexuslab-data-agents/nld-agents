@@ -221,9 +221,10 @@ External rules are `DataQualityRule` subclasses registered from
 `nld_project.yml`:
 
 ```yaml
-additional_quality_rules:
-  - name: column_percentage_range
-    rule_class: assets.utils.quality_rules.ColumnPercentageRangeRule
+flow:
+  additional_quality_rules:
+    - name: column_percentage_range
+      rule_class: assets.utils.quality_rules.ColumnPercentageRangeRule
 ```
 
 The registry (`DataQualityRuleRegistry`) seeds the built-ins on import and
@@ -233,7 +234,7 @@ that it subclasses `DataQualityRule` with a `name` matching the manifest,
 and instantiating it are deferred to the first `get()`/`has()` lookup of the
 rule name. Loading a project for its metadata (scheduling, catalog info)
 therefore never imports that project's own Python code — mirroring the
-`FlowIncrementalTypeRegistry`/`additional_incremental_types` pattern. See
+`FlowIncrementalTypeRegistry`/`flow.additional_incremental_types` pattern. See
 the `how-to-create-a-new-data-quality-check` skill for the full authoring
 walkthrough.
 
@@ -244,7 +245,7 @@ walkthrough.
 | `core/nld/flow/quality/models/config.py` | `DataQualityChecksConfig`, `DataQualityCheckConfig`, severity vocabulary |
 | `core/nld/flow/quality/models/result.py` | `DataQualityCheckResult` (step payload shape), `DataQualityCheckStatus`, the outcome properties |
 | `core/nld/flow/quality/models/context.py` | `DataQualityContext` — target connector, table path, captured baseline |
-| `core/nld/flow/quality/models/manifest.py` | `DataQualityRuleManifest` (`additional_quality_rules` entry) |
+| `core/nld/flow/quality/models/manifest.py` | `DataQualityRuleManifest` (`flow.additional_quality_rules` entry) |
 | `core/nld/flow/quality/rules/` | `DataQualityRule` ABC + the six built-in rules |
 | `core/nld/flow/quality/registry.py` | Rule registry singleton |
 | `core/nld/flow/quality/service.py` | Check resolution, target context ownership, measurement, evaluation |

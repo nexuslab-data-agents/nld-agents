@@ -188,26 +188,27 @@ tags:
 
 #### Namespace-Level Tags
 
-Tags can also be defined at the namespace level in `config/structure.yaml` via
-the `tags` field on `StructureProjectMapping`. These tags are automatically
-injected into all structures in that namespace after entity loading, with
-deduplication against the structure's own tags.
+Tags can also be defined at the namespace level in the `namespaces` block of
+`nld_project.yml` via the `tags` field on `StructureNamespaceMapping`. These
+tags are automatically injected into all structures in that namespace after
+entity loading, with deduplication against the structure's own tags.
 
 ```yaml
-# config/structure.yaml
-mappings:
+# nld_project.yml
+namespaces:
   source.external_crm:
-    default_connection_name: pg_main
-    database_name: main_db
-    schema_name: external_crm
-    tags:
-      - external_source
+    structure:
+      default_connection_name: pg_main
+      database_name: main_db
+      schema_name: external_crm
+      tags:
+        - external_source
 ```
 
 All structures under the `source.external_crm` namespace (and child namespaces)
 will inherit the `external_source` tag without needing to declare it individually.
 
-**File:** `core/nld/structure/config/structure_config.py` (StructureProjectMapping)<br/>
+**File:** `core/nld/structure/config/structure_config.py` (StructureNamespaceMapping)<br/>
 **Injection:** `core/nld/project/project.py` (_apply_structure_config_tags)
 
 ### Business Metadata

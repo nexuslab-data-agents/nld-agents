@@ -1401,7 +1401,7 @@ it.
 | `models/referential.py` | Enums for states, selections, granularities, and `IncrementalPlanStatus` (§4.5) |
 | `models/events.py`, `models/request.py`, `models/constants.py` | Shared events, request, and constant models |
 | `services/factory.py` | `IncrementalStateManagerFactory` — resolves logic/manager/backend through the registry with engine resolution |
-| `services/registry.py` | `FlowIncrementalTypeRegistry` — single lookup boundary for built-in and external types, seeded from `additional_incremental_types` in `nld_project.yml` |
+| `services/registry.py` | `FlowIncrementalTypeRegistry` — single lookup boundary for built-in and external types, seeded from `flow.additional_incremental_types` in `nld_project.yml` |
 | `impl/__init__.py` | Registers built-in `by_key`, `by_source_tst`, `no_increment` manifests on first import |
 | `impl/by_key/logic.py` | ByKey parameter definitions |
 | `impl/by_key/manager.py` | ByKeyStateManager with strategy-based logic |

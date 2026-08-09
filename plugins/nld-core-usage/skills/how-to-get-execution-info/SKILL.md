@@ -42,8 +42,9 @@ semantics), see the `guide-flows` and `guide-incremental` skills.
 
 - Run from a directory with `nld_project.yml`.
 - The flow must have a `state_backend_connector` configured (either
-  inline on the flow YAML, or via the project-level default in
-  `config/flow.yaml`). If neither is set, the CLI raises a clear
+  inline on the flow YAML, or via the namespace-level default in
+  `namespaces.<ns>.flow.default_state_backend_connector` of
+  `nld_project.yml`). If neither is set, the CLI raises a clear
   RuntimeError.
 - The execution-side read accessors (`get_latest_execution_info`,
   `get_execution_history`) are implemented on the base
