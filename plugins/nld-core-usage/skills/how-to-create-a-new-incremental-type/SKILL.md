@@ -170,10 +170,10 @@ deployment needs the others.
    nld project info
    ```
 
-   The output lists registered incremental types under
-   `additional_incremental_types`. The factory accepts the new name in
-   any flow definition's `incremental.type:` field once the registration
-   succeeds.
+   The output lists registered incremental types under its
+   `Flow configuration` block, next to the additional flow task types and
+   data quality rules. The factory accepts the new name in any flow
+   definition's `incremental.type:` field once the registration succeeds.
 
 8. **Smoke test.** Point a flow's `incremental.type` at the new name,
    run it with `nld flow execute`, and inspect `nld flow state incremental
