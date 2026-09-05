@@ -123,6 +123,11 @@ For each field, walk these in order:
      (`standard: iso_3166`).
    - `dt_` / `ts_` business time not already a `rec_*` technical timestamp →
      `functional_timestamp`, `snapshot_date`, `validity_start/end_*`.
+   - user column recording **who** created or last changed the row at this layer
+     (`ds_inserted_by`, `ds_updated_by`, an application's `cd_created_by` …) →
+     the built-in `rec_insert_by` / `rec_last_update_by`, not a functional
+     characterisation. One field each per structure; the deletion counterpart is
+     `rec_deletion_by`. Available from nld-core 0.1.2a4.
    - string/int encoded date or time (`YYYYMMDD`, `HHMMSS`, …) → `functional_date`
      / `functional_time` with a `format` attribute (e.g. `yyyymmdd`, `ddmmyyyy`,
      `hhmmss`, `hhmm`).
