@@ -65,13 +65,32 @@ their own definitions (§6).
 | `mandatory` | No | Field cannot be null. Accepts the `enforced` attribute. |
 | `unique` | No | Field values must be unique. Accepts the `enforced` attribute. |
 
-#### 3.2 Record technical timestamps (target side)
+#### 3.2 Record technical tracking (target side)
 
 | Name | Single per structure | Description |
 |------|:--------------------:|-------------|
 | `rec_insert_tst` | Yes | Timestamp of first insertion in the current structure. |
+| `rec_insert_by` | Yes | User that inserted the record in the current structure. |
 | `rec_last_update_tst` | Yes | Timestamp of last update in the current structure. |
+| `rec_last_update_by` | Yes | User that applied the last update in the current structure. |
 | `rec_previous_layer_update_tst` | Yes | Timestamp of last update in the previous layer (used for incremental flows that compare against the upstream layer). |
+
+`rec_insert_by` and `rec_last_update_by` (nld-core 0.1.2a4) are the user
+counterparts of the two record timestamps, for applications that stamp who
+created and who last changed a row. They carry no column-name convention: a
+field is matched by its characterisation, never by its name.
+
+Their upsert policy lives in the same module as the timestamps one
+(`core/nld/flow/utils/lifecycle_field_resolution.py`):
+`resolve_upsert_field_params()` gives the `rec_insert_by` field the insert-only
+treatment `rec_insert_tst` already gets — it is excluded from `UPDATE SET`, so
+the creator survives every later update. `rec_last_update_by` gets **no** SQL
+expression override, unlike `rec_last_update_tst` which is refreshed with
+`CURRENT_TIMESTAMP`: a flow execution has no acting user, so the column is left
+to the caller (an application writing through the structure, or the source
+query). For the same reason
+`resolve_technical_tracking_timestamp_expressions()` never injects a value into
+either user column.
 
 #### 3.3 Record technical timestamps (source side)
 

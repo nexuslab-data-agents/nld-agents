@@ -378,7 +378,12 @@ the connector's `upsert_from_query()` method via the
 parameters. `resolve_upsert_field_params()` excludes the
 `rec_insert_tst` field (`ts_inserted_at`) from `UPDATE SET`
 (insert-only) and overrides the `rec_last_update_tst` field
-(`ts_updated_at`) with `CURRENT_TIMESTAMP` on update.
+(`ts_updated_at`) with `CURRENT_TIMESTAMP` on update. The
+`rec_insert_by` field is excluded from `UPDATE SET` the same way, so
+the user who created a record survives later updates, while
+`rec_last_update_by` receives no expression override — a flow
+execution has no acting user, so that column stays whatever the source
+query or the calling application writes.
 
 The seed write strategies (bulk `VALUES` insert of a seed CSV) share
 the same policy module: on insert the technical tracking timestamp

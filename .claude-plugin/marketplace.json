@@ -9,7 +9,7 @@
       "name": "nld-core-usage",
       "source": "./plugins/nld-core-usage",
       "description": "Architectural and how-to skills for using the nld-core library — base model, entity registry, project & execution context, project catalog (multi-project), connections, structures, structure models (inter-layer lineage), structure audits (per-structure data-analysis audits), flows, incremental processing, data quality checks, business dictionary, governance/ownership (structure & flow owners), environment-aware flow scheduling, execution/incremental info accessors, and the incremental-strategy decision guide.",
-      "version": "0.8.2",
+      "version": "0.8.3",
       "author": {
         "name": "NexusLab Data"
       }
@@ -18,7 +18,7 @@
       "name": "nld-data-conventions",
       "source": "./plugins/nld-data-conventions",
       "description": "Data conventions for NLD structures and fields — naming, characterisations, and ordering rules",
-      "version": "0.1.3",
+      "version": "0.1.4",
       "author": {
         "name": "NexusLab Data"
       }

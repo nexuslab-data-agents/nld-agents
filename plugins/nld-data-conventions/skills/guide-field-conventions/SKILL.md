@@ -39,7 +39,9 @@ Activate this guide when the agent is:
 - Source timestamps must map to template fields (`ts_src_inserted_at`, `ts_src_updated_at`), never custom columns
 
 **Field characterisations** — metadata annotations on field templates:
-- Record lifecycle: `rec_insert_tst`, `rec_last_update_tst`, `rec_insert_by`, `rec_last_update_by`
+- Record lifecycle: `rec_insert_tst`, `rec_insert_by`, `rec_last_update_tst`, `rec_last_update_by`
+  (the two `_by` columns are built-in from nld-core 0.1.2a4; the framework never
+  fills them, but it keeps `rec_insert_by` out of the UPSERT `UPDATE SET`)
 - Logical deletion: `rec_deletion_flag`, `rec_deletion_tst`
 - Source tracking: `src_extraction_tst`, `src_insert_tst`, `src_update_tst`
 - Data format: `epoch_ms` (timestamp as Unix epoch milliseconds)

@@ -460,7 +460,9 @@ characterisations:
 | `mandatory` | Field cannot be null | No |
 | `unique` | Field values must be unique | No |
 | `rec_insert_tst` | Record insert timestamp | Yes |
+| `rec_insert_by` | User that inserted the record (insert-only on upsert) | Yes |
 | `rec_last_update_tst` | Record last update timestamp | Yes |
+| `rec_last_update_by` | User that applied the last update | Yes |
 | `rec_previous_layer_update_tst` | Last update timestamp in the previous layer | Yes |
 | `rec_source_insert_tst` | Source insert timestamp | Yes |
 | `rec_source_last_update_tst` | Source last update timestamp | Yes |
