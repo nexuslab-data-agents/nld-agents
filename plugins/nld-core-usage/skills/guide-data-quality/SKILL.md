@@ -74,6 +74,14 @@ project-local path. If not found, read the bundled copy.
   raises `DataQualityBlockingViolationException` after every check result
   is recorded, marking the execution FAILED and leaving the incremental
   state untouched.
+- **Violations alert, the execution decides the level.** When the flow's
+  namespace declares `scheduling.alerting` and the run was handed a webhook
+  (`NLD__ALERTING__WEBHOOK_URL`), a `warning`-severity violation raises a
+  `WARNING` alert, an `error`-severity one a `FAILED` alert on an execution
+  that still completed, and a `blocking` one a `FAILED` alert on the failed
+  execution — filtered by `alert_on`. The violated checks are listed in the
+  message. See the `guide-scheduling` skill, "Scheduling policy: retries and
+  alerting".
 - **Payloads live in step metadata.** Check results are persisted in the
   step `metadata` dict under the `DATA_QUALITY` category — never as new
   step columns, because the metadata backend tables are never ALTERed.

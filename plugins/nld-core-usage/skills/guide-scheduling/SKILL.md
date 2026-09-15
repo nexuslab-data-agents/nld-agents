@@ -8,10 +8,13 @@ description: >
   additional_predecessors/excluded_predecessors or fully overridden by
   predecessors, external/cross-product
   references), the declared `frequency` (intended execution cadence, tracked
-  independently of the cron), the SchedulingResolver/Validator/FrequencyReporter
+  independently of the cron), the namespace-scoped scheduling policy
+  (`namespaces.<ns>.scheduling`: the `max_attempts` retry budget and the
+  `alerting` block that drives both nld's own alerts and the scheduler's),
+  the SchedulingResolver/Validator/FrequencyReporter/SchedulingPolicy
   services, and the `nld scheduling` CLI. Read when working on scheduling YAML
-  under scheduling/, environment config, or nld/scheduling/ code. For the
-  cross-project catalogue see guide-project-catalog.
+  under scheduling/, environment config, alerting, or nld/scheduling/ code. For
+  the cross-project catalogue see guide-project-catalog.
 user-invocable: false
 ---
 
@@ -28,8 +31,10 @@ Activate this guide when working on:
 - `environments` in `nld_project.yml`, the `--env` flag, or `NLD__ENVIRONMENT`
 - `scheduling/` YAML definitions (`FlowTask` entities)
 - `nld/scheduling/` code (models, resolver, graph, validator, tasks)
-- The `nld scheduling` CLI (validate / deps / frequency)
+- The `nld scheduling` CLI (validate / deps / frequency / info)
 - Cross-project (`nld_project_catalog.yml`) dependency declarations
+- The `scheduling` block of a namespace in `nld_project.yml` (retry budget,
+  alerting) and how a flow execution raises an alert (`nld/flow/alerting/`)
 
 ## Environments
 
@@ -186,6 +191,63 @@ upstream cadence and are never flagged — the cron is not parsed.
 Nothing here is a hard failure: `nld scheduling validate` still gates on cycles
 only, and the frequency report warns.
 
+## Scheduling policy: retries and alerting
+
+A namespace's scheduled runs share a policy declared under the `namespaces`
+block of `nld_project.yml` (`nld/scheduling/config/scheduling_config.py`):
+
+```yaml
+namespaces:
+  .:                       # the root: every namespace inherits it
+    scheduling:
+      alerting:
+        alert_on: [FAILED, WARNING]     # SchedulingExecutionState values
+        slack_channel_name: data-alerts # transport keys are free-form
+  "*.extraction":          # a wildcard level: every extraction sub-namespace
+    scheduling:
+      max_attempts: 2      # retry budget, first attempt included (1 = no retry)
+```
+
+`SchedulingPolicy` (`nld/scheduling/services/policy.py`) resolves both for a
+task, with one asymmetry worth knowing: **`max_attempts` takes the nearest
+declaring level** (a `FlowTask` may also override it directly), while
+**`alerting` walks past levels that declare none** — so `"*.extraction"`
+raising only its retry budget still inherits the root channel. Switching
+alerting off is therefore explicit: `alerting: {enabled: false}` on the
+nearer level. `nld scheduling info --name <task>` prints both values with the
+declaring line.
+
+`AlertingConfig` types `enabled` (default true), `alert_on` (at least one
+state, any case, a typo fails at project load; default `[FAILED]`) and
+`alert_after_consecutive_failures` (declared, not applied yet); anything else
+(`slack_channel_name`…) is kept as declared and returned by
+`transport_settings`, because transports belong to the platform.
+
+**One declaration, two alerting layers.** The same block drives:
+
+- **nld itself** (`nld/flow/alerting/`): at the end of `DataFlowTask.run`, the
+  outcome is mapped on a level — a flow exception or a `blocking` quality
+  violation is `FAILED` on a failed execution; an `error`-severity violation
+  is `FAILED` too but the execution completes (the pipeline goes on); a
+  `warning`-severity violation is `WARNING`. If the level is in `alert_on`,
+  nld posts the alert itself to the Slack-compatible webhook it was given.
+  The runtime side comes from the scheduler as environment variables:
+  `NLD__ALERTING__WEBHOOK_URL` (unset: nld never posts),
+  `NLD__ALERTING__OUTCOME_LINE_TEMPLATE` (a `string.Template` with `$status`,
+  `$alerted`, `$level`, printed once after the run so the scheduler can read
+  the outcome back), `NLD__ALERTING__ATTEMPT` / `NLD__ALERTING__MAX_ATTEMPTS`
+  (a failure is alerted on the last attempt only; earlier ones are retried)
+  and `NLD__ALERTING__EXECUTION_REFERENCE` (quoted in the message). Delivery
+  problems are logged, never raised: alerting cannot fail a run.
+- **the scheduler**: a generator (nld-scheduling-generator for Kestra) reads
+  `SchedulingPolicy.alerting()` to label each flow and to hand the pod the
+  variables above; the scheduler's own alert reacts to failures nld could not
+  report (a pod that never started, an out-of-memory kill) and stays quiet
+  when the outcome line says nld already alerted.
+
+Run by hand with none of the variables set, nld neither posts nor prints
+anything; the declaration only describes what scheduled runs do.
+
 ## Services
 
 In `nld/scheduling/services/`:
@@ -206,6 +268,10 @@ In `nld/scheduling/services/`:
   `count_by_frequency()`); each `SchedulingFrequencyEntry` exposes the declared
   `frequency`, the `upstream_frequency` it is checked against, `is_declared` and
   `is_inconsistent`.
+- **`SchedulingPolicy`** — resolves a task's retry budget
+  (`resolve_max_attempts`) and alerting (`alerting()` = the config in force or
+  None, `resolve_alerting()` = the declaration with its origin) from the
+  namespace-scoped `scheduling` block, see above.
 
 ## CLI
 
@@ -215,6 +281,7 @@ nld scheduling deps      --env <env> [--format json|...] [--task-name <t>]
                                      [--namespace <ns>] [--upstream] [--downstream]
                                      [--override-output-folder-path <dir>]
 nld scheduling frequency --env <env> [--frequency <value>]
+nld scheduling info      --name <task> [--namespace <ns>]
 ```
 
 - `validate` — checks the environment's scheduling graph is acyclic.
@@ -228,8 +295,11 @@ nld scheduling frequency --env <env> [--frequency <value>]
   cadence its triggers allow, and a status (`ok` / `undeclared` /
   `inconsistent`), plus a per-cadence breakdown. `--frequency` narrows the
   report to one cadence ("which assets are daily?").
+- `info` — one scheduled task's declaration: its retry policy and alerting
+  (each with the `nld_project.yml` line that decided it), params and
+  per-environment triggers.
 
-All three are environment-aware (`--env`, same precedence as above).
+The first three are environment-aware (`--env`, same precedence as above).
 
 ## Examples
 
