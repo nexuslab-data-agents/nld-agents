@@ -201,8 +201,10 @@ namespaces:
   .:                       # the root: every namespace inherits it
     scheduling:
       alerting:
+        transports: [slack]             # the technologies, by transport name
         alert_on: [FAILED, WARNING]     # SchedulingExecutionState values
-        slack_channel_name: data-alerts # transport keys are free-form
+        slack:                          # each transport's own settings block
+          channel: data-alerts
   "*.extraction":          # a wildcard level: every extraction sub-namespace
     scheduling:
       max_attempts: 2      # retry budget, first attempt included (1 = no retry)
@@ -217,11 +219,14 @@ alerting off is therefore explicit: `alerting: {enabled: false}` on the
 nearer level. `nld scheduling info --name <task>` prints both values with the
 declaring line.
 
-`AlertingConfig` types `enabled` (default true), `alert_on` (at least one
-state, any case, a typo fails at project load; default `[FAILED]`) and
-`alert_after_consecutive_failures` (declared, not applied yet); anything else
-(`slack_channel_name`…) is kept as declared and returned by
-`transport_settings`, because transports belong to the platform.
+`AlertingConfig` types `enabled` (default true), `transports` (the
+technologies by name — required when enabled, so a reader can tell exactly
+what a namespace alerts through), `alert_on` (at least one state, any case, a
+typo fails at project load; default `[FAILED]`) and
+`alert_after_consecutive_failures` (declared, not applied yet). Each named
+transport may carry a block of its own non-secret settings under its name
+(`slack.channel`, `telegram.chat_id`); transport names and settings keys are
+validated against the transport registry when the project loads.
 
 **One declaration, two alerting layers.** The same block drives:
 
@@ -230,9 +235,20 @@ state, any case, a typo fails at project load; default `[FAILED]`) and
   violation is `FAILED` on a failed execution; an `error`-severity violation
   is `FAILED` too but the execution completes (the pipeline goes on); a
   `warning`-severity violation is `WARNING`. If the level is in `alert_on`,
-  nld posts the alert itself to the Slack-compatible webhook it was given.
-  The runtime side comes from the scheduler as environment variables:
-  `NLD__ALERTING__WEBHOOK_URL` (unset: nld never posts),
+  nld posts the alert itself through every declared transport this
+  environment configures. Transports live in
+  `nld/flow/alerting/transports/`: built-in `slack` (an incoming webhook,
+  `NLD__ALERTING__SLACK__WEBHOOK_URL`) and `telegram` (a bot,
+  `NLD__ALERTING__TELEGRAM__BOT_TOKEN`, plus `NLD__ALERTING__TELEGRAM__CHAT_ID`
+  or the `chat_id` setting); a platform adds one with a `FlowAlertTransport`
+  subclass (`name`, `required_env_vars`, `settings_keys`,
+  `from_environment`, `send`) declared under `flow.additional_alert_transports`
+  in `nld_project.yml`. A declared transport whose secret is not in the
+  environment is skipped, never an error. The execution context owns a
+  `FlowAlertingProvider` (`context.alerting`, built when the project is
+  initialised) that hands each flow its `FlowAlertingService`; the task
+  itself builds nothing. The transport-neutral runtime side comes from the
+  scheduler as environment variables:
   `NLD__ALERTING__OUTCOME_LINE_TEMPLATE` (a `string.Template` with `$status`,
   `$alerted`, `$level`, printed once after the run so the scheduler can read
   the outcome back), `NLD__ALERTING__ATTEMPT` / `NLD__ALERTING__MAX_ATTEMPTS`
@@ -241,7 +257,9 @@ state, any case, a typo fails at project load; default `[FAILED]`) and
   problems are logged, never raised: alerting cannot fail a run.
 - **the scheduler**: a generator (nld-scheduling-generator for Kestra) reads
   `SchedulingPolicy.alerting()` to label each flow and to hand the pod the
-  variables above; the scheduler's own alert reacts to failures nld could not
+  variables above — for each named transport, the variables its class
+  declares, mapped to the platform's secret keys; the scheduler's own alert
+  reacts to failures nld could not
   report (a pod that never started, an out-of-memory kill) and stays quiet
   when the outcome line says nld already alerted.
 

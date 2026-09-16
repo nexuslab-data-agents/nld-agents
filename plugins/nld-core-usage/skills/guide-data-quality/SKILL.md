@@ -75,8 +75,9 @@ project-local path. If not found, read the bundled copy.
   is recorded, marking the execution FAILED and leaving the incremental
   state untouched.
 - **Violations alert, the execution decides the level.** When the flow's
-  namespace declares `scheduling.alerting` and the run was handed a webhook
-  (`NLD__ALERTING__WEBHOOK_URL`), a `warning`-severity violation raises a
+  namespace declares `scheduling.alerting` (with its `transports`) and the
+  run was handed the transports' secrets (`NLD__ALERTING__SLACK__WEBHOOK_URL`,
+  `NLD__ALERTING__TELEGRAM__BOT_TOKEN`…), a `warning`-severity violation raises a
   `WARNING` alert, an `error`-severity one a `FAILED` alert on an execution
   that still completed, and a `blocking` one a `FAILED` alert on the failed
   execution — filtered by `alert_on`. The violated checks are listed in the
