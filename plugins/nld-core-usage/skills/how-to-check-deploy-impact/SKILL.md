@@ -54,7 +54,10 @@ Classification rules:
 - **Changed flows / structures** — files under `flows/<ns…>/<name>.<ext>` and
   `structure/<ns…>/<name>.<ext>` (extensions `.yml`, `.yaml`, `.sql`, `.py`)
   map to the asset `<ns>.<name>`; a flow's YAML and its SQL map to the same
-  flow.
+  flow. Inside a namespace folder `<folder>`, `<folder path>/flows/<sub…>/<name>`
+  maps to `<folder>.<sub>.<name>` — the same asset as its type-first path, so
+  moving a namespace into its folder lists every moved file as changed (the
+  paths changed) under unchanged asset names.
 - **Pending change files** — changed or untracked files under `.deployments/`
   are listed by their `change_id`. The applied-log in the database is never
   consulted; this is the repository's view of what a deploy would pick up.

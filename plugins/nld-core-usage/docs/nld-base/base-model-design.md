@@ -198,6 +198,12 @@ NldNamespace(".").depth  # 0
 # Path conversion
 ns.to_path()                          # "source/raw/customers"
 NldNamespace.from_path("source/raw")  # NldNamespace("source.raw")
+
+# Lineage (segment-wise, so "source" does not contain "sourced")
+NldNamespace("source").contains("source.raw")        # True
+NldNamespace("source.raw").is_related_to("source")   # True (ancestor or descendant)
+NldNamespace("source").append("raw.daily")           # NldNamespace("source.raw.daily")
+NldNamespace("source.raw.daily").relative_to("source")  # NldNamespace("raw.daily")
 ```
 
 ### 2.5 NldNamespacedBaseModelWrapper

@@ -33,14 +33,17 @@ query from a co-located `.sql` file and materializes its result as a table.
 
 ### 2.1 Easy Flow Development
 
-Developers define data flows as YAML definitions (`flows/<namespace>/<flow>.yml`) paired
+Developers define data flows as YAML definitions (`flows/<namespace>/<flow>.yml`, or
+`<namespace folder>/flows/<sub namespace>/<flow>.yml` for a namespace folder) paired
 with Python task classes extending `DataFlowTask`. The framework handles:
 - Connector resolution and injection via `data_connectors` mapping
 - Parameter management (init vs run separation)
 - State manager creation via factories with pluggable backends and engines
 - **Task auto-resolution:** When the `task` field is omitted from the YAML definition,
   the framework auto-resolves the task module from the entity path, namespace, and
-  flow name (e.g. `<entity_path>.flows.<namespace>.<flow_name>`) and searches for a
+  flow name (e.g. `<entity_path>.flows.<namespace>.<flow_name>`, or
+  `<entity_path>.<folder path>.flows.<sub namespace>.<flow_name>` inside a namespace
+  folder — see `NldEntityLayout.get_module_path`) and searches for a
   `DataFlowTask` subclass in that module using `find_subclass_in_module`.
 
 Flow definitions support both explicit `task` module paths and auto-resolution

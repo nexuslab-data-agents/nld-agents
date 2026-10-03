@@ -29,6 +29,7 @@ Activate this guide when the agent is working on:
 - Adding or modifying an entity type (`EntityDefinition`, `folder_name`, `search_direction`)
 - Registry / provider code (`nld/service/`)
 - Entity loading from the filesystem, or selective / lazy loading
+- Namespace folders (namespace-first asset layout) or namespace-scoped loading
 - Namespace resolution and duplicate-priority rules
 - Registry accessors (`get_<entity>` / `get_<entity>_dict` / `list_<entity>_keys`)
 
@@ -47,6 +48,8 @@ The full architectural reference is at
 | Typed accessors + entity-type table | "4. NldEntityRegistry" |
 | Typed wrappers | "5. Typed Wrappers" |
 | Filesystem loading | "6. Entity Loading from Filesystem" |
+| Namespace folders (`folder: true`), `NldEntityLayout` | "6. → Namespace folders" |
+| `load_entities(namespace=...)`, scoped commands | "6. → Namespace-scoped loading" |
 | Selective / lazy loading, `always_load` | "6. → Selective / lazy entity loading" |
 | Namespace resolution worked example | "7. Namespace Resolution with Search Direction" |
 

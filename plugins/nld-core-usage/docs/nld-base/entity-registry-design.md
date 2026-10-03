@@ -185,12 +185,64 @@ entities_root/
 
 **Process:**
 
-1. `Project.load_entities()` calls `NldEntityRegistry.load_entities(root_directory)`.
-2. For each `EntityDefinition`, scans `root_directory/<folder_name>/` for files.
+1. `Project.load_entities()` calls `NldEntityRegistry.load_entities(root_directory)`
+   with the project's `NldEntityLayout`.
+2. For each `EntityDefinition`, scans `root_directory/<folder_name>/` for files, then
+   the `<folder_name>/` of every namespace folder (see below).
 3. Subdirectory path becomes the namespace (`source/raw/` → `NldNamespace("source.raw")`).
 4. File name (without extension) becomes the entity name.
 5. `ResolutionContext` is set up with already-loaded entities before deserialization,
    enabling cross-entity references.
+
+### Namespace folders
+
+By default the tree is **type first**: one folder per entity type, the namespace
+being the path below it. A namespace declared with `folder: true` in the
+`namespaces` block of `nld_project.yml` is stored **namespace first** instead: its
+entities live in `<namespace path>/<folder_name>/`, the namespace being the folder
+namespace extended by the path below the entity folder. Shared entities
+(templates, characterisations, governance…) typically stay type first at the root.
+
+```
+entities_root/                          namespaces: {source.web: {folder: true}}
+├── templates/field_template/
+│   └── rec_insert_tst.yml       → FieldTemplate at namespace "."
+├── structure/
+│   └── calendar.yml             → Structure "calendar" at namespace "."
+└── source/web/                  ← namespace folder "source.web"
+    ├── structure/
+    │   └── offer.yml            → Structure "offer" at namespace "source.web"
+    ├── flows/raw/
+    │   ├── load_offer.yml       → DataFlowDefinition at namespace "source.web.raw"
+    │   └── load_offer.sql
+    └── seeds/
+        └── country.csv          → seed of structure "source.web.country"
+```
+
+Both layouts resolve to the **same namespaces** (`source/web/flows/raw/x.yml` and
+`flows/source/web/raw/x.yml` both hold flow `source.web.raw.x`), so moving a
+namespace into its folder is a pure file move: same registry, same flow
+definition hashes, no redeploy.
+
+`NldEntityLayout` (`core/nld/pydantic/entity_layout.py`, exposed as
+`project.entity_layout`) is the single path authority, used by loading,
+`write_entity`, SQL and seed file resolution, Python flow task modules
+(`<entity_path>.<folder path>.flows.<sub path>.<flow>`), flow definition hashes,
+entity outputs written through `FileOutputService` and the `nld deploy impact`
+path → asset mapping.
+
+Rules:
+
+- **One location per namespace** — a namespace is owned by the deepest declared
+  folder containing it, or by the type-first tree when none does. Entities of a
+  namespace found anywhere else raise `NamespaceFolderConflictException` (e.g.
+  `structure/web/x.yml` while `web` is a namespace folder). Migrate one namespace at
+  a time.
+- Folders may be multi-level (`source.web`) and nested (`source` and `source.web`).
+- `folder` must be a boolean, cannot be set on a wildcard key nor on the root, and
+  no folder segment may reuse a top-level entity folder name (`flows`,
+  `structure`, `templates`, `seeds`, `config`, …).
+- Additional entity roots (`additional_entity_paths`) are always read type first.
 
 ### Selective / lazy entity loading
 
@@ -215,6 +267,24 @@ Two consequences worth remembering:
   additional entities default to `always_load: true`, because tasks resolve them
   by key independently of any selective scope; set `always_load: false` to opt a
   custom entity out.
+
+### Namespace-scoped loading
+
+`load_entities(namespace=...)` (on `EntityProvider`, `NldEntityRegistry`, `Project`
+and `NldExecutionContext`) loads only the **lineage** of a namespace: its ancestors
+(which it inherits from), itself and its descendants. Namespace folders outside
+that lineage are not scanned at all. The scope applies to every entity type of
+the provider, so a load with a different scope than the previous one clears the
+registry and reloads instead of mixing scopes.
+
+Read-only commands scope their load with their `--namespace` option: `structure
+list/info/validate`, `structure model list/info`, `structure audit
+list/info/render`, `flow list/info`, `scheduling list/info`, `business dict
+list/find`, `ownership list`, `project info/entity-info`. Commands that need
+cross-namespace lineage or resolve links to structures elsewhere keep a full load:
+flow execute/deploy/state, `deploy impact`, structure deploy, `structure model
+validate`, `structure audit validate`, `ownership resolve`, `scheduling
+deps/validate`.
 
 ## 7. Namespace Resolution with Search Direction
 

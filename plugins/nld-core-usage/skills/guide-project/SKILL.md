@@ -27,6 +27,7 @@ This is one of four guides covering the base layer:
 Activate this guide when the agent is working on:
 - `Project` loading or the `nld_project.yml` shape (`entity_path`, `environments`, `properties`, `flow`, `namespaces`)
 - Namespace-scoped structure/flow settings, or the wildcard namespace keys that resolve them
+- Namespace folders (`namespaces.<ns>.folder: true`) and `project.entity_layout`
 - `NldExecutionContext`, `TaskRequest`, or `contextvars`-based context access
 - `StandardTask` and how tasks pick up the active context
 - `load_entities()` / `init_project()` / connector loading from the context

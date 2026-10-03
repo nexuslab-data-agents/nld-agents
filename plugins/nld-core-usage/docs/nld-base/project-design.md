@@ -90,7 +90,7 @@ with NldExecutionContext(task_request=request) as context:
 | Method | Description |
 |--------|-------------|
 | `init_project()` | Load `Project` from `nld_project.yml` |
-| `load_entities()` | Load entities into project's registry (optionally selective — see `entity-registry-design.md`) |
+| `load_entities()` | Load entities into project's registry (optionally selective by entity type, or scoped to a namespace lineage with `namespace=` — see `entity-registry-design.md`) |
 | `project` (property) | Get project (raises `RuntimeError` if not initialized) |
 | `entity_registry` (property) | Shortcut to `project.entity_registry` |
 | `load_connector(name)` | Load a data connector on demand |
@@ -117,6 +117,7 @@ entities from filesystem, and is held by the execution context.
 | `flow_config` | `FlowProjectConfig` | General flow configuration from the `flow` block: `additional_flow_task_types`, `additional_incremental_types`, `additional_quality_rules`. |
 | `flow_namespace_config` | `FlowNamespaceConfig` | Namespace-scoped flow settings from `namespaces.<ns>.flow`. |
 | `structure_namespace_config` | `StructureNamespaceConfig` | Namespace-scoped structure settings from `namespaces.<ns>.structure`. |
+| `folder_namespaces` | `list[str]` | Namespaces declared with `namespaces.<ns>.folder: true`; `project.entity_layout` (`NldEntityLayout`) combines them with `entity_path`. |
 | `entity_registry` | `NldEntityRegistry` | Manages all project entities |
 
 **Loading a project:**
@@ -158,6 +159,8 @@ namespaces:                    # optional — namespace-scoped settings
       default_connection_name: pg_main
       database_name: main_db
       schema_name: raw
+  source.web:
+    folder: true               # entities stored under <entity_path>/source/web/
 environments:                  # optional — see guide-scheduling
   default: prd
   values:
@@ -174,8 +177,13 @@ properties:                    # optional — free-form platform metadata
 ### The `namespaces` block
 
 Each key is a namespace (`.` being the root) declaring the settings that apply
-to the entities under it. Two facets exist today, `structure` and `flow`, and a
-namespace may declare either or both.
+to the entities under it. The `structure` and `flow` facets carry settings, and a
+namespace may declare either or both. The boolean `folder` facet does not
+configure entities but says where they are stored: `folder: true` makes the
+namespace a **namespace folder**, its entities grouped under
+`<entity_path>/<namespace path>/<entity folder>/` instead of
+`<entity_path>/<entity folder>/<namespace path>/` (see
+`entity-registry-design.md` → "Namespace folders").
 
 Resolution walks the namespace hierarchy from the most specific level down to
 the root, and at each level prefers an **exact** key over a **wildcard** one.
@@ -188,6 +196,7 @@ is what lets a wildcard win over a broader exact key, so with both `.` and
 |-------|--------|-------|
 | `structure` | `default_connection_name`, `database_name`, `schema_name`, `tags` | `StructureNamespaceMapping` |
 | `flow` | `default_state_backend_connector` | `FlowNamespaceMapping` |
+| `folder` | `true` / `false` — exact, non-root keys only | collected into `Project.folder_namespaces` |
 
 The block is transposed at load into one config per facet, reachable on the
 project as `structure_namespace_config` and `flow_namespace_config` (both
