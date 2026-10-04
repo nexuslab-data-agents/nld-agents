@@ -560,6 +560,11 @@ resolves its query:
 | `target_from_sources_mapping` | one field per entry; an expression without origin needs `data_type` on the entry |
 | neither | every source field, passed through (can then feed `nld structure render`) |
 
+Unquoted SQL identifiers are case-insensitive: an unquoted name takes the
+spelling of the source field it matches (`SELECT CD_CATEGORY` gives
+`cd_category`), any other unquoted name is lowercased, and a quoted name keeps
+its exact case.
+
 A selected source field brings its description, data type, nested fields and
 field characterisations. A source template is reused only when all its
 fields are selected unchanged; otherwise the selected template fields become
@@ -573,6 +578,8 @@ mapping `data_type` nor the existing file is an error naming the field.
 | field list and order, `data_type`, nested `fields`, `structure_type`, `generated_from` | field descriptions and characterisations (filled from the source only when missing), structure `description`, `properties`, `tags`, `characterisations`, hooks, extra templates (source templates are added) |
 
 Structure-level keys are seeded from the source on the first generation only.
+Existing field keys keep their order; a missing key is inserted at its model
+position (a missing `description` goes before `data_type`).
 An up-to-date file is never rewritten, so its comments survive.
 
 **Staleness.** When the source structure or the flow projection changes, the
