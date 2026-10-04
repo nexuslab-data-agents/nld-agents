@@ -19,7 +19,8 @@ user-invocable: true
 
 ## Definition
 
-- **What**: Produce a `StructureAudit` YAML under `assets/audits/structure/`
+- **What**: Produce a `StructureAudit` YAML under `assets/audits/structure/` (or
+  `assets/<ns>/audits/structure/` when `<ns>` is a namespace folder)
   capturing a structure's target, run metadata, and per-column coverage and
   value distributions, then validate and render it with the CLI. For SQL
   connectors the measuring **and** the YAML writing are done by
@@ -67,6 +68,7 @@ StructureAudits are the built-in `structure_audit` entity
 ```
 assets/audits/structure/<ns path>/<audit_name>.yml      # namespaced
 assets/audits/structure/<audit_name>.yml                # root namespace
+assets/<folder ns path>/audits/structure/<sub path>/<audit_name>.yml   # namespace folder (`folder: true`)
 ```
 
 The audit's `name:` (and file stem) is the **audited structure name, with no
@@ -239,6 +241,7 @@ nld structure audit render  --name <audit> [--namespace <ns>] [--stdout]
 2. **Measure** the structure's columns elsewhere (row count, non-null coverage,
    distinct counts, min/max, value distributions for low-cardinality columns).
 3. **Author the audit** at `assets/audits/structure/<ns>/<structure>.yml`
+   (`assets/<ns>/audits/structure/<structure>.yml` in a namespace folder)
    following the template above, naming it after the audited structure.
 4. **List** to confirm discovery:
    `nld structure audit list --namespace <ns>`.

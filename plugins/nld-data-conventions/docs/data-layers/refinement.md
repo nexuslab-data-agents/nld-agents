@@ -188,6 +188,10 @@ For each refined entity:
 
 | File | Path | Purpose |
 |------|------|---------|
-| Flow YAML | `assets/flows/<ns>/refinement/refined_<prefix>_<entity>.yaml` | Flow configuration |
-| SQL | `assets/flows/<ns>/refinement/refined_<prefix>_<entity>.sql` | Transformation SQL |
-| Structure | `assets/structure/<ns>/refined_<prefix>_<entity>.yml` | Table schema |
+| Flow YAML | `assets/<ns>/flows/refinement/refined_<prefix>_<entity>.yaml` | Flow configuration |
+| SQL | `assets/<ns>/flows/refinement/refined_<prefix>_<entity>.sql` | Transformation SQL |
+| Structure | `assets/<ns>/structure/refined_<prefix>_<entity>.yml` | Table schema |
+
+> Paths assume the namespace-folder layout (`<ns>` declared with `folder: true`
+> in `nld_project.yml`). A product still on the legacy type-first layout uses
+> `assets/flows/<ns>/…` and `assets/structure/<ns>/…` instead.

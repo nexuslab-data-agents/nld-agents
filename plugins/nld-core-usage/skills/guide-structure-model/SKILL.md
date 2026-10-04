@@ -73,7 +73,9 @@ pair; use the explicit `{left, right}` form when the names differ.
 - Built-in entity `structure_model`, `folder_name="structure_model"`, resolved
   relative to the project `entity_path`. With `entity_path: assets`, files live
   at `assets/structure_model/<ns path>/<model>.yml`; root namespace files sit
-  directly under `assets/structure_model/`.
+  directly under `assets/structure_model/`. In a namespace folder
+  (`folder: true`) they live in `<folder path>/structure_model/<sub path>/`
+  instead (see `guide-entity-registry` → Namespace folders).
 - Registry accessors: `get_structure_model(key, namespace)`,
   `get_structure_model_keys(namespace)`, `get_structure_model_dict(namespace)`,
   `list_structure_model_keys(namespace)` (local, no parent walk),

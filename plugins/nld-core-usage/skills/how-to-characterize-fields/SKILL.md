@@ -49,9 +49,11 @@ names, §4 **common characterisations**). For naming-prefix conventions, see the
 
 - Run from a directory with `nld_project.yml`.
 - The structure to characterise already exists under the entity path
-  (`<entity_path>/structure/<ns>/...`).
+  (`<entity_path>/structure/<ns>/...`, or `<entity_path>/<ns>/structure/...`
+  in a namespace folder).
 - **Strongly recommended**: a `StructureAudit` for the same structure exists
-  (`assets/audits/structure/<ns>/<structure>.yml`). The audit is the data
+  (`assets/audits/structure/<ns>/<structure>.yml`, or
+  `assets/<ns>/audits/structure/<structure>.yml` in a namespace folder). The audit is the data
   profile that turns guesses into evidence-based proposals. An **agent-authored
   analysis markdown** — a separate report someone produced by analysing the audit,
   carrying additional information beyond the raw measured facts (field-selection

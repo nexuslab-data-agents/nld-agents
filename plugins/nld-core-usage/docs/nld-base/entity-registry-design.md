@@ -196,7 +196,7 @@ entities_root/
 
 ### Namespace folders
 
-By default the tree is **type first**: one folder per entity type, the namespace
+*Since nld-core 0.1.2a5.* By default the tree is **type first**: one folder per entity type, the namespace
 being the path below it. A namespace declared with `folder: true` in the
 `namespaces` block of `nld_project.yml` is stored **namespace first** instead: its
 entities live in `<namespace path>/<folder_name>/`, the namespace being the folder
@@ -270,7 +270,7 @@ Two consequences worth remembering:
 
 ### Namespace-scoped loading
 
-`load_entities(namespace=...)` (on `EntityProvider`, `NldEntityRegistry`, `Project`
+*Since nld-core 0.1.2a5.* `load_entities(namespace=...)` (on `EntityProvider`, `NldEntityRegistry`, `Project`
 and `NldExecutionContext`) loads only the **lineage** of a namespace: its ancestors
 (which it inherits from), itself and its descendants. Namespace folders outside
 that lineage are not scanned at all. The scope applies to every entity type of

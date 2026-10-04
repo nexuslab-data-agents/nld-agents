@@ -63,7 +63,9 @@ accessors.
   `flow_owner` (`folder_name="governance/flow"`), resolved relative to the
   project `entity_path`. With `entity_path: assets`, files live at
   `assets/governance/structure/<ns path>/<name>.yml`; root-namespace files sit
-  directly under `governance/structure/`.
+  directly under `governance/structure/`. In a namespace folder
+  (`folder: true`) they live in `<folder path>/governance/structure/<sub path>/`
+  instead (see `guide-entity-registry` → Namespace folders).
 - The subdirectory path under the folder is the namespace, exactly like every
   other entity (`governance/structure/fr_company/owner.yml` → namespace
   `fr_company`).

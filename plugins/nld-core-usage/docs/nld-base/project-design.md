@@ -196,7 +196,7 @@ is what lets a wildcard win over a broader exact key, so with both `.` and
 |-------|--------|-------|
 | `structure` | `default_connection_name`, `database_name`, `schema_name`, `tags` | `StructureNamespaceMapping` |
 | `flow` | `default_state_backend_connector` | `FlowNamespaceMapping` |
-| `folder` | `true` / `false` — exact, non-root keys only | collected into `Project.folder_namespaces` |
+| `folder` | `true` / `false` — exact, non-root keys only (nld-core ≥ 0.1.2a5) | collected into `Project.folder_namespaces` |
 
 The block is transposed at load into one config per facet, reachable on the
 project as `structure_namespace_config` and `flow_namespace_config` (both

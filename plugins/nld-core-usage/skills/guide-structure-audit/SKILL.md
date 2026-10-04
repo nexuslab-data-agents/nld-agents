@@ -113,7 +113,9 @@ with the namespace it was loaded from. Returned by registry accessors.
 - Built-in entity `structure_audit`, `folder_name="audits/structure"`, resolved
   relative to the project `entity_path`. With `entity_path: assets`, files live
   at `assets/audits/structure/<ns path>/<audit>.yml`; root namespace files sit
-  directly under `assets/audits/structure/`.
+  directly under `assets/audits/structure/`. In a namespace folder
+  (`folder: true`) they live in `<folder path>/audits/structure/<sub path>/`
+  instead (see `guide-entity-registry` → Namespace folders).
 - Registry accessors: `get_structure_audit(key, namespace)`,
   `get_structure_audit_dict(namespace)`,
   `get_structure_audit_keys(namespace)`,

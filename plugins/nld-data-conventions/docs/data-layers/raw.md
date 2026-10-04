@@ -104,29 +104,33 @@ The view uses `ROW_NUMBER() OVER (PARTITION BY <key> ORDER BY ts_updated_at DESC
 
 | File | Path | Purpose |
 |------|------|---------|
-| Ingestion flow | `assets/flows/<ns>/ingestion/<entity>_ingestion.yaml` | DLT ingestion from S3 |
-| Raw JSON structure | `assets/structure/<ns>/raw_json_<prefix>_<entity>.yml` | Table with key + raw_data |
+| Ingestion flow | `assets/<ns>/flows/ingestion/<entity>_ingestion.yaml` | DLT ingestion from S3 |
+| Raw JSON structure | `assets/<ns>/structure/raw_json_<prefix>_<entity>.yml` | Table with key + raw_data |
 
 ### For raw_ sub-layer (flatten from JSON)
 
 | File | Path | Purpose |
 |------|------|---------|
-| Flatten flow | `assets/flows/<ns>/raw/raw_<prefix>_<entity>.yaml` | SQL flow to flatten JSON |
-| Flatten SQL | `assets/flows/<ns>/raw/raw_<prefix>_<entity>.sql` | JSON extraction SQL |
-| Raw structure | `assets/structure/<ns>/raw_<prefix>_<entity>.yml` | Flat table structure |
-| Dedup view flow | `assets/flows/<ns>/raw/v_raw_<prefix>_<entity>_latest.yaml` | DEDUPLICATED_SELECT view |
-| Dedup view SQL | `assets/flows/<ns>/raw/v_raw_<prefix>_<entity>_latest.sql` | Rendered SQL |
-| Dedup view structure | `assets/structure/<ns>/v_raw_<prefix>_<entity>_latest.yml` | View structure |
+| Flatten flow | `assets/<ns>/flows/raw/raw_<prefix>_<entity>.yaml` | SQL flow to flatten JSON |
+| Flatten SQL | `assets/<ns>/flows/raw/raw_<prefix>_<entity>.sql` | JSON extraction SQL |
+| Raw structure | `assets/<ns>/structure/raw_<prefix>_<entity>.yml` | Flat table structure |
+| Dedup view flow | `assets/<ns>/flows/raw/v_raw_<prefix>_<entity>_latest.yaml` | DEDUPLICATED_SELECT view |
+| Dedup view SQL | `assets/<ns>/flows/raw/v_raw_<prefix>_<entity>_latest.sql` | Rendered SQL |
+| Dedup view structure | `assets/<ns>/structure/v_raw_<prefix>_<entity>_latest.yml` | View structure |
 
 ### For raw_ (flat sources, no JSON)
 
 | File | Path | Purpose |
 |------|------|---------|
-| Ingestion flow | `assets/flows/<ns>/ingestion/<entity>_ingestion.yaml` | DLT direct ingestion |
-| Raw structure | `assets/structure/<ns>/raw_<prefix>_<entity>.yml` | Table with flat columns |
-| Dedup view flow | `assets/flows/<ns>/raw/v_raw_<prefix>_<entity>_latest.yaml` | DEDUPLICATED_SELECT view |
-| Dedup view SQL | `assets/flows/<ns>/raw/v_raw_<prefix>_<entity>_latest.sql` | Rendered SQL |
-| Dedup view structure | `assets/structure/<ns>/v_raw_<prefix>_<entity>_latest.yml` | View structure |
+| Ingestion flow | `assets/<ns>/flows/ingestion/<entity>_ingestion.yaml` | DLT direct ingestion |
+| Raw structure | `assets/<ns>/structure/raw_<prefix>_<entity>.yml` | Table with flat columns |
+| Dedup view flow | `assets/<ns>/flows/raw/v_raw_<prefix>_<entity>_latest.yaml` | DEDUPLICATED_SELECT view |
+| Dedup view SQL | `assets/<ns>/flows/raw/v_raw_<prefix>_<entity>_latest.sql` | Rendered SQL |
+| Dedup view structure | `assets/<ns>/structure/v_raw_<prefix>_<entity>_latest.yml` | View structure |
+
+> Paths assume the namespace-folder layout (`<ns>` declared with `folder: true`
+> in `nld_project.yml`). A product still on the legacy type-first layout uses
+> `assets/flows/<ns>/…` and `assets/structure/<ns>/…` instead.
 
 ## Column Conventions
 
