@@ -22,6 +22,7 @@ This document describes the standard YAML format for defining data structures in
 | `pre_deployment_sql_hook` | list[string] | No | SQL statements run before the structure's deployment DDL. The structure's list overrides a template's; Jinja-rendered with `schema`, `structure_name`, `object_path`, and project variables |
 | `post_deployment_sql_hook` | list[string] | No | SQL statements run after the structure's deployment DDL. Same override and rendering rules as `pre_deployment_sql_hook` |
 | `fields` | dict | Yes | Field definitions (keyed by field name) |
+| `generated_from` | dict | No | Written by `nld structure generate`: the flow, its source structure and their hashes. Marks the structure as generated from its flow's single predecessor — see "Generated Structures" |
 
 ### Structure Inheritance & Dynamic Class Resolution
 
@@ -516,6 +517,68 @@ targets. When the target structure type is VIEW, the override uses the
 Resolution is handled by `FieldTemplateLineage.resolve_for_target_type()`,
 which returns the override rule if a matching structure type exists, or the
 default rule otherwise.
+
+### Generated Structures
+
+The target structure of a flow with a **single predecessor** — typically a
+`VIEW` exposing a refined table — can be generated instead of copied field by
+field. It stays a named, committed YAML file like any other structure;
+`nld structure generate` writes it on first use and merges every
+regeneration into it.
+
+```yaml
+# structure/views/v_customer.yml (generated, then edited by hand)
+generated_from:
+  flow: views.v_customer            # <flow namespace>.<flow name>
+  mapping_hash: 4744331bb38e2213    # fingerprint of the flow projection
+  source: refined.customer          # the flow's single predecessor
+  source_hash: 7f6a8b44025a6ec5     # fingerprint of the source fields, templates and keys
+structure_type: VIEW
+connector_type: postgresql
+templates:
+  - tracking                        # kept: every template field is selected unchanged
+fields:
+  id_customer:
+    description: Customer identifier
+    data_type: VARCHAR(20)
+  ds_customer_name:                 # renamed by the flow (ds_name AS ds_customer_name)
+    description: Customer name
+    data_type: CHARACTER VARYING
+characterisations:
+  - name: pk_v_customer             # pk_customer, with the source name replaced
+    characterisation: primary_key
+    linked_fields:
+      - id_customer
+```
+
+**Projection.** The fields come from the flow, in the order a SQL flow
+resolves its query:
+
+| Flow has | Fields |
+|---|---|
+| a `.sql` file | one `SELECT` reading the predecessor table — no join, set operation or subquery. Supports columns, `*`, `col AS alias`, `CAST(x AS type)` (the cast gives the type) and aliased expressions |
+| `target_from_sources_mapping` | one field per entry; an expression without origin needs `data_type` on the entry |
+| neither | every source field, passed through (can then feed `nld structure render`) |
+
+A selected source field brings its description, data type, nested fields and
+field characterisations. A source template is reused only when all its
+fields are selected unchanged; otherwise the selected template fields become
+explicit fields. An expression whose type comes from neither a `CAST`, a
+mapping `data_type` nor the existing file is an error naming the field.
+
+**Ownership on regeneration.**
+
+| Rewritten from the source every time | Kept as written |
+|---|---|
+| field list and order, `data_type`, nested `fields`, `structure_type`, `generated_from` | field descriptions and characterisations (filled from the source only when missing), structure `description`, `properties`, `tags`, `characterisations`, hooks, extra templates (source templates are added) |
+
+Structure-level keys are seeded from the source on the first generation only.
+An up-to-date file is never rewritten, so its comments survive.
+
+**Staleness.** When the source structure or the flow projection changes, the
+`generated_from` hashes no longer match: `nld structure validate` reports the
+structure as `STALE` (a warning), `nld flow deploy` warns before deploying its
+flow, and `nld structure generate --check` exits non-zero with the diff.
 
 ### Complete Example
 

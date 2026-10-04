@@ -321,6 +321,11 @@ the data is always up to date. No physical table is created.
 CREATE OR REPLACE VIEW schema.table AS (SELECT ...);
 ```
 
+When the view reads a single predecessor, its target structure can be
+generated from the view SQL with `nld structure generate --name <flow>` and
+kept in sync with the source (see `structure-design.md` → "Generated
+Structures").
+
 ### 3.4 INSERT
 
 Appends all rows from the query result to the existing target table. The table must
