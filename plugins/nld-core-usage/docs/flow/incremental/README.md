@@ -72,7 +72,7 @@ Each strategy page reports availability against four axes:
 |----------|---------------------------|-------------|---------------------|
 | `by_key` | postgresql, bigquery, snowflake, duckdb, local, s3_blob_storage | postgresql, snowflake, s3_blob_storage | postgresql, snowflake, s3_blob_storage |
 | `by_source_tst` | postgresql, bigquery, snowflake, duckdb, local, sqlite | postgresql, snowflake, sqlite | postgresql, snowflake, sqlite |
-| `by_target_period` | postgresql, local | postgresql, local | postgresql |
+| `by_target_period` | postgresql, snowflake, sqlite, bigquery, duckdb, s3_blob_storage, local | all | postgresql, snowflake, sqlite, s3_blob_storage |
 | `no_increment` | any (pass-through) | — | — |
 
 `read_processing_state` / `read_post_processing_state` back `get-state`.

@@ -606,7 +606,9 @@ selects `FULL` — every period the source scan reports, for any perimeter
 (a deploy reload works on every flow); `--periods` / `--period-from
 [--period-to]` select `BACKFILL`, plus `--with-delta` `BACKFILL_DELTA`
 (succeeded periods skipped); `--full` + `--with-delta` raises; `--limit`
-caps any strategy to its oldest periods.
+caps any strategy to its oldest periods. FULL also replaces the periods
+already recorded in the state, so a period that vanished from the source
+is emptied.
 
 Specific rules:
 

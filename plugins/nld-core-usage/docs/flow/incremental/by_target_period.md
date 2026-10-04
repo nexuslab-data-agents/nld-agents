@@ -41,8 +41,10 @@ predecessors:
 
 Perimeters:
 
-- **`declared`** — the caller passes the periods (`--periods`,
-  `--period-from [--period-to]`); a DELTA run without them is refused.
+- **`declared`** — the caller passes the periods (`--periods=…`,
+  `--period-from=… [--period-to=…]`); a DELTA run without them is refused.
+  `nld flow execute` takes these flags in `--key=value` form, e.g.
+  `nld flow execute --name sales --period-from=2026-01 --period-to=2026-03`.
   Typical caller: a scheduler that knows which month to (re)build.
 - **`discovered`** — a DELTA run scans each MASTER predecessor for the
   periods holding rows modified since the last successful scan, then
@@ -64,7 +66,7 @@ period · change detection = none (declared, rolling) or the scan field
 |------|--------------------|
 | Params declared | `--full`, `--periods`, `--period-from`, `--period-to`, `--limit`, `--with-delta` |
 | `DELTA` | no params — the perimeter's periods + the pending periods (refused for `declared`) |
-| `FULL` | `--full` — every period present in the source (source scan, any perimeter) |
+| `FULL` | `--full` — every period present in the source (source scan, any perimeter) **and** every period already recorded in the state, so a period that vanished from the source is emptied |
 | `BACKFILL` | `--periods` and/or `--period-from [--period-to]` — exactly those periods, even succeeded ones |
 | `BACKFILL_DELTA` | the same + `--with-delta` — the declared periods minus the `SUCCEEDED` ones |
 | `--full` + `--with-delta` | raises |
@@ -94,7 +96,10 @@ leaves the period empty and `FAILED`; the next DELTA retries it.
 
 - The source query is filtered on every MASTER predecessor with one
   half-open range per group of contiguous periods
-  (`col >= start AND col < end`), so partition pruning keeps working.
+  (`col >= start AND col < end`), so partition pruning keeps working. The
+  predicate goes into the SELECT reading the MASTER table, so a MASTER read
+  inside a CTE, a subquery or a UNION branch is filtered where its alias is
+  in scope.
 - DATE and naive TIMESTAMP columns are compared to local calendar
   literals; timezone-aware columns to the UTC instant of the local
   midnight, so results never depend on the session timezone.
@@ -103,26 +108,37 @@ leaves the period empty and `FAILED`; the next DELTA retries it.
 - A run selecting no period executes **no statement** on the target (no
   hooks, no write) — never an unfiltered load.
 - Rows whose period column is NULL are never loaded.
+- On SQLite, where dates and timestamps are stored as ISO text, periods are
+  compared as text (`period_timezone` only moves the rolling reference day).
 
 ## Availability by connector / engine
 
 | Connector / engine | Flow execution | `get-state` | `compute` | `compute --persist` |
 |--------------------|:--------------:|:-----------:|:---------:|:-------------------:|
 | `postgresql` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
+| `snowflake` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
+| `sqlite` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
+| `bigquery` / `pydantic` | ✅ | ✅ | ✅ | ❌ |
+| `duckdb` / `pydantic` | ✅ | ✅ | ✅ | ❌ |
+| `s3_blob_storage` / `pydantic` (`json` or `parquet`) | ✅ | ✅ | ✅ | ✅ |
 | `local` / `pydantic` | ✅ | ✅ | ✅ | ❌ |
-| `bigquery`, `snowflake`, `duckdb`, `s3_blob_storage` | — | — | — | — |
 
-The source scan and the period filters render through sqlglot for
-PostgreSQL, Snowflake, BigQuery and DuckDB targets; only the state backends
-above are registered. Backend modules live under
+The SQL connectors share one backend (`SQLModelByTargetPeriodStateBackendManager`
+in `backend/sql_model_base.py`) on the connector's Pydantic model manager;
+planned states come from the connector's planned-state mixin where one
+exists (PostgreSQL, Snowflake, SQLite). S3 keeps the state at
+`{s3_root}/state/period_state.<fmt>` and each run's processing state next to
+that run's data folder. Backend modules live under
 `core/nld/flow/incremental/impl/by_target_period/backend/`.
 
 ## Notes
 
-- **PostgreSQL tables** — `_nld_incremental_by_target_period_state`
-  (calendar + watermark), `_nld_incremental_by_target_period_period_state`
-  (one row per period), `_nld_incremental_by_target_period_processing_state`
-  (one row per run, periods as JSON) and
+- **SQL tables** (same names on every SQL connector) —
+  `_nld_incremental_by_target_period_state` (calendar + watermark),
+  `_nld_incremental_by_target_period_period_state` (one row per period; a
+  run rewrites only the periods it touched),
+  `_nld_incremental_by_target_period_processing_state` (one row per run,
+  periods as JSON) and
   `_nld_incremental_plans_by_target_period_planned_processing_state`.
 - **Calendar changes** — the state records its granularity and timezone; a
   run whose options differ is refused (period keys would be misread).
