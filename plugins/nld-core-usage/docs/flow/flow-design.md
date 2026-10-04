@@ -15,8 +15,8 @@ query from a co-located `.sql` file and materializes its result as a table.
 
 - **SQL-first approach:** Most data flows are expressed as SQL SELECT statements.
   The framework reads a `.sql` file and applies a configurable **write strategy**
-  (OVERWRITE, VIEW, INSERT, UPSERT, DELETE_INSERT, or UPSERT_LOGICAL_DELETE) to
-  materialize the result. Execution, state tracking, and incremental logic are
+  (OVERWRITE, VIEW, INSERT, UPSERT, DELETE_INSERT, DELETE_INSERT_SCOPED, or
+  UPSERT_LOGICAL_DELETE) to materialize the result. Execution, state tracking, and incremental logic are
   handled transparently.
 - **SQLFlowTask** (`core/nld/flow/sql/sql_flow_task.py`) extends `DataFlowTask` and
   resolves its SQL file from the project entities root using the flow namespace and
