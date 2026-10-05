@@ -22,7 +22,7 @@ This document describes the standard YAML format for defining data structures in
 | `pre_deployment_sql_hook` | list[string] | No | SQL statements run before the structure's deployment DDL. The structure's list overrides a template's; Jinja-rendered with `schema`, `structure_name`, `object_path`, and project variables |
 | `post_deployment_sql_hook` | list[string] | No | SQL statements run after the structure's deployment DDL. Same override and rendering rules as `pre_deployment_sql_hook` |
 | `fields` | dict | Yes | Field definitions (keyed by field name) |
-| `generated_from` | dict | No | Written by `nld structure generate`: the flow, its source structure and their hashes. Marks the structure as generated from its flow's single predecessor — see "Generated Structures" |
+| `generation_metadata` | dict | No | Written by `nld structure generate`: the `flow` the structure is generated from and its `source` structure. Marks the structure as generated from its flow's single predecessor — see "Generated Structures" |
 
 ### Structure Inheritance & Dynamic Class Resolution
 
@@ -528,11 +528,9 @@ regeneration into it.
 
 ```yaml
 # structure/views/v_customer.yml (generated, then edited by hand)
-generated_from:
+generation_metadata:
   flow: views.v_customer            # <flow namespace>.<flow name>
-  mapping_hash: 4744331bb38e2213    # fingerprint of the flow projection
   source: refined.customer          # the flow's single predecessor
-  source_hash: 7f6a8b44025a6ec5     # fingerprint of the source fields, templates and keys
 structure_type: VIEW
 connector_type: postgresql
 templates:
@@ -575,17 +573,19 @@ mapping `data_type` nor the existing file is an error naming the field.
 
 | Rewritten from the source every time | Kept as written |
 |---|---|
-| field list and order, `data_type`, nested `fields`, `structure_type`, `generated_from` | field descriptions and characterisations (filled from the source only when missing), structure `description`, `properties`, `tags`, `characterisations`, hooks, extra templates (source templates are added) |
+| field list and order, `data_type`, nested `fields`, `structure_type`, `generation_metadata` | field descriptions and characterisations (filled from the source only when missing), structure `description`, `properties`, `tags`, `characterisations`, hooks, extra templates (source templates are added) |
 
 Structure-level keys are seeded from the source on the first generation only.
 Existing field keys keep their order; a missing key is inserted at its model
 position (a missing `description` goes before `data_type`).
 An up-to-date file is never rewritten, so its comments survive.
 
-**Staleness.** When the source structure or the flow projection changes, the
-`generated_from` hashes no longer match: `nld structure validate` reports the
-structure as `STALE` (a warning), `nld flow deploy` warns before deploying its
-flow, and `nld structure generate --check` exits non-zero with the diff.
+**Staleness.** A generated structure is stale when regenerating it in memory
+from the flow named in `generation_metadata` would change the file — no hash
+is stored, so only a change that regeneration would apply counts (a new SQL
+filter does not). `nld structure validate` reports it as `STALE` (a warning),
+`nld flow deploy` warns before deploying its flow, and
+`nld structure generate --check` exits non-zero with the diff.
 
 ### Complete Example
 

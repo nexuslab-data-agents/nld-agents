@@ -47,7 +47,7 @@ project-local path. If not found, read the bundled copy.
 | Adding field characterisations | "Field Characterisations", "Standard Field Characterisation Definitions" |
 | Understanding tags and metadata | "Tags", "Business Metadata" |
 | Column order enforcement (`enforce_field_order`) and deployment SQL hooks (`pre_deployment_sql_hook` / `post_deployment_sql_hook`) | "Structure Root Properties"; behavior in `structure-deployment.md` |
-| Generating a view structure from its flow (`generated_from`) | "Generated Structures" |
+| Generating a view structure from its flow (`generation_metadata`) | "Generated Structures" |
 | Full YAML example | "Complete Example" |
 
 **structure-deployment.md** — read when working on deployment, DDL, drift
@@ -138,8 +138,9 @@ nld structure generate --check                                 # write nothing; 
   `target_from_sources_mapping`, else every source field.
 - Regeneration rewrites the field list, types and nested fields; user edits
   (descriptions, characterisations, extra templates, hooks) are kept.
-- The file records a `generated_from` block (flow, source, hashes) — that is
-  what makes `validate`, `flow deploy` and `--check` detect staleness.
+- The file records a `generation_metadata` block (`flow`, `source`); staleness
+  (`validate`, `flow deploy`, `--check`) regenerates the structure in memory
+  from that flow and compares the result with the file.
 
 Rules, ownership table and an example: `structure-design.md` →
 "Generated Structures".
