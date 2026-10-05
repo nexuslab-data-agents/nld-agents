@@ -17,15 +17,17 @@ nld structure deploy [--name <structure>] [--namespace <ns>]
 | Option | Effect |
 |--------|--------|
 | `--name` | Deploy one structure (TABLE only; its own namespace is resolved from the registry) |
-| `--namespace` | Scope to a namespace; default is the root namespace |
+| `--namespace` | Deploy one deployment unit — the namespace and its descendants on the same deploy target, widened to its deploy group (see `flow-deployment.md` §4b); without it, the whole project |
 | `--preview` | Compute and print diff + DDL; execute nothing, record nothing. Exit `2` when changes are pending, `0` when in sync |
 | `--output` | With `--preview`, write the change entries as a JSON array to this path (written even when empty) |
 | `--adopt` | On drift: record the live schema as a flagged `state_refresh` baseline, then deploy against it. Also permits dependent-view drops |
 | `--allow-drift` | On drift: deploy against the live schema without recording a new baseline |
 | `--rebuild` | Recreate the in-scope structures from the assets, ignoring recorded and live state (destructive) |
 
-Without `--name`, the scope is every TABLE structure in the namespace that is
-not an external source and not managed by flow execution. Live tables with no
+Without `--name`, the scope is every TABLE structure of the deployment unit
+(or of the project) that is not an external source and not managed by flow
+execution. An applied run holds the deploy lock of its targets and records
+its scope, exactly as `nld flow deploy` does. Live tables with no
 matching asset are never diffed, dropped, or recorded — they are invisible to
 structure deploy. Views are deployed by `nld flow deploy` VIEW flows, never by
 structure deploy.
@@ -204,12 +206,18 @@ declaration order with the target injected from its group key.
 
 Change files require a configured `metadata_backend_connector`. The applied
 log is the `_nld_deployment_change` table (PK `change_id`, with `applied_at`,
-`content_hash`, `deployment_id`, `directive_outcomes`). An applied file is
-immutable — a content-hash mismatch is an error ("declare a new change file
-instead") — and an unapplied file older than an applied one is an
-out-of-order-gap error, never silently skipped. A file is recorded as applied
-only when every directive resolved in the run; a scoped deploy leaves files
-with out-of-scope directives pending.
+`content_hash`, `deployment_id`, `directive_outcomes`), completed by
+`_nld_deployment_change_directive` (PK `change_id, outcome_key`): each
+resolved directive is recorded on its own and never runs again, and a file
+joins `_nld_deployment_change` once all its directives are recorded —
+possibly over several namespace deploys, each applying the directives whose
+subject (a rename's new name) belongs to its scope. A file with any applied
+directive is immutable — a content-hash mismatch is an error ("declare a
+new change file instead"). An unapplied directive older than an applied one
+**touching a common asset** (a rename touches its old and new name) is an
+out-of-order-gap error, never silently skipped; directives on unrelated
+assets are independent, so one namespace's pending directives never block
+another namespace.
 
 Rename resolution is idempotent four-way logic: old exists / new absent ⇒
 in-place `ALTER … RENAME`; new exists / old absent ⇒ no-op (already

@@ -124,6 +124,7 @@ entities from filesystem, and is held by the execution context.
 | `scheduling_namespace_config` | `SchedulingNamespaceConfig` | Namespace-scoped scheduling settings (retry budget, alerting) from `namespaces.<ns>.scheduling`. |
 | `structure_namespace_config` | `StructureNamespaceConfig` | Namespace-scoped structure settings from `namespaces.<ns>.structure`. |
 | `folder_namespaces` | `list[str]` | Namespaces declared with `namespaces.<ns>.folder: true`; `project.entity_layout` (`NldEntityLayout`) combines them with `entity_path`. |
+| `deploy_namespace_config` | `DeployNamespaceConfig` | Deploy groups from `namespaces.<ns>.deploy.group`; `get_groups()` returns the members by group. |
 | `entity_registry` | `NldEntityRegistry` | Manages all project entities |
 
 **Loading a project:**
@@ -198,8 +199,8 @@ properties:                    # optional — free-form platform metadata
 ### The `namespaces` block
 
 Each key is a namespace (`.` being the root) declaring the settings that apply
-to the entities under it. The `structure`, `flow` and `scheduling` facets carry
-settings, and a namespace may declare any of them. The boolean `folder` facet does not
+to the entities under it. The `structure`, `flow`, `scheduling` and `deploy`
+facets carry settings, and a namespace may declare any of them. The boolean `folder` facet does not
 configure entities but says where they are stored: `folder: true` makes the
 namespace a **namespace folder**, its entities grouped under
 `<entity_path>/<namespace path>/<entity folder>/` instead of
@@ -219,6 +220,7 @@ is what lets a wildcard win over a broader exact key, so with both `.` and
 | `flow` | `default_state_backend_connector` (a connection name, or `{primary, secondary}`) | `FlowNamespaceMapping` |
 | `scheduling` | `max_attempts` (1–10, default 1), `alerting` | `SchedulingNamespaceMapping` |
 | `folder` | `true` / `false` — exact, non-root keys only (nld-core ≥ 0.1.2a5) | collected into `Project.folder_namespaces` |
+| `deploy` | `group` — exact (non-wildcard) keys only, applied to the declaring namespace without hierarchy resolution; a group needs at least two members (nld-core > 0.1.2a5) | `DeployNamespaceMapping`, collected into `Project.deploy_namespace_config` — the namespaces sharing a group always deploy together (see `flow-deployment.md` §4b) |
 
 The block is transposed at load into one config per facet, reachable on the
 project as `structure_namespace_config`, `flow_namespace_config` and

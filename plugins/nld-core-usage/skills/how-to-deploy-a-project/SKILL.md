@@ -51,13 +51,22 @@ nld flow deploy --no-interactive          # CI
 
 # Scoped
 nld flow deploy --name <flow> [--namespace <ns>]
-nld flow deploy --namespace <ns>
+nld flow deploy --namespace <ns>            # one deployment unit (+ its deploy group)
 nld flow deploy --name <flow> --downstream   # include transitive dependents
 nld flow deploy --name <flow> --upstream     # include transitive ancestors
 ```
 
 `--preview` exits `2` when changes are pending, `0` when in sync — the CI
 gate contract. A declined prompt cancels cleanly (exit 0, nothing applied).
+
+`--namespace` deploys one **deployment unit** — the namespace and its
+descendants mapped to the same connection and schema; a descendant mapped
+elsewhere is left out, and a namespace declaring `deploy: {group: <name>}`
+brings every member of its group. A flow writing another unit's table
+refuses the deploy before any DDL. Units on distinct schemas can deploy in
+parallel: each applied run locks its targets, and a deploy of a locked
+target refuses and names the holder (`nld deploy unlock --target
+<connection>:<schema>` releases a lock left by a killed run).
 
 ## What gets deployed
 
