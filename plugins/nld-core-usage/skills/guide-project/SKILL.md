@@ -47,11 +47,14 @@ The full architectural reference is at
 | Execution context | "3. NldExecutionContext" |
 | Project container + nld_project.yml | "4. Project" |
 | `flow` and `namespaces` blocks, namespace resolution | "4. Project" → "The `namespaces` block" |
+| Retry budget and alerting (`scheduling` facet) | "4. Project" → "The `scheduling` facet: retries and alerting" |
 | Standard task base class | "5. StandardTask" |
 | End-to-end worked example | "6. Complete Entity Access Chain" |
 
 ## Cross-References
 
+- `how-to-set-up-a-project` — the procedure to initialize a project or audit
+  an existing one's configuration, key by key.
 - `guide-entity-registry` — the registry the project owns and how loading works
   (including selective loading via `load_entities`).
 - `guide-project-catalog` — when a platform is several projects.

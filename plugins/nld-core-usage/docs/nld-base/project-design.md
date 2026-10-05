@@ -114,8 +114,14 @@ entities from filesystem, and is held by the execution context.
 | `entity_path` | `str` | Relative path to entities folder (default: `"."`) |
 | `environments` | `EnvironmentsConfig` | Named environments (connection profile + variable overrides); active env resolved by `--env` → `NLD__ENVIRONMENT` → `default`. See `guide-scheduling`. |
 | `properties` | `dict[str, Any]` | Free-form key-value metadata the core does not interpret (platform hints). |
-| `flow_config` | `FlowProjectConfig` | General flow configuration from the `flow` block: `additional_flow_task_types`, `additional_incremental_types`, `additional_quality_rules`. |
+| `metadata_backend_connector` | `str \| None` | Connection holding the deployment metadata tables (`_nld_structure_*`, `_nld_flow_*`). Required by `nld flow deploy` and change files. See `guide-deployment`. |
+| `variables` | `dict[str, str]` | Jinja variables for SQL hooks (structure and flow `pre/post` hooks). An `NLD__VAR__<NAME>` environment variable overrides `<name>`. |
+| `python_additional_paths` | `dict[str, list[str]]` | Extra Python modules (dotted notation, no slash) searched for flow task classes (`flows`) and SQL rendering transformations (`sql_transformations`). Unknown keys are rejected. |
+| `additional_entity_paths` | `list[str]` | Extra entity roots loaded *before* the project ones, so a project entity overrides a packaged one: a path relative to the project root, or `pkg://<package>[/<subdir>]` for an installed package. |
+| `additional_entities` | `list[AdditionalEntityConfig]` | Project-defined entity types (`name`, `model_type`, `folder_name`, optional `display_name`, `category`, `search_direction`, `always_load`, `file_format`). A name colliding with a built-in type is rejected. |
+| `flow_config` | `FlowProjectConfig` | General flow configuration from the `flow` block: `additional_flow_task_types`, `additional_incremental_types`, `additional_quality_rules`, `additional_alert_transports`. |
 | `flow_namespace_config` | `FlowNamespaceConfig` | Namespace-scoped flow settings from `namespaces.<ns>.flow`. |
+| `scheduling_namespace_config` | `SchedulingNamespaceConfig` | Namespace-scoped scheduling settings (retry budget, alerting) from `namespaces.<ns>.scheduling`. |
 | `structure_namespace_config` | `StructureNamespaceConfig` | Namespace-scoped structure settings from `namespaces.<ns>.structure`. |
 | `folder_namespaces` | `list[str]` | Namespaces declared with `namespaces.<ns>.folder: true`; `project.entity_layout` (`NldEntityLayout`) combines them with `entity_path`. |
 | `entity_registry` | `NldEntityRegistry` | Manages all project entities |
@@ -138,14 +144,20 @@ and optionally loads all entities from the filesystem.
 name: my_project
 version: 1.0.0
 entity_path: .
+metadata_backend_connector: pg_main   # optional — needed by nld flow deploy
+variables:                     # optional — Jinja variables of SQL hooks
+  expo_role: reporting_reader
 python_additional_paths:
   flows:
     - custom.flows.module
+additional_entity_paths:       # optional — packaged entity roots
+  - pkg://shared_assets/assets
 flow:                          # optional — general flow configuration
   additional_flow_task_types:
     custom: custom.flows.custom_task.CustomFlowTask
   additional_incremental_types: []
   additional_quality_rules: []
+  additional_alert_transports: []
 namespaces:                    # optional — namespace-scoped settings
   .:
     structure:
@@ -154,6 +166,15 @@ namespaces:                    # optional — namespace-scoped settings
       schema_name: public
     flow:
       default_state_backend_connector: pg_main
+    scheduling:
+      alerting:
+        transports: [slack]
+        alert_on: [FAILED, WARNING]
+        slack:
+          channel: data-alerts
+  "*.extraction":
+    scheduling:
+      max_attempts: 2           # one retry for flows calling external APIs
   source.raw:
     structure:
       default_connection_name: pg_main
@@ -177,8 +198,8 @@ properties:                    # optional — free-form platform metadata
 ### The `namespaces` block
 
 Each key is a namespace (`.` being the root) declaring the settings that apply
-to the entities under it. The `structure` and `flow` facets carry settings, and a
-namespace may declare either or both. The boolean `folder` facet does not
+to the entities under it. The `structure`, `flow` and `scheduling` facets carry
+settings, and a namespace may declare any of them. The boolean `folder` facet does not
 configure entities but says where they are stored: `folder: true` makes the
 namespace a **namespace folder**, its entities grouped under
 `<entity_path>/<namespace path>/<entity folder>/` instead of
@@ -195,13 +216,39 @@ is what lets a wildcard win over a broader exact key, so with both `.` and
 | Facet | Fields | Model |
 |-------|--------|-------|
 | `structure` | `default_connection_name`, `database_name`, `schema_name`, `tags` | `StructureNamespaceMapping` |
-| `flow` | `default_state_backend_connector` | `FlowNamespaceMapping` |
+| `flow` | `default_state_backend_connector` (a connection name, or `{primary, secondary}`) | `FlowNamespaceMapping` |
+| `scheduling` | `max_attempts` (1–10, default 1), `alerting` | `SchedulingNamespaceMapping` |
 | `folder` | `true` / `false` — exact, non-root keys only (nld-core ≥ 0.1.2a5) | collected into `Project.folder_namespaces` |
 
 The block is transposed at load into one config per facet, reachable on the
-project as `structure_namespace_config` and `flow_namespace_config` (both
-`NamespaceMappingConfig` subclasses, `core/nld/pydantic/namespace_mapping.py`).
-An unknown facet name raises rather than being ignored.
+project as `structure_namespace_config`, `flow_namespace_config` and
+`scheduling_namespace_config` (all `NamespaceMappingConfig` subclasses,
+`core/nld/pydantic/namespace_mapping.py`). An unknown facet name raises rather
+than being ignored.
+
+#### The `scheduling` facet: retries and alerting
+
+`max_attempts` is the attempt budget the scheduler gives each flow of the
+namespace (1 = no retry). nld reads the current attempt from the environment
+and alerts on a failure only at the final attempt.
+
+`alerting` declares through which technologies, and on what, the flows of the
+namespace alert:
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `transports` | — (required when enabled) | Transport names: built-in `slack`, `telegram`, or one registered through `flow.additional_alert_transports` (`name`, `transport_class`) |
+| `alert_on` | `[FAILED]` | Execution states raising an alert: `SUCCESS`, `WARNING`, `FAILED` |
+| `alert_after_consecutive_failures` | `1` | Scheduler-side threshold before alerting |
+| `enabled` | `true` | `false` is the explicit opt-out of a namespace (needs no transport) |
+| `<transport>` | — | Non-secret settings of one transport: `slack.channel`, `telegram.chat_id` |
+
+Secrets never live in the project file: each transport reads them from
+`NLD__ALERTING__<TRANSPORT>__<SETTING>` (`NLD__ALERTING__SLACK__WEBHOOK_URL`,
+`NLD__ALERTING__TELEGRAM__BOT_TOKEN`), and a transport whose secret is absent is
+silently disabled. Resolution walks past levels that declare no `alerting`, so a
+root declaration covers every namespace until one declares its own. Unknown
+transports and unknown settings keys fail the project load.
 
 > **Upgrade note (0.1.2a3).** `namespaces` replaces the former
 > `config/structure.yaml` and `config/flow.yaml`, and the top-level
