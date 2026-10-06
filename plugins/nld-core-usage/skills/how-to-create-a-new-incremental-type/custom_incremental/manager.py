@@ -1,16 +1,15 @@
 """State manager for `by_source_tst_with_days_from`.
 
-The only behavioural difference from `by_source_tst` is the
-`update_processing_state` override on DELTA runs: ``pull_from_timestamp``
-is floored at ``now - days_from`` so that an old or missing watermark
-backfills at least the last N days while a watermark older than the
-floor is honoured.
+The type behaves like `by_source_tst` except on DELTA runs:
+``update_processing_state`` floors ``pull_from_timestamp`` at
+``now - days_from``, so an absent or recent watermark backfills at least
+the last N days, while a watermark older than the floor is honoured.
 """
 
 import datetime
 from typing import Any, cast
 
-from nld.connector.base.connector import DATA_CONNECTOR
+from nld.connector.base.connector import DataConnector
 from nld.flow.incremental.base.manager import (
     IncrementalBackendStateManager,
     IncrementalStateManager,
@@ -25,10 +24,21 @@ from .logic import (
 )
 from .sql_filter_manager import BySourceTstWithDaysFromSqlFilterManager
 from .state import (
+    BySourceTstWithDaysFromPlannedProcessingDetailedState,
+    BySourceTstWithDaysFromPlannedProcessingState,
     BySourceTstWithDaysFromProcessingState,
     BySourceTstWithDaysFromSourceState,
     BySourceTstWithDaysFromState,
 )
+
+type BySourceTstWithDaysFromBackend = IncrementalBackendStateManager[
+    DataConnector[Any],
+    BySourceTstWithDaysFromState,
+    BySourceTstWithDaysFromSourceState,
+    BySourceTstWithDaysFromProcessingState,
+    BySourceTstWithDaysFromPlannedProcessingState,
+    BySourceTstWithDaysFromPlannedProcessingDetailedState,
+]
 
 
 def _floor_with_days_from(
@@ -55,6 +65,7 @@ class BySourceTstWithDaysFromStateManager(
         BySourceTstWithDaysFromState,
         BySourceTstWithDaysFromSourceState,
         BySourceTstWithDaysFromProcessingState,
+        BySourceTstWithDaysFromPlannedProcessingState,
         BySourceTstWithDaysFromFlowIncrementalParams,
     ]
 ):
@@ -63,19 +74,9 @@ class BySourceTstWithDaysFromStateManager(
     def __init__(
         self,
         incremental_parameters: BySourceTstWithDaysFromFlowIncrementalParams,
-        incremental_state_backend_manager: IncrementalBackendStateManager[
-            DATA_CONNECTOR,
-            BySourceTstWithDaysFromState,
-            BySourceTstWithDaysFromSourceState,
-            BySourceTstWithDaysFromProcessingState,
-        ]
+        incremental_state_backend_manager: BySourceTstWithDaysFromBackend
         | None = None,
-        secondary_incremental_state_backend_manager: IncrementalBackendStateManager[
-            DATA_CONNECTOR,
-            BySourceTstWithDaysFromState,
-            BySourceTstWithDaysFromSourceState,
-            BySourceTstWithDaysFromProcessingState,
-        ]
+        secondary_incremental_state_backend_manager: BySourceTstWithDaysFromBackend
         | None = None,
         parameters: dict[str, Any] | None = None,
     ):
@@ -126,6 +127,42 @@ class BySourceTstWithDaysFromStateManager(
                 f"The method 'update_processing_state' is not implemented "
                 f"for data load strategy {self.strategy}"
             )
+
+    def is_planned_processing_state_fresh(
+        self,
+        planned_processing_state: BySourceTstWithDaysFromPlannedProcessingState,
+    ) -> bool:
+        """Whether a plan still matches the latest baseline.
+
+        BACKFILL and FULL windows are explicit and never go stale. A
+        BACKFILL_DELTA plan is fresh when its last status change happened
+        after the baseline ``last_pull_to_timestamp``. A DELTA plan adds that
+        its floored ``pull_from_timestamp`` still covers that baseline.
+        """
+        detailed_state = planned_processing_state.detailed_state
+        if detailed_state.strategy in [
+            FlowLoadingStrategies.BACKFILL,
+            FlowLoadingStrategies.FULL,
+        ]:
+            return True
+        if self.latest_incremental_state is None:
+            return True
+        baseline_timestamp = self.latest_incremental_state.last_pull_to_timestamp
+        plan_changed_after_last_run = (
+            baseline_timestamp is None
+            or planned_processing_state.status_changed_at > baseline_timestamp
+        )
+        if detailed_state.strategy == FlowLoadingStrategies.BACKFILL_DELTA:
+            return plan_changed_after_last_run
+        if detailed_state.strategy == FlowLoadingStrategies.DELTA:
+            return plan_changed_after_last_run and (
+                baseline_timestamp is None
+                or (
+                    detailed_state.pull_from_timestamp is not None
+                    and detailed_state.pull_from_timestamp <= baseline_timestamp
+                )
+            )
+        return True
 
     @property
     def sql_filter_manager(self) -> IncrementalSqlFilterManager:

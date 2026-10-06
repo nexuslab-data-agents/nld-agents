@@ -30,9 +30,9 @@ use.
 | Surface | What it is | Field on `FlowIncrementalTypeManifest` |
 |---------|-----------|----------------------------------------|
 | **Logic** | A module-level `FlowIncrementalLogic[ParamsCls]` instance, paired with a `FlowIncrementalDefinition` and a `FlowIncrementalParams` subclass that lists every CLI-visible parameter in `param_definitions`. | `logic_module` |
-| **State manager** | A subclass of `IncrementalStateManager` parameterised by your three state classes and your params class. Owns `init_processing_state`, `update_processing_state`, `create_post_processing_state`, and the `sql_filter_manager` property. | `state_manager_module` |
-| **State models** | Three pydantic models — `FlowState`, `FlowSourceState`, `FlowProcessingState` subclasses — declared in the logic and state-manager generics. Carry the persisted watermark, the per-run source snapshot, and the per-run processing record. The `FlowState` and `FlowProcessingState` subclasses each implement the abstract `render_state_text()` so `nld flow state incremental get-state` can render them; the `FlowProcessingState` subclass also implements `get_display_log()` (and overrides `get_pull_timestamps()` for timestamp strategies). | (imported by `logic_module` and `state_manager_module`) |
-| **Backend package** | A package containing one module per `(backend_type, engine)` pair the type supports. Each module subclasses `IncrementalBackendStateManager[Connector, State, SourceState, ProcessingState]`. The base subclass goes in the file named by the template with `base` as the backend type — `base_with_{engine}.py` by default. | `backend_package` |
+| **State manager** | A subclass of `IncrementalStateManager[State, SourceState, ProcessingState, PlannedProcessingState, Params]`. Owns `init_processing_state`, `update_processing_state`, `create_post_processing_state`, and the `sql_filter_manager` property. | `state_manager_module` |
+| **State models** | Three pydantic models — `FlowState`, `FlowSourceState`, `FlowProcessingState` subclasses — declared on the definition (`state_class`, `source_state_class`, `processing_state_class`) and in the state-manager generics. Carry the persisted watermark, the per-run source snapshot, and the per-run processing record. The `FlowState` and `FlowProcessingState` subclasses each implement the abstract `render_state_text()` so `nld flow state incremental get-state` can render them; the `FlowProcessingState` subclass also implements `get_display_log()` (and overrides `get_pull_timestamps()` for timestamp strategies). A plan-capable type adds two planned-state models: a `FlowPlannedProcessingDetailedState[ProcessingState]` subclass (the planned window, with `to_processing_state` / `from_processing_state`) and a `FlowPlannedProcessingState[DetailedState]` subclass, declared as `planned_processing_detailed_state_class` / `planned_processing_state_class`. | (imported by `logic_module` and `state_manager_module`) |
+| **Backend package** | A package containing one module per `(backend_type, engine)` pair the type supports. Each module subclasses `IncrementalBackendStateManager[Connector, State, SourceState, ProcessingState, PlannedProcessingState, PlannedProcessingDetailedState]`; the factory loads the first such class defined in the module. The base subclass goes in the file named by the template with `base` as the backend type — `base_with_{engine}.py` by default. | `backend_package` |
 
 The optional `backend_module_template` controls the per-backend filename
 pattern (defaults to `{backend_type}_with_{engine}`). `fallback_to_base_backend`
@@ -53,20 +53,22 @@ backfills the last `N` days.
 
 | File under `custom_incremental/` | Maps to |
 |----------------------------------|---------|
-| `logic.py` | `logic_module` — defines `BY_SOURCE_TST_WITH_DAYS_FROM_FLOW_INCREMENTAL_LOGIC`, the `FlowIncrementalDefinition`, and a `FlowIncrementalParams` subclass declaring `days_from: int \| None`. |
-| `state.py` | three state models (`State`, `SourceState`, `ProcessingState`) — same shape as `by_source_tst` because the persisted watermark is unchanged. |
-| `manager.py` | `state_manager_module` — `IncrementalStateManager` subclass. Reads `incremental_parameters.days_from` inside `update_processing_state` and floors `pull_from_timestamp` at `now - days_from`. |
-| `sql_filter_manager.py` | timestamp-range filter, reused without modification. |
+| `logic.py` | `logic_module` — defines `BY_SOURCE_TST_WITH_DAYS_FROM_FLOW_INCREMENTAL_LOGIC`, the `FlowIncrementalDefinition` (with `supports_planned_state=True` and its planned-state classes), and a `FlowIncrementalParams` subclass declaring `days_from: int \| None`. |
+| `state.py` | the three state models plus the two planned-state models — same shape as `by_source_tst` because the persisted watermark is unchanged. |
+| `manager.py` | `state_manager_module` — `IncrementalStateManager` subclass. Reads `incremental_parameters.days_from` inside `update_processing_state` and floors `pull_from_timestamp` at `now - days_from`; `is_planned_processing_state_fresh` keeps a DELTA plan fresh while its floored lower bound still covers the persisted watermark. |
+| `sql_filter_manager.py` | timestamp-range filter, the same as `by_source_tst`'s. |
 | `backend/__init__.py` | empty marker. |
-| `backend/base_with_pydantic.py` | abstract `IncrementalBackendStateManager` subclass typed on the three state models. |
-| `backend/postgresql_with_pydantic.py` | concrete PostgreSQL backend persisting state + processing-state rows via the `Psycopg2SQLConnector` `pydantic_manager`. |
+| `backend/base_with_pydantic.py` | abstract `IncrementalBackendStateManager` subclass typed on the five state models. |
+| `backend/postgresql_with_pydantic.py` | concrete PostgreSQL backend on `PostgreSQLIncrementalBackendMixin`, persisting state, processing-state and planned processing-state rows via the `Psycopg2SQLConnector` model manager. |
 | `nld_project_snippet.yml` | copy-pasteable `flow.additional_incremental_types:` entry. |
 
-Other backends (BigQuery, Snowflake, DuckDB, S3-blob-storage) follow the
-same pattern as `postgresql_with_pydantic.py`: subclass the matching
-`PostgreSQLBackendMixin`/`BigQueryBackendMixin`/etc. and override the
-schema/table accessors. The example ships only `base` and `postgresql`
-to keep the reference small; consult the built-in
+Other backends follow the same pattern as `postgresql_with_pydantic.py`
+on the matching mixin. `SnowflakeIncrementalBackendMixin`,
+`SQLiteIncrementalBackendMixin` and `S3IncrementalBackendMixin` are
+plan-capable like the PostgreSQL one; `BigQueryBackendMixin`,
+`DuckDBBackendMixin` and `LocalBackendMixin` are not, and their backends
+skip the planned-state hooks. The example ships only `base` and
+`postgresql` to keep the reference small; consult the built-in
 `nld.flow.incremental.impl.by_source_tst.backend` package when a real
 deployment needs the others.
 
@@ -129,20 +131,28 @@ deployment needs the others.
    state manager when a baseline can supersede an earlier plan (the
    base returns `True`; `by_source_tst` checks DELTA /
    BACKFILL_DELTA window invariants against the persisted watermark,
-   `by_key` keeps every plan fresh). Backends inherit the
-   `supports_planned_state=True` from `PostgreSQLIncrementalBackendMixin`
-   and `S3IncrementalBackendMixin`; a custom backend mixin must set
-   the `ClassVar` itself to be plan-capable. The `nld flow state
+   `by_key` keeps every plan fresh). A plan-capable definition also
+   declares its two planned-state classes. Backends inherit
+   `supports_planned_state=True` from `PostgreSQLIncrementalBackendMixin`,
+   `SnowflakeIncrementalBackendMixin`, `SQLiteIncrementalBackendMixin`
+   and `S3IncrementalBackendMixin`, and implement the mixin's three
+   hooks for the type's own planned table:
+   `_ensure_planned_processing_state_table_exists`,
+   `write_planned_processing_state` and `read_planned_processing_state`.
+   A custom backend mixin sets the `ClassVar` itself to be plan-capable.
+   The `nld flow state
    incremental compute --persist`, `nld flow execute
    --state-compute-only`, and `nld flow state incremental get-planned`
    commands gate on the AND of the strategy and backend layers.
 
 5. **Wire the backend.** Place at minimum `base_with_<engine>.py`
    (abstract) plus one concrete `<backend_type>_with_<engine>.py` per
-   supported pair. Each concrete subclass overrides
-   `retrieve_current_state`, `get_processing_state`,
-   `get_post_processing_state`, `write_processing_state`, and
-   `write_post_processing_state`. Backend subclasses may also override
+   supported pair. Each concrete subclass implements the abstract
+   `write_processing_state` and `write_post_processing_state`, and
+   overrides `read_current_state` (the watermark a run resumes from),
+   `read_processing_state` and `read_post_processing_state` (what
+   `get-state` reads); the base versions raise `NotImplementedError`.
+   Backend subclasses may also override
    the classmethod `determine_parameters_for_flow_definition(
    data_flow_definition)` to derive backend parameters from the typed
    flow context (target structure, predecessors, …); the default
@@ -185,8 +195,10 @@ deployment needs the others.
 
 - The four surfaces must be importable from the python paths declared in
   the manifest. `Project` only validates that the paths are dotted; the
-  factory imports them on first use, and an `ImportError` there surfaces
-  as a `IncrementalStateManagerImportError` at flow runtime.
+  factory imports them on first use, so a wrong logic or state-manager
+  path surfaces as a `ModuleNotFoundError` at flow runtime. A missing
+  backend module, a logic module without a `FlowIncrementalLogic`
+  instance, or an abstract backend class raises `ImplementationException`.
 - The registry is a process-wide singleton. Tests that register a
   temporary type must `unregister(name)` in teardown.
 - External types are available only in contexts that load `Project`

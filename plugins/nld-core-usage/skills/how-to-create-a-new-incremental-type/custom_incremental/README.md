@@ -12,13 +12,13 @@ type from `nld_project.yml`.
 | File | Purpose |
 |------|---------|
 | `__init__.py` | re-exports |
-| `logic.py` | `FlowIncrementalDefinition`, params class with `days_from`, top-level `FlowIncrementalLogic` |
-| `state.py` | `State` / `SourceState` / `ProcessingState` pydantic models |
-| `manager.py` | `IncrementalStateManager` subclass — floors `pull_from_timestamp` using `days_from` |
+| `logic.py` | `FlowIncrementalDefinition` (plan-capable), params class with `days_from`, top-level `FlowIncrementalLogic` |
+| `state.py` | `State` / `SourceState` / `ProcessingState` and the two planned-state pydantic models |
+| `manager.py` | `IncrementalStateManager` subclass — floors `pull_from_timestamp` using `days_from`; plan freshness rule |
 | `sql_filter_manager.py` | timestamp-range SQL filter |
 | `backend/__init__.py` | marker |
 | `backend/base_with_pydantic.py` | abstract `IncrementalBackendStateManager` subclass |
-| `backend/postgresql_with_pydantic.py` | PostgreSQL backend |
+| `backend/postgresql_with_pydantic.py` | PostgreSQL backend on `PostgreSQLIncrementalBackendMixin`, including the planned processing-state table |
 | `nld_project_snippet.yml` | copy-pasteable registration entry |
 
 ## Floor semantics
