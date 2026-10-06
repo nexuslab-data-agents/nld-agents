@@ -443,7 +443,7 @@ that space:
 | **Anchor** | which side drives the selection decision | source (`by_source_tst`, `by_key`), none (`no_increment`) |
 | **Source selection** | is a selection pushed down to the source, and on what basis | none / partial + basis (key, tst, …) — derived from the anchor |
 | **Dimension** | the unit the type selects and remembers | key, time window, scope, — |
-| **Change detection** | what tells the type something changed | source key inventory, extraction timestamp, functional update timestamp, none |
+| **Change detection** | what tells the type something changed | source key inventory, extraction timestamp, business update timestamp, none |
 
 The anchor determines the source selection: a source-anchored type
 selects **partially**, on the basis of its dimension; `no_increment` has

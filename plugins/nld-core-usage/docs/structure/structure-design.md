@@ -317,9 +317,15 @@ characterisations:
 |-----------------|-------------|------------------|
 | `primary_key` | Primary key constraint | Yes |
 | `technical_unique_key` | Technical uniqueness constraint | Yes |
-| `functional_unique_key` | Functional uniqueness constraint | Yes |
-| `functional_key` | Functional key definition | Yes |
+| `business_unique_key` | Business uniqueness constraint | Yes |
+| `business_key` | Business key definition (non-unique) | Yes |
 | `unique` | General uniqueness constraint | Yes |
+
+`functional_unique_key` and `functional_key` are the former names of
+`business_unique_key` and `business_key`. They are still accepted as deprecated
+aliases: the loader replaces them by the new name and logs a warning naming the
+structure file, so no code past the parser sees the old name. They will be
+removed in a future release.
 
 ### Field Definition
 

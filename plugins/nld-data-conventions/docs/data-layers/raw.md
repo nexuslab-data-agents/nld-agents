@@ -73,7 +73,7 @@ Every raw table (both `raw_json_` and `raw_`) has a corresponding `v_*_latest` v
 
 | Table | View | Dedup Key |
 |-------|------|-----------|
-| `raw_<prefix>_<entity>` | `v_raw_<prefix>_<entity>_latest` | `functional_key` (entity key) |
+| `raw_<prefix>_<entity>` | `v_raw_<prefix>_<entity>_latest` | `business_key` (entity key) |
 
 > **Note**: `raw_json_` tables do not have a deduplicated view. The raw flatten flow reads directly from `raw_json_` and handles deduplication in the SQL or via the UPSERT write strategy on the `raw_` target.
 
@@ -142,5 +142,5 @@ The view uses `ROW_NUMBER() OVER (PARTITION BY <key> ORDER BY ts_updated_at DESC
 ### raw_ tables (flattened)
 - Columns use **source field names** (not semantic prefixes - those are for the refined layer)
 - Data types should match the source as closely as possible
-- Functional key should be defined as a characterisation
+- Business key should be defined as a characterisation
 - Template-provided tracking columns

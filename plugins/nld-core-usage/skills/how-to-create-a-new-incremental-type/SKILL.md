@@ -83,7 +83,7 @@ deployment needs the others.
    | Anchor | which side drives the selection | source / none |
    | Source selection | is a selection pushed to the source, on what basis | none / partial + basis — **derived from the anchor** |
    | Dimension | the unit selected and remembered | key, time window, scope, … |
-   | Change detection | what signals a change | key inventory, extraction tst, functional update tst, none |
+   | Change detection | what signals a change | key inventory, extraction tst, business update tst, none |
 
    A source-anchored type selects partially on its dimension. Keep this
    separate from **source availability** (whether one read of
