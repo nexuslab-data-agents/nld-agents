@@ -16,7 +16,7 @@ some connectors (local, S3) offer on top of their own storage. See the
 | `nld flow execute` (write path) | ✅ | Header, state, history, and step rows persisted. |
 | `nld flow state execution get-state` | ✅ | Base default, derived from `retrieve_latest_execution_state`. |
 | `nld flow state execution get-history` | ✅ | Base default. |
-| `nld flow state execution get-steps` | `[]` | Step rows live in `*_execution_step_history` but are not joined on read, so the header reads back without steps. |
+| `nld flow state execution get-steps` | ✅ | `_get_steps_for(flow_uid)` reads the step rows from `*_execution_step_history`. |
 
 ## Incremental backend
 

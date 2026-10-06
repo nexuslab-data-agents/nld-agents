@@ -6,8 +6,8 @@ This document describes the standard YAML format for defining data structures in
 
 | Property | Type | Required | Description |
 |----------|------|----------|-------------|
-| `name` | string | Yes | Unique identifier (typically file name without extension) |
-| `connector_type` | string | No | Target backend: `postgresql`, `snowflake`, `flat_file`, `pandas`, `pydantic` |
+| `name` | string | Yes | Identifier, unique within its namespace (typically file name without extension). The same name may exist in several namespaces: `<namespace>.<name>` then designates one copy (see `entity-registry-design.md` → "Same-name entities across namespaces") |
+| `connector_type` | string | No | Target backend: `postgresql`, `snowflake`, `bigquery`, `duckdb`, `sqlite` (each resolving to its connector subclass), or `flat_file`, `pandas`, `pydantic` |
 | `structure_type` | string | Yes | Object type: `TABLE`, `VIEW`, `FLAT_FILE` |
 | `description` | string | No | Full description of the structure |
 | `short_description` | string | No | Brief description for display purposes |
@@ -18,10 +18,11 @@ This document describes the standard YAML format for defining data structures in
 | `origin` | dict[str, Any] | No | Definition origin and flow relationships (e.g., `creation_method`, `loading_flows`) |
 | `options` | dict[str, Any] | No | Additional options for the structure |
 | `characterisations` | list | No | Structure-level characterisations |
-| `enforce_field_order` | boolean | No | Whether deployment enforces the declared column order on the physical table. Unset falls back to the connector's `enforce_field_order_default` capability (PostgreSQL and Snowflake enforce by default; BigQuery and DuckDB do not). When enforced, an order mismatch triggers a data-preserving REBUILD — see `structure-deployment.md` |
+| `enforce_field_order` | boolean | No | Whether deployment enforces the declared column order on the physical table. Unset falls back to the connector's `enforce_field_order_default` capability (PostgreSQL and Snowflake enforce by default; BigQuery, DuckDB and SQLite do not). When enforced, an order mismatch triggers a data-preserving REBUILD — see `structure-deployment.md` |
 | `pre_deployment_sql_hook` | list[string] | No | SQL statements run before the structure's deployment DDL. The structure's list overrides a template's; Jinja-rendered with `schema`, `structure_name`, `object_path`, and project variables |
 | `post_deployment_sql_hook` | list[string] | No | SQL statements run after the structure's deployment DDL. Same override and rendering rules as `pre_deployment_sql_hook` |
 | `fields` | dict | Yes | Field definitions (keyed by field name) |
+| `generation_metadata` | dict | No | Written by `nld structure generate`: the `flow` the structure is generated from and its `source` structure. Marks the structure as generated from its flow's single predecessor — see "Generated Structures" |
 
 ### Structure Inheritance & Dynamic Class Resolution
 
@@ -188,26 +189,29 @@ tags:
 
 #### Namespace-Level Tags
 
-Tags can also be defined at the namespace level in `config/structure.yaml` via
-the `tags` field on `StructureProjectMapping`. These tags are automatically
-injected into all structures in that namespace after entity loading, with
-deduplication against the structure's own tags.
+Tags can also be defined at the namespace level in the `namespaces` block of
+`nld_project.yml` via the `tags` field on `StructureNamespaceMapping`. These
+tags are automatically injected into all structures in that namespace after
+entity loading, with deduplication against the structure's own tags.
 
 ```yaml
-# config/structure.yaml
-mappings:
+# nld_project.yml
+namespaces:
   source.external_crm:
-    default_connection_name: pg_main
-    database_name: main_db
-    schema_name: external_crm
-    tags:
-      - external_source
+    structure:
+      default_connection_name: pg_main
+      database_name: main_db
+      schema_name: external_crm
+      tags:
+        - external_source
 ```
 
-All structures under the `source.external_crm` namespace (and child namespaces)
-will inherit the `external_source` tag without needing to declare it individually.
+All structures whose namespace resolves to this mapping — `source.external_crm`
+and its descendants that declare no closer `structure` mapping — carry the
+`external_source` tag without declaring it individually. Tags are not merged
+across levels: a descendant with its own mapping gets only that mapping's tags.
 
-**File:** `core/nld/structure/config/structure_config.py` (StructureProjectMapping)<br/>
+**File:** `core/nld/structure/config/structure_config.py` (StructureNamespaceMapping)<br/>
 **Injection:** `core/nld/project/project.py` (_apply_structure_config_tags)
 
 ### Business Metadata
@@ -460,7 +464,9 @@ characterisations:
 | `mandatory` | Field cannot be null | No |
 | `unique` | Field values must be unique | No |
 | `rec_insert_tst` | Record insert timestamp | Yes |
+| `rec_insert_by` | User that inserted the record (insert-only on upsert) | Yes |
 | `rec_last_update_tst` | Record last update timestamp | Yes |
+| `rec_last_update_by` | User that applied the last update | Yes |
 | `rec_previous_layer_update_tst` | Last update timestamp in the previous layer | Yes |
 | `rec_source_insert_tst` | Source insert timestamp | Yes |
 | `rec_source_last_update_tst` | Source last update timestamp | Yes |
@@ -513,6 +519,118 @@ targets. When the target structure type is VIEW, the override uses the
 Resolution is handled by `FieldTemplateLineage.resolve_for_target_type()`,
 which returns the override rule if a matching structure type exists, or the
 default rule otherwise.
+
+### Generated Structures
+
+The target structure of a flow with a **single predecessor** — typically a
+`VIEW` exposing a refined table — can be generated instead of copied field by
+field. It stays a named, committed YAML file like any other structure;
+`nld structure generate` writes it on first use and merges every
+regeneration into it.
+
+```yaml
+# structure/views/v_customer.yml (generated, then edited by hand)
+generation_metadata:
+  flow: views.v_customer            # <flow namespace>.<flow name>
+  source: refined.customer          # the flow's single predecessor
+structure_type: VIEW
+connector_type: postgresql
+templates:
+  - tracking                        # kept: every template field is selected unchanged
+fields:
+  id_customer:
+    description: Customer identifier
+    data_type: VARCHAR(20)
+  ds_customer_name:                 # renamed by the flow (ds_name AS ds_customer_name)
+    description: Customer name
+    data_type: CHARACTER VARYING
+characterisations:
+  - name: pk_v_customer             # pk_customer, with the source name replaced
+    characterisation: primary_key
+    linked_fields:
+      - id_customer
+```
+
+**Projection.** The fields come from the flow, in the order a SQL flow
+resolves its query:
+
+| Flow has | Fields |
+|---|---|
+| a `.sql` file | one `SELECT` reading the predecessor table — no join, set operation or subquery. Supports columns, `*`, `col AS alias`, `CAST(x AS type)` (the cast gives the type) and aliased expressions |
+| `target_from_sources_mapping` | one field per entry; an expression without origin needs `data_type` on the entry |
+| neither | every source field, passed through (can then feed `nld structure render`) |
+
+Unquoted SQL identifiers are case-insensitive: an unquoted name takes the
+spelling of the source field it matches (`SELECT CD_CATEGORY` gives
+`cd_category`), any other unquoted name is lowercased, and a quoted name keeps
+its exact case.
+
+A selected source field brings its description, data type, nested fields and
+field characterisations. A source template is reused only when all its
+fields are selected unchanged; otherwise the selected template fields become
+explicit fields. An expression whose type comes from neither a `CAST`, a
+mapping `data_type` nor the existing file is an error naming the field.
+
+**Ownership on regeneration.**
+
+| Rewritten from the source every time | Kept as written |
+|---|---|
+| field list and order, `data_type`, nested `fields`, `structure_type`, `generation_metadata` | field descriptions and characterisations (filled from the source only when missing), structure `description`, `properties`, `tags`, `characterisations`, hooks, extra templates (source templates are added) |
+
+Structure-level keys are seeded from the source on the first generation only.
+Existing field keys keep their order; a missing key is inserted at its model
+position (a missing `description` goes before `data_type`).
+An up-to-date file is never rewritten, so its comments survive.
+
+**Staleness.** A generated structure is stale when regenerating it in memory
+from the flow named in `generation_metadata` would change the file — no hash
+is stored, so only a change that regeneration would apply counts (a new SQL
+filter does not). `nld structure validate` reports it as `STALE` (a warning),
+`nld flow deploy` warns before deploying its flow, and
+`nld structure generate --check` exits non-zero with the diff.
+
+### Exporting a Structure as a Pydantic Model
+
+**File:** `core/nld/structure/export/pydantic_model_builder.py` (exported from
+`nld.structure`)
+
+`build_pydantic_model(structure, mode=..., exclude_characterisations=..., model_name=...)`
+turns a structure (templates included, through `get_all_fields()`) into an
+`NldBaseModel` subclass, so an application serving an API over a structure does
+not restate its fields. `build_json_schema(...)` takes the same arguments and
+returns the model's JSON Schema.
+
+| `mode` | Shape | Required fields | Default class name |
+|---|---|---|---|
+| `read` (default) | The stored row | Every `mandatory` field | `<StructureName>` |
+| `create` | The row a caller sends | `mandatory` fields without a `default_value` (a literal or an SQL expression the engine fills) | `<StructureName>Create` |
+| `patch` | A partial update | None; every field defaults to `None` and unknown keys are rejected (`extra="forbid"`) | `<StructureName>Patch` |
+
+- `exclude_characterisations` drops the fields carrying any of the listed
+  characterisations, matched against the field's own characterisations and the
+  structure characterisations linking it — `["primary key", "rec_insert_tst"]`
+  drops the key fields and the insert timestamp. Names are compared
+  case-insensitively, spaces, `-` and `_` being equivalent.
+- Nested `fields` become nested models; a string `length` becomes `max_length`,
+  a numeric one `max_digits` / `decimal_places`; the field `description` reaches
+  the schema; a `default_value` convertible to the field type becomes the model
+  default (an SQL expression such as `CURRENT_TIMESTAMP` gives `None`).
+- Only portable data types are exported (`DATA_TYPE_TO_PYTHON_TYPE`: character
+  types → `str`, integers → `int`, `numeric`/`decimal` → `Decimal`, floating
+  types → `float`, `boolean`, `date`, `time`, `timestamp[tz]`, `uuid`, and
+  `json`/`jsonb`/`variant` → `Any`). Any other type, or an unknown mode, raises
+  `StructureExportError`.
+
+```python
+from nld.structure import build_json_schema, build_pydantic_model
+
+CustomerCreate = build_pydantic_model(
+    structure,
+    mode="create",
+    exclude_characterisations=["primary key", "rec_insert_tst", "rec_last_update_tst"],
+)
+schema = build_json_schema(structure, mode="patch")
+```
 
 ### Complete Example
 

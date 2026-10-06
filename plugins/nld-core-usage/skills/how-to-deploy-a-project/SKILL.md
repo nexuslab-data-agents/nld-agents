@@ -51,13 +51,25 @@ nld flow deploy --no-interactive          # CI
 
 # Scoped
 nld flow deploy --name <flow> [--namespace <ns>]
-nld flow deploy --namespace <ns>
+nld flow deploy --namespace <ns>            # one deployment unit (+ its deploy group), opt-in
 nld flow deploy --name <flow> --downstream   # include transitive dependents
 nld flow deploy --name <flow> --upstream     # include transitive ancestors
 ```
 
 `--preview` exits `2` when changes are pending, `0` when in sync — the CI
 gate contract. A declined prompt cancels cleanly (exit 0, nothing applied).
+
+`--namespace` deploys one **deployment unit**, only for a namespace that
+`nld_project.yml` declares with `deploy: {unit: true}` (or a deploy group);
+any other namespace is refused, so a project declaring nothing deploys as a
+whole only. The unit is the namespace and its descendants mapped to the
+same connection and schema; a descendant mapped
+elsewhere is left out, and a namespace declaring `deploy: {group: <name>}`
+brings every member of its group. A flow writing another unit's table
+refuses the deploy before any DDL. Units on distinct schemas can deploy in
+parallel: each applied run locks its targets, and a deploy of a locked
+target refuses and names the holder (`nld deploy unlock --target
+<connection>:<schema>` releases a lock left by a killed run).
 
 ## What gets deployed
 
@@ -70,11 +82,11 @@ gate contract. A declined prompt cancels cleanly (exit 0, nothing applied).
   never reported as removed.
 - Each changed flow's target structure deploys first: the diff is computed
   against the live target and resolves to `CREATE` (table absent), `ALTER`
-  (field/characterisation diffs), or `REBUILD` (order enforcement or an
-  engine-unsupported default change — backup-and-swap, the old table
-  archived as `__nld_backup_<ts>`). Flows deploy in topological order; a
-  failure cascade-skips its transitive dependents and the run ends
-  `partial`/`failed` in `_nld_flow_deployment`.
+  (field/characterisation diffs), or `REBUILD` (order enforcement, or a
+  default or type change the engine cannot apply in place — backup-and-swap,
+  the old table archived as `__nld_backup_<ts>`). Flows deploy in
+  topological order; a failure cascade-skips its transitive dependents and
+  the run ends `partial`/`failed` in `_nld_flow_deployment`.
 - Dependent views dropped by table DDL are recreated by re-executing their
   VIEW flows within the same run. A dependent view no nld VIEW flow manages
   fails the deploy before anything is dropped.
@@ -84,7 +96,9 @@ gate contract. A declined prompt cancels cleanly (exit 0, nothing applied).
   previews as a destructive DROP + ADD instead; `backfill_default` fills a
   column's NULLs once; `reload` plans a full refresh the next
   `nld flow execute` consumes (deploy itself never runs the flow — check
-  with `nld flow state incremental get-planned`).
+  with `nld flow state incremental get-planned`). A `--namespace` deploy
+  applies only the directives whose subject belongs to its unit; the others
+  stay pending for the deploy that owns them.
 - Structures tagged `external_source` or
   `target_structure_is_managed_by_flow_execution`, and live tables with no
   matching asset, are never touched.

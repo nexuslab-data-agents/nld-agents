@@ -3,10 +3,12 @@ name: guide-entity-registry
 description: >
   Architectural guide for the nld-core entity-management layer — EntityDefinition,
   search direction (children vs parents), EntityProvider's three-level store,
-  NldEntityRegistry typed accessors, the standard entity-type table, filesystem
-  entity loading, and selective/lazy loading (requested_entity_definitions,
-  always_load, accessors-return-empty). Read when adding an entity type, working
-  on registry/loading code, or namespace resolution.
+  NldEntityRegistry typed accessors, the standard entity-type table, same-name
+  structures and flows across namespaces (qualified keys, AmbiguousEntityException),
+  filesystem entity loading, namespace folders and namespace-scoped loading, and
+  selective/lazy loading (requested_entity_definitions, always_load,
+  accessors-return-empty). Read when adding an entity type, working on
+  registry/loading code, or namespace resolution.
 user-invocable: false
 ---
 
@@ -29,7 +31,10 @@ Activate this guide when the agent is working on:
 - Adding or modifying an entity type (`EntityDefinition`, `folder_name`, `search_direction`)
 - Registry / provider code (`nld/service/`)
 - Entity loading from the filesystem, or selective / lazy loading
+- Namespace folders (namespace-first asset layout) or namespace-scoped loading
 - Namespace resolution and duplicate-priority rules
+- Structures or flows sharing a name across namespaces (qualified
+  `<namespace>.<name>` keys, `AmbiguousEntityException`)
 - Registry accessors (`get_<entity>` / `get_<entity>_dict` / `list_<entity>_keys`)
 
 ## Document Resolution
@@ -44,9 +49,12 @@ The full architectural reference is at
 | Entity type metadata | "1. EntityDefinition" |
 | children vs parents search | "2. Search Direction" |
 | Storage & retrieval service | "3. EntityProvider" |
+| Same-name structures/flows, qualified keys, ambiguous lookups | "3. EntityProvider" → "Same-name entities across namespaces" |
 | Typed accessors + entity-type table | "4. NldEntityRegistry" |
 | Typed wrappers | "5. Typed Wrappers" |
 | Filesystem loading | "6. Entity Loading from Filesystem" |
+| Namespace folders (`folder: true`), `NldEntityLayout` | "6. → Namespace folders" |
+| `load_entities(namespace=...)`, scoped commands | "6. → Namespace-scoped loading" |
 | Selective / lazy loading, `always_load` | "6. → Selective / lazy entity loading" |
 | Namespace resolution worked example | "7. Namespace Resolution with Search Direction" |
 

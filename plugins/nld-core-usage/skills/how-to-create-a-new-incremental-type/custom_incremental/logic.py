@@ -10,23 +10,23 @@ from typing import ClassVar
 
 from pydantic import field_validator
 
-from nld.flow.incremental.base.logic import (
+from nld.flow.incremental.models import (
     FULL_FLAG_PARAM,
     WITH_DELTA_FLAG_PARAM,
     FlowIncrementalDefinition,
     FlowIncrementalLogic,
     FlowIncrementalParamDefinition,
     FlowIncrementalParams,
-)
-from nld.flow.incremental.models.events import IncrementalParameterIgnored
-from nld.flow.incremental.models.referential import (
     FlowSourceSelection,
     FlowTargetUpdateGranularity,
 )
+from nld.flow.incremental.models.events import IncrementalParameterIgnored
 from nld.flow.utils import FlowLoadingStrategies
 from nld.utils.datetime_util import ensure_utc_datetime, parse_datetime_string
 
 from .state import (
+    BySourceTstWithDaysFromPlannedProcessingDetailedState,
+    BySourceTstWithDaysFromPlannedProcessingState,
     BySourceTstWithDaysFromProcessingState,
     BySourceTstWithDaysFromSourceState,
     BySourceTstWithDaysFromState,
@@ -71,6 +71,10 @@ BY_SOURCE_TST_WITH_DAYS_FROM_INCREMENTAL_DEFINITION = FlowIncrementalDefinition(
     state_class=BySourceTstWithDaysFromState,
     source_state_class=BySourceTstWithDaysFromSourceState,
     processing_state_class=BySourceTstWithDaysFromProcessingState,
+    planned_processing_state_class=BySourceTstWithDaysFromPlannedProcessingState,
+    planned_processing_detailed_state_class=(
+        BySourceTstWithDaysFromPlannedProcessingDetailedState
+    ),
     auto_processing_state_transition=True,
     partial_state_persistence=False,
     tracks_logical_deletion=False,
@@ -170,7 +174,7 @@ class BySourceTstWithDaysFromFlowIncrementalParams(FlowIncrementalParams):
         return (
             False,
             f"Strategy '{self.strategy}' is not supported for "
-            f"'by_source_tst_with_days_from' incremental mode. "
+            f"'by_source_tst_with_days_from' incremental type. "
             f"Supported strategies: DELTA, FULL, BACKFILL, BACKFILL-DELTA.",
         )
 

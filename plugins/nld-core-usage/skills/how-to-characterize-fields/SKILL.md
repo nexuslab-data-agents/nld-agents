@@ -49,9 +49,11 @@ names, §4 **common characterisations**). For naming-prefix conventions, see the
 
 - Run from a directory with `nld_project.yml`.
 - The structure to characterise already exists under the entity path
-  (`<entity_path>/structure/<ns>/...`).
+  (`<entity_path>/structure/<ns>/...`, or `<entity_path>/<ns>/structure/...`
+  in a namespace folder).
 - **Strongly recommended**: a `StructureAudit` for the same structure exists
-  (`assets/audits/structure/<ns>/<structure>.yml`). The audit is the data
+  (`assets/audits/structure/<ns>/<structure>.yml`, or
+  `assets/<ns>/audits/structure/<structure>.yml` in a namespace folder). The audit is the data
   profile that turns guesses into evidence-based proposals. An **agent-authored
   analysis markdown** — a separate report someone produced by analysing the audit,
   carrying additional information beyond the raw measured facts (field-selection
@@ -123,6 +125,11 @@ For each field, walk these in order:
      (`standard: iso_3166`).
    - `dt_` / `ts_` business time not already a `rec_*` technical timestamp →
      `functional_timestamp`, `snapshot_date`, `validity_start/end_*`.
+   - user column recording **who** created or last changed the row at this layer
+     (`ds_inserted_by`, `ds_updated_by`, an application's `cd_created_by` …) →
+     the built-in `rec_insert_by` / `rec_last_update_by`, not a functional
+     characterisation. One field each per structure; the deletion counterpart is
+     `rec_deletion_by`.
    - string/int encoded date or time (`YYYYMMDD`, `HHMMSS`, …) → `functional_date`
      / `functional_time` with a `format` attribute (e.g. `yyyymmdd`, `ddmmyyyy`,
      `hhmmss`, `hhmm`).

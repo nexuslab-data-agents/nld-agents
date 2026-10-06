@@ -116,6 +116,7 @@ StructureModels are the built-in `structure_model` entity
 ```
 assets/structure_model/<ns path>/<model_name>.yml      # namespaced
 assets/structure_model/<model_name>.yml                # root namespace
+assets/<folder ns path>/structure_model/<sub path>/<model_name>.yml   # namespace folder (`folder: true`)
 ```
 
 The file `name:` must match the model name (the file stem is used when omitted).
@@ -177,7 +178,9 @@ nld structure model validate [--name <model>] [--namespace <ns>]
 2. **For each structure**, collect its `references` / `hierarchy_parent_info`
    columns and resolve each to the sibling it keys into. **Keep only same-layer
    siblings.**
-3. **Author** `assets/structure_model/<ns>/<structure>.yml` for **every** owned
+3. **Author** `assets/structure_model/<ns>/<structure>.yml` (or
+   `assets/<ns>/structure_model/<structure>.yml` when `<ns>` is a namespace
+   folder) for **every** owned
    structure: one link per same-layer sibling, or `links: {}` when there is none.
 4. **Validate** (the gate): `nld structure model validate`. Fix any reported
    missing field; re-run until clean. Commit the model alongside the structures.

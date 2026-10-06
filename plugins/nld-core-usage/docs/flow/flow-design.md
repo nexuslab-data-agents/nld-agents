@@ -25,7 +25,9 @@ query from a co-located `.sql` file and materializes its result as a table.
   from the flow definition's `write_strategy` field (defaults to `OVERWRITE`).
 - **DataFlowTask** (`core/nld/flow/task/data_flow_task.py`) provides the base
   lifecycle: pre-processing (state retrieval, source state, processing state
-  determination) -> `run_flow()` -> post-processing (state saving, execution status).
+  determination) -> `run_flow()` -> data quality checks (when declared) ->
+  post-processing (state saving, execution status) -> outcome reporting
+  (alert and scheduler outcome line).
 
 ---
 
@@ -33,14 +35,17 @@ query from a co-located `.sql` file and materializes its result as a table.
 
 ### 2.1 Easy Flow Development
 
-Developers define data flows as YAML definitions (`flows/<namespace>/<flow>.yml`) paired
+Developers define data flows as YAML definitions (`flows/<namespace>/<flow>.yml`, or
+`<namespace folder>/flows/<sub namespace>/<flow>.yml` for a namespace folder) paired
 with Python task classes extending `DataFlowTask`. The framework handles:
 - Connector resolution and injection via `data_connectors` mapping
 - Parameter management (init vs run separation)
 - State manager creation via factories with pluggable backends and engines
 - **Task auto-resolution:** When the `task` field is omitted from the YAML definition,
   the framework auto-resolves the task module from the entity path, namespace, and
-  flow name (e.g. `<entity_path>.flows.<namespace>.<flow_name>`) and searches for a
+  flow name (e.g. `<entity_path>.flows.<namespace>.<flow_name>`, or
+  `<entity_path>.<folder path>.flows.<sub namespace>.<flow_name>` inside a namespace
+  folder — see `NldEntityLayout.get_module_path`) and searches for a
   `DataFlowTask` subclass in that module using `find_subclass_in_module`.
 
 Flow definitions support both explicit `task` module paths and auto-resolution
@@ -341,6 +346,9 @@ Deploy changed flows and their target structures:
 - Resolve pending `.deployments/` change files (flow renames, planned reloads)
 - Track every run and flow version in the metadata backend via
   `FlowDeployMetadataManager`
+- Deploy the whole project by default, or one opt-in deployment unit with
+  `--namespace` (a namespace declaring `deploy: {unit: true}` or a deploy
+  group), locking its targets while applying
 
 See `flow-deployment.md` for the full architecture.
 

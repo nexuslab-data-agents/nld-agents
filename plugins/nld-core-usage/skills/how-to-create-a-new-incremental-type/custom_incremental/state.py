@@ -3,18 +3,22 @@
 The persisted watermark is identical to `by_source_tst`: a single
 ``last_pull_to_timestamp`` per flow. ``days_from`` is a runtime parameter
 only; it does not alter what gets stored.
+
+The two planned-state models back ``supports_planned_state=True`` on the
+definition: the detailed state carries the precomputed pull window of a
+PLANNED plan, and converts to and from the processing state.
 """
 
 import datetime
 
 from pydantic import field_validator
 
-from nld.flow.incremental.base.state import (
+from nld.flow.incremental.models import (
+    FlowPlannedProcessingDetailedState,
+    FlowPlannedProcessingState,
     FlowProcessingState,
     FlowSourceState,
     FlowState,
-)
-from nld.flow.incremental.models.referential import (
     IncrementalProcessingStatus,
 )
 from nld.utils.datetime_util import ensure_utc_datetime, get_current_datetime
@@ -133,3 +137,51 @@ class BySourceTstWithDaysFromProcessingState(FlowProcessingState):
 
     def failed(self) -> bool:
         return self.processing_status == IncrementalProcessingStatus.FAILED
+
+
+class BySourceTstWithDaysFromPlannedProcessingDetailedState(
+    FlowPlannedProcessingDetailedState[BySourceTstWithDaysFromProcessingState],
+):
+    """Plan-time detail: the pull window a PLANNED plan proposes."""
+
+    strategy: str
+    pull_from_timestamp: datetime.datetime | None = None
+    pull_to_timestamp: datetime.datetime | None = None
+
+    @field_validator("pull_from_timestamp", "pull_to_timestamp", mode="before")
+    @classmethod
+    def validate_utc_timezone(
+        cls,
+        value: datetime.datetime | None,
+    ) -> datetime.datetime | None:
+        return ensure_utc_datetime(value)
+
+    def to_processing_state(
+        self,
+        flow_uid: str,
+    ) -> BySourceTstWithDaysFromProcessingState:
+        return BySourceTstWithDaysFromProcessingState(
+            flow_uid=flow_uid,
+            strategy=self.strategy,
+            pull_from_timestamp=self.pull_from_timestamp,
+            pull_to_timestamp=self.pull_to_timestamp,
+        )
+
+    @classmethod
+    def from_processing_state(
+        cls,
+        plan_state_uid: str,
+        processing_state: BySourceTstWithDaysFromProcessingState,
+    ) -> "BySourceTstWithDaysFromPlannedProcessingDetailedState":
+        return cls(
+            plan_state_uid=plan_state_uid,
+            strategy=processing_state.strategy,
+            pull_from_timestamp=processing_state.pull_from_timestamp,
+            pull_to_timestamp=processing_state.pull_to_timestamp,
+        )
+
+
+class BySourceTstWithDaysFromPlannedProcessingState(
+    FlowPlannedProcessingState[BySourceTstWithDaysFromPlannedProcessingDetailedState],
+):
+    """A PLANNED plan carrying a `by_source_tst_with_days_from` detail."""

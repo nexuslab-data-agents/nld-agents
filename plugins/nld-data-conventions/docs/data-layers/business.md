@@ -22,7 +22,7 @@ and follow the layout described in
   (referenced via the `predecessors` section of each business flow YAML).
 - **Outputs**: business tables (reference / fact) and their display views,
   consumed by Platinum-layer datamarts and dimensions.
-- **Implementation**: pure SQL flows (`assets/flows/<sub_product>/*.{sql,yaml}`).
+- **Implementation**: pure SQL flows (`assets/<sub_product>/flows/*.{sql,yaml}`).
   No Python code runs in the business layer.
 
 ## Table Naming
@@ -267,8 +267,12 @@ For each business entity:
 
 | File          | Path                                                          | Purpose              |
 |---------------|---------------------------------------------------------------|----------------------|
-| Flow YAML     | `assets/flows/<sub_product>/r_<entity>.yaml`                  | Flow configuration   |
-| SQL           | `assets/flows/<sub_product>/r_<entity>.sql`                   | Transformation SQL   |
-| Structure     | `assets/structure/<sub_product>/r_<entity>.yml`               | Table schema         |
-| View flow YAML| `assets/flows/<sub_product>/v_r_<entity>.yaml` *(optional)*   | Display view config  |
-| View SQL      | `assets/flows/<sub_product>/v_r_<entity>.sql` *(optional)*    | Display view SQL     |
+| Flow YAML     | `assets/<sub_product>/flows/r_<entity>.yaml`                  | Flow configuration   |
+| SQL           | `assets/<sub_product>/flows/r_<entity>.sql`                   | Transformation SQL   |
+| Structure     | `assets/<sub_product>/structure/r_<entity>.yml`               | Table schema         |
+| View flow YAML| `assets/<sub_product>/flows/v_r_<entity>.yaml` *(optional)*   | Display view config  |
+| View SQL      | `assets/<sub_product>/flows/v_r_<entity>.sql` *(optional)*    | Display view SQL     |
+
+> Paths assume the namespace-folder layout (`<sub_product>` declared with `folder: true`
+> in `nld_project.yml`). A namespace without `folder: true` is stored type first, under
+> `assets/flows/<sub_product>/…` and `assets/structure/<sub_product>/…` instead.

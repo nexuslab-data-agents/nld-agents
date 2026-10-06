@@ -4,7 +4,7 @@ description: >
   Architectural guide for the nld-core connection and connector system. Covers
   ConnectionConfigSource, TomlConnectionConfigSource, credential management,
   connector engine architecture, and connector usage patterns for PostgreSQL,
-  BigQuery, Snowflake, and DuckDB.
+  BigQuery, Snowflake, DuckDB, and SQLite.
 user-invocable: false
 ---
 
@@ -40,6 +40,7 @@ When reading the reference doc, focus on the section relevant to your task:
 | Working with PostgreSQL connectors | Part 2: "PostgreSQL Connector Structure" |
 | Static engine facts (data type enums, comparable aliases, fixed precision) | Part 2: "Connector Definitions" |
 | DuckDB connector and the embedded `DuckDBEngine` | Part 2: "DuckDB Connector" |
+| SQLite connector (single `main` schema, storage-affinity type comparison, file-local deploy metadata) | Part 2: "SQLite Connector" |
 | Understanding engine selection (`custom_connector`) | Part 2: "Engine Selection" |
 | Selecting a profile when opening a connector (`get_data_connector` / `--profile-name`) | "Selecting a Profile at Connection Time" |
 | Writing tests for connection code | Part 1: "Testing" |

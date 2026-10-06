@@ -19,7 +19,8 @@ user-invocable: true
 
 ## Definition
 
-- **What**: Produce a `StructureAudit` YAML under `assets/audits/structure/`
+- **What**: Produce a `StructureAudit` YAML under `assets/audits/structure/` (or
+  `assets/<ns>/audits/structure/` when `<ns>` is a namespace folder)
   capturing a structure's target, run metadata, and per-column coverage and
   value distributions, then validate and render it with the CLI. For SQL
   connectors the measuring **and** the YAML writing are done by
@@ -48,10 +49,12 @@ accessors), see the `guide-structure-audit` skill.
 
 - Run from a directory with `nld_project.yml`.
 - The audited structure must already exist under the entity path
-  (`<entity_path>/structure/<ns>/...`).
+  (`<entity_path>/structure/<ns>/...`, or `<entity_path>/<ns>/structure/...`
+  in a namespace folder).
 - **For `nld structure audit run`** (SQL connectors): a working connection to the
   environment holding the table, reachable from the project (verify with
-  `nld connection debug --name <conn>`). The table must be deployed and populated.
+  `nld connection debug --connection-name <conn>`). The table must be deployed
+  and populated.
 - **For manual authoring** (non-SQL connectors): the measurements (coverage,
   distinct counts, distributions) come from querying the data elsewhere — you
   record them; this path does not compute them.
@@ -67,6 +70,7 @@ StructureAudits are the built-in `structure_audit` entity
 ```
 assets/audits/structure/<ns path>/<audit_name>.yml      # namespaced
 assets/audits/structure/<audit_name>.yml                # root namespace
+assets/<folder ns path>/audits/structure/<sub path>/<audit_name>.yml   # namespace folder (`folder: true`)
 ```
 
 The audit's `name:` (and file stem) is the **audited structure name, with no
@@ -84,8 +88,9 @@ to the layout above — you do not hand-write anything.
 
 ```
 nld structure audit run --name <structure> [--namespace <ns>]
-                        [--connection <conn>] [--sample <N>]
-                        [--environment <env>] [--force]
+                        [--connection <conn>] [--profile-name <profile>]
+                        [--sample <N>] [--environment <env>]
+                        [--force | --new-version]
 ```
 
 | Option | Purpose |
@@ -93,9 +98,11 @@ nld structure audit run --name <structure> [--namespace <ns>]
 | `--name` | The **structure** to profile. The audit is named after it (with the environment suffix for non-`prd`). Required. |
 | `--namespace` | Namespace the structure resolves in. |
 | `--connection` | Connection to query. Defaults to the structure namespace's mapped connection, so you usually omit it. |
+| `--profile-name` | Credential profile of that connection (default profile when omitted). |
 | `--sample <N>` | Profile a random sample of at most `N` rows instead of the full table. The sampling is recorded under `metadata.sampling`. Omit for a full pass. |
 | `--environment <env>` | Environment label recorded in `target.environment` and folded into the audit name. Defaults to `prd`. |
-| `--force` | Overwrite an existing audit YAML. Without it, an existing audit is left untouched and the run is skipped. |
+| `--force` | Overwrite an existing audit YAML. Without it (or `--new-version`), an existing audit is left untouched and the run is skipped. |
+| `--new-version` | Write a timestamped audit (`<audit>.<YYYYMMDDThhmmss>.yml`) next to the canonical one, keeping previous audits. |
 
 What the run does for you:
 
@@ -239,6 +246,7 @@ nld structure audit render  --name <audit> [--namespace <ns>] [--stdout]
 2. **Measure** the structure's columns elsewhere (row count, non-null coverage,
    distinct counts, min/max, value distributions for low-cardinality columns).
 3. **Author the audit** at `assets/audits/structure/<ns>/<structure>.yml`
+   (`assets/<ns>/audits/structure/<structure>.yml` in a namespace folder)
    following the template above, naming it after the audited structure.
 4. **List** to confirm discovery:
    `nld structure audit list --namespace <ns>`.

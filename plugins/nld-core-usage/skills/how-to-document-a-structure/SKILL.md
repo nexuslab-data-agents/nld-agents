@@ -5,7 +5,7 @@ description: >
   extract the schema with `nld connection get-structure`, document every
   JSON/VARIANT/ARRAY column's nested schema recursively with the `fields`
   attribute, declare characterisations (keys/unique), and validate with
-  `nld structure info`. The generic nld-core mechanics — independent of any data
+  `nld structure info` and `nld structure validate`. The generic nld-core mechanics — independent of any data
   layer or product layout (those are layered on by the platform skill).
 user-invocable: true
 ---
@@ -26,6 +26,10 @@ user-invocable: true
 - **Why**: The Structure is the single source of truth for the data model; it
   drives SQL rendering, deployment and lineage. A wrong/opaque structure breaks
   all three.
+- **Alternative**: the target structure of a flow with a single predecessor (a
+  view exposing one table) can be generated from the flow with
+  `nld structure generate --name <flow>`, which keeps it in sync with its
+  source — see `guide-structures` → "CLI: generating a flow's target structure".
 
 For the entity internals (connector subclasses, deployment, field
 characterisations), see the `guide-structures` skill. For naming the columns,
@@ -168,10 +172,13 @@ Naming: `<structure_name>__<suffix>` (e.g. `..._dlt_id_key`,
 ## Step 4 — Validate
 
 ```bash
-nld structure info --structure-name <namespace>.<structure_name>
+nld structure info --name <structure_name> --namespace <namespace>
+nld structure validate --name <structure_name> --namespace <namespace>
 ```
 
-Fix YAML / unknown-template errors and re-run until clean.
+`info` loads the structure the way the runtime does (YAML, templates, adapters);
+`validate` checks its field characterisations against the catalogue. Fix the
+reported errors and re-run until both are clean.
 
 ---
 
@@ -187,7 +194,7 @@ Fix YAML / unknown-template errors and re-run until clean.
   leaves.
 - Declare `characterisations` for primary keys, unique constraints and
   functional keys.
-- Validate with `nld structure info`.
+- Validate with `nld structure info` and `nld structure validate`.
 
 ---
 

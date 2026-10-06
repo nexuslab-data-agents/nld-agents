@@ -39,7 +39,7 @@ nld structure deploy --adopt [--namespace <ns>]
 #    (no reload scheduled, no structure DDL — diffs are empty after adopt)
 nld flow deploy --no-interactive
 
-# 3) Verify the backend works: preview should now be clean
+# 3) Verify the backend works: the preview is clean
 nld flow deploy --preview        # expect exit 0, empty change set
 ```
 
@@ -49,7 +49,10 @@ What each step does:
    recorded as a flagged `state_refresh` baseline (never overwriting history)
    and a stable `uid` is minted. Live tables with no matching asset are not
    adopted and stay invisible to every later deploy. If an asset's table does
-   not exist yet, the deploy creates it from the asset.
+   not exist yet, the deploy creates it from the asset. Without `--namespace`
+   the whole project is adopted; `--namespace <ns>` restricts the adoption to
+   one deployment unit and is accepted only for a namespace `nld_project.yml`
+   declares with `deploy: {unit: true}` or a deploy group.
 2. **First flow deploy** — every flow is `NEW` and records its baseline
    hashes; target structures were just adopted, so no DDL runs and no reload
    is scheduled (`nld flow state incremental get-planned` stays empty).

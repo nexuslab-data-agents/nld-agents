@@ -2,10 +2,11 @@
 name: guide-project
 description: >
   Architectural guide for the nld-core project & execution-context layer — the
-  Project container (nld_project.yml, entity_path, environments, properties),
-  TaskRequest, NldExecutionContext (contextvars, load_entities, connectors),
-  StandardTask, and the complete task→entity access chain. Read when working on
-  Project loading, the execution context, task wiring, or nld_project.yml shape.
+  Project container (nld_project.yml, entity_path, environments, properties,
+  the flow block and the namespace-scoped namespaces block), TaskRequest,
+  NldExecutionContext (contextvars, load_entities, connectors), StandardTask,
+  and the complete task→entity access chain. Read when working on Project
+  loading, the execution context, task wiring, or nld_project.yml shape.
 user-invocable: false
 ---
 
@@ -24,7 +25,11 @@ This is one of four guides covering the base layer:
 ## When to Use
 
 Activate this guide when the agent is working on:
-- `Project` loading or the `nld_project.yml` shape (`entity_path`, `environments`, `properties`)
+- `Project` loading or the `nld_project.yml` shape (`entity_path`, `environments`, `properties`, `flow`, `namespaces`, `additional_entity_paths`)
+- Namespace-scoped structure/flow/scheduling settings, or the wildcard namespace keys that resolve them
+- Namespace folders (`namespaces.<ns>.folder: true`) and `project.entity_layout`
+- Namespace deploy units and groups (`namespaces.<ns>.deploy`)
+- Entity roots shipped outside the project (`additional_entity_paths`, `pkg://`)
 - `NldExecutionContext`, `TaskRequest`, or `contextvars`-based context access
 - `StandardTask` and how tasks pick up the active context
 - `load_entities()` / `init_project()` / connector loading from the context
@@ -43,11 +48,15 @@ The full architectural reference is at
 | Task input parameters | "2. TaskRequest" |
 | Execution context | "3. NldExecutionContext" |
 | Project container + nld_project.yml | "4. Project" |
+| `flow` and `namespaces` blocks, namespace resolution | "4. Project" → "The `namespaces` block" |
+| Retry budget and alerting (`scheduling` facet) | "4. Project" → "The `scheduling` facet: retries and alerting" |
 | Standard task base class | "5. StandardTask" |
 | End-to-end worked example | "6. Complete Entity Access Chain" |
 
 ## Cross-References
 
+- `how-to-set-up-a-project` — the procedure to initialize a project or audit
+  an existing one's configuration, key by key.
 - `guide-entity-registry` — the registry the project owns and how loading works
   (including selective loading via `load_entities`).
 - `guide-project-catalog` — when a platform is several projects.

@@ -321,6 +321,11 @@ the data is always up to date. No physical table is created.
 CREATE OR REPLACE VIEW schema.table AS (SELECT ...);
 ```
 
+When the view reads a single predecessor, its target structure can be
+generated from the view SQL with `nld structure generate --name <flow>` and
+kept in sync with the source (see `structure-design.md` → "Generated
+Structures").
+
 ### 3.4 INSERT
 
 Appends all rows from the query result to the existing target table. The table must
@@ -378,7 +383,12 @@ the connector's `upsert_from_query()` method via the
 parameters. `resolve_upsert_field_params()` excludes the
 `rec_insert_tst` field (`ts_inserted_at`) from `UPDATE SET`
 (insert-only) and overrides the `rec_last_update_tst` field
-(`ts_updated_at`) with `CURRENT_TIMESTAMP` on update.
+(`ts_updated_at`) with `CURRENT_TIMESTAMP` on update. The
+`rec_insert_by` field is excluded from `UPDATE SET` the same way, so
+the user who created a record survives later updates, while
+`rec_last_update_by` receives no expression override — a flow
+execution has no acting user, so that column stays whatever the source
+query or the calling application writes.
 
 The seed write strategies (bulk `VALUES` insert of a seed CSV) share
 the same policy module: on insert the technical tracking timestamp
@@ -496,7 +506,7 @@ the definition):
 `DataFlowTask` exposes the resolved value via the `incremental_logic` instance
 property, which call sites (`__init__`, `init_state_manager`,
 `incremental_definition`) read from instead of `_INCREMENTAL_LOGIC` directly.
-`SQLFlowTask` no longer overwrites its ClassVar at construction time — the
+`SQLFlowTask` does not overwrite its ClassVar at construction time — the
 resolver does that work in one place.
 
 `SQLFlowTask._apply_incremental_filter()` delegates to
@@ -727,7 +737,8 @@ FlowExecutionInfo (result)
 **Entry point:** `DataFlowExecutionTask.__init__()` at `nld/flow/task/data_flow_exec_task.py:27`
 
 1. **Load entities:** the execution context scans the `entities/flows/` directory
-   for YAML definitions and registers them in the entity registry.
+   (and the `flows/` folder of every declared namespace folder) for YAML
+   definitions and registers them in the entity registry.
 
 2. **Retrieve definition:** the flow definition is fetched by name and namespace
    from the entity registry.
@@ -831,11 +842,19 @@ raised a `RuntimeError`.
 
 ### 7.1 Path Convention
 
-SQL files are resolved using the function `resolve_sql_file_path()` at
-`nld/flow/sql/sql_file_resolver.py:6`:
+SQL files are resolved using the function `resolve_sql_file_path()` in
+`nld/flow/sql/sql_file_resolver.py`, which asks the project's
+`NldEntityLayout` for the flow's directory:
 
 ```
 {entities_root}/flows/{namespace_as_path}/{flow_name}.sql
+```
+
+For a namespace stored in a namespace folder (`folder: true` on the
+namespace in `nld_project.yml`), the folder comes first:
+
+```
+{entities_root}/{folder_path}/flows/{sub_namespace_as_path}/{flow_name}.sql
 ```
 
 ### 7.2 Namespace Mapping
@@ -847,7 +866,9 @@ SQL files are resolved using the function `resolve_sql_file_path()` at
 | `source.raw` | `entities/flows/source/raw/my_flow.sql` |
 
 Dots in the namespace are converted to directory separators. The root namespace
-(`.`) means the SQL file is placed directly under `entities/flows/`.
+(`.`) means the SQL file is placed directly under `entities/flows/`. With
+`source` declared as a namespace folder, the SQL file of a flow in
+`source.raw` is `entities/source/flows/raw/my_flow.sql`.
 
 ---
 
@@ -865,7 +886,7 @@ Dots in the namespace are converted to directory separators. The root namespace
 | `predecessors.<name>.full_path` | `NldEntityReference[Structure]` | Yes | Dot-separated reference to the predecessor structure entity. |
 | `predecessors.<name>.role` | `str` | No | `MASTER` or `SECONDARY`. First predecessor defaults to MASTER when no role is set. |
 | `predecessors.<name>.key_field` | `str` | No | Column name for `by_key` incremental filtering on the MASTER predecessor. |
-| `state_backend_connector` | `str` or `StateBackendConnector` | No | Connector(s) for persisting execution/incremental state. Accepts a bare connection-name string (legacy form, coerced to `primary`) or a mapping with `primary` (required) and optional `secondary`. Each side may itself be a bare string or the typed `StateBackendConnectorConfig` (`connector` + free-form `params` dict — e.g. `file_format` for S3). The primary backend is authoritative for all reads and for the consolidated execution history; the secondary receives a dual-write copy of per-run execution info, step info and incremental processing state, with failures logged and swallowed (post-processing incremental state stays primary-only). |
+| `state_backend_connector` | `str` or `StateBackendConnector` | No | Connector(s) for persisting execution/incremental state. Accepts a bare connection-name string (shorthand, coerced to `primary`) or a mapping with `primary` (required) and optional `secondary`. Each side may itself be a bare string or the typed `StateBackendConnectorConfig` (`connector` + free-form `params` dict — e.g. `file_format` for S3). The primary backend is authoritative for all reads and for the consolidated execution history; the secondary receives a dual-write copy of per-run execution info, step info and incremental processing state, with failures logged and swallowed (post-processing incremental state stays primary-only). |
 | `target_structure` | `NldEntityReference[Structure]` | No | Dot-separated reference to a target structure entity (e.g. `staging.my_table`). Required for OVERWRITE, INSERT, UPSERT, DELETE_INSERT, and UPSERT_LOGICAL_DELETE strategies. |
 | `write_strategy` | `str` | No | Write strategy: OVERWRITE, VIEW, INSERT, UPSERT, DELETE_INSERT, or UPSERT_LOGICAL_DELETE (default: OVERWRITE) |
 | `params` | `list` or `dict` | No | Flow parameters |
@@ -897,7 +918,7 @@ The dict format is automatically normalized to the list format with type `str`.
 
 `state_backend_connector` accepts three YAML forms:
 
-**Legacy bare string (single primary backend):**
+**Bare string shorthand (single primary backend):**
 
 ```yaml
 state_backend_connector: postgres_metadata

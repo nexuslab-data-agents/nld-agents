@@ -258,8 +258,8 @@ flowchart LR
 Once the state manager is wired, `executor.execute_data_flow(task)`
 calls `task.run(**run_params)`. The orchestration inside `run()` is
 defined on `DataFlowTask` itself
-(`core/nld/flow/task/data_flow_task.py:506`); subclasses only override
-`run_flow()`.
+(`core/nld/flow/task/data_flow_task.py`, `run` → `_run_lifecycle`);
+subclasses only override `run_flow()`.
 
 ```mermaid
 flowchart TD
@@ -276,9 +276,12 @@ flowchart TD
     P1e -->|no, AUTO| P1f
     P1f --> P2[state_manager.save_execution_start]
     P1g --> P2
-    P2 --> RF[run_flow<br/>subclass implementation]
-    RF -->|success| RU[update_execution_status_to_completed]
+    P2 --> DQB[pre_processing_for_data_quality<br/>baseline capture<br/>when quality checks are enabled]
+    DQB --> RF[run_flow<br/>subclass implementation]
+    RF -->|success| DQ[run_data_quality_checks<br/>when quality checks are enabled]
+    DQ --> RU[update_execution_status_to_completed<br/>with_warning on a violation]
     RF -->|exception| RF2[update_execution_status_to_failed]
+    DQ -->|blocking violation| RF2
     RU --> POST[post_processing]
     RF2 --> POST
     POST --> POST1{tracks_state<br/>and not partial<br/>persistence used?}
@@ -287,10 +290,23 @@ flowchart TD
     POST1a --> POSTP[post_processing_for_plan<br/>update_plan_state_to_completed<br/>when used_planned_processing_state<br/>and execution_status ≠ FAILED]
     POSTP --> POST2[post_processing_for_execution<br/>update_global_execution_state<br/>save_all_execution_infos]
     POST2 --> POST3[post_processing_at_end<br/>subclass hook]
-    POST3 --> END{flow_error?}
+    POST3 --> OUT[report_execution_outcome<br/>alert + outcome line<br/>never raises]
+    OUT --> END{flow_error?}
     END -->|yes| RAISE[re-raise]
     END -->|no| RET[return FlowExecutionInfo]
 ```
+
+The data quality steps run only when the flow declares enabled
+`quality_checks` (see `flow-data-quality.md`). Whatever the outcome — an
+error raised anywhere in the lifecycle included — `run()` then calls
+`report_execution_outcome`: the execution context's
+`FlowAlertingProvider` hands the task the `FlowAlertingService` in force
+for its namespace, which maps the outcome on an alert level, posts the
+alert through the configured transports when `alert_on` lists it, and
+prints the scheduler's outcome line when one is requested. A problem in
+this reporting is logged and never turns the execution into a failure
+(see the `guide-scheduling` skill, "Scheduling policy: retries and
+alerting").
 
 `nld flow execute` carries two flags that route directly into this
 pipeline:

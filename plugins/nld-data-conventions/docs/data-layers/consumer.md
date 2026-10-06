@@ -21,7 +21,7 @@ and follow the layout described in
   (referenced via the `predecessors` section of each consumer flow YAML).
 - **Outputs**: dimension and datamart tables, plus their display views, ready
   for direct consumption by downstream tools.
-- **Implementation**: pure SQL flows (`assets/flows/<sub_product>/*.{sql,yaml}`).
+- **Implementation**: pure SQL flows (`assets/<sub_product>/flows/*.{sql,yaml}`).
   No Python code runs in the consumer layer.
 
 ## Table Naming
@@ -65,6 +65,10 @@ For each consumer entity:
 
 | File         | Path                                                       | Purpose             |
 |--------------|------------------------------------------------------------|---------------------|
-| Flow YAML    | `assets/flows/<sub_product>/v_<entity>.yaml`               | Flow configuration  |
-| SQL          | `assets/flows/<sub_product>/v_<entity>.sql`                | View / table SQL    |
-| Structure    | `assets/structure/<sub_product>/v_<entity>.yml`            | Table / view schema |
+| Flow YAML    | `assets/<sub_product>/flows/v_<entity>.yaml`               | Flow configuration  |
+| SQL          | `assets/<sub_product>/flows/v_<entity>.sql`                | View / table SQL    |
+| Structure    | `assets/<sub_product>/structure/v_<entity>.yml`            | Table / view schema |
+
+> Paths assume the namespace-folder layout (`<sub_product>` declared with `folder: true`
+> in `nld_project.yml`). A namespace without `folder: true` is stored type first, under
+> `assets/flows/<sub_product>/…` and `assets/structure/<sub_product>/…` instead.

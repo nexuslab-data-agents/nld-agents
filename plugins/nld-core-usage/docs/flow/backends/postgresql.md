@@ -15,7 +15,7 @@ implemented for both backend families. See the
 | `nld flow execute` (write path) | ✅ | Header, state, history, and step rows in `_nld_execution_*` tables. |
 | `nld flow state execution get-state` | ✅ | |
 | `nld flow state execution get-history` | ✅ | |
-| `nld flow state execution get-steps` | ✅ | Overrides `get_latest_execution_info` / `get_execution_history` to splice rows from `*_execution_step_history` via `_get_steps_for(flow_uid)`. |
+| `nld flow state execution get-steps` | ✅ | `_get_steps_for(flow_uid)` reads the step rows from `*_execution_step_history`. |
 
 ## Incremental backend
 

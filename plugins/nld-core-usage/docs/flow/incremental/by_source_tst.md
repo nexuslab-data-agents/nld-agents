@@ -37,6 +37,7 @@ Two rules are specific to this type and do not generalise:
 | `snowflake` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
 | `duckdb` / `pydantic` | ✅ | ❌ | ✅ | ❌ |
 | `local` / `pydantic` | ✅ | ❌ | ✅ | ❌ |
+| `sqlite` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
 | `s3_blob_storage` | — | — | — | — |
 
 All registered `by_source_tst` backends use the `pydantic` engine.
@@ -52,15 +53,17 @@ Backend modules live under
   from the persisted state alone.
 - **Flow execution** — implemented on every registered backend.
 - **`get-state`** — `read_processing_state` /
-  `read_post_processing_state` are implemented on PostgreSQL and Snowflake.
-- **`compute --persist`** — available on PostgreSQL and Snowflake (via
-  `PostgreSQLIncrementalBackendMixin` / `SnowflakeIncrementalBackendMixin`,
+  `read_post_processing_state` are implemented on PostgreSQL, Snowflake
+  and SQLite.
+- **`compute --persist`** — available on PostgreSQL, Snowflake and SQLite
+  (via `PostgreSQLIncrementalBackendMixin` /
+  `SnowflakeIncrementalBackendMixin` / `SQLiteIncrementalBackendMixin`,
   table `_nld_incremental_plans` for state plans +
   `_nld_incremental_plans_by_source_tst_planned_processing_state` for the
   detailed-state payload).
 - **`get-planned`** (`nld flow state incremental get-planned`) lists the
-  PLANNED plans from the same slot, so it is available on PostgreSQL and
-  Snowflake.
+  PLANNED plans from the same slot, so it is available on PostgreSQL,
+  Snowflake and SQLite.
 - **Planned-state freshness** — `by_source_tst` overrides
   `is_planned_processing_state_fresh`. `BACKFILL` and `FULL` plans
   (explicit windows) are always fresh. `BACKFILL_DELTA` plans are

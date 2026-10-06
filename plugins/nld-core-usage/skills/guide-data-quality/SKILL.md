@@ -8,7 +8,7 @@ description: >
   value_in_set), the valid/warning/error result status and its escalation
   through the declared warning/error/blocking severity, result
   persistence as DATA_QUALITY execution steps, the single-scan
-  engine-portable measurement query, and the `additional_quality_rules`
+  engine-portable measurement query, and the `flow.additional_quality_rules`
   extension point.
 user-invocable: false
 ---
@@ -30,7 +30,7 @@ Activate this guide when the agent is working on:
   severities they escalate through (`warning`, `error`, `blocking`), or
   `DataQualityBlockingViolationException`
 - The `DATA_QUALITY` steps shown by `nld flow state execution get-steps`
-- Registering external rules through `additional_quality_rules`
+- Registering external rules through `flow.additional_quality_rules`
 
 For authoring a new rule, use the `how-to-create-a-new-data-quality-check`
 skill instead.
@@ -74,6 +74,15 @@ project-local path. If not found, read the bundled copy.
   raises `DataQualityBlockingViolationException` after every check result
   is recorded, marking the execution FAILED and leaving the incremental
   state untouched.
+- **Violations alert, the execution decides the level.** When the flow's
+  namespace declares `scheduling.alerting` (with its `transports`) and the
+  run was handed the transports' secrets (`NLD__ALERTING__SLACK__WEBHOOK_URL`,
+  `NLD__ALERTING__TELEGRAM__BOT_TOKEN`…), a `warning`-severity violation raises a
+  `WARNING` alert, an `error`-severity one a `FAILED` alert on an execution
+  that still completed, and a `blocking` one a `FAILED` alert on the failed
+  execution — filtered by `alert_on`. The violated checks are listed in the
+  message. See the `guide-scheduling` skill, "Scheduling policy: retries and
+  alerting".
 - **Payloads live in step metadata.** Check results are persisted in the
   step `metadata` dict under the `DATA_QUALITY` category — never as new
   step columns, because the metadata backend tables are never ALTERed.

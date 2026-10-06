@@ -291,6 +291,7 @@ connection's `type`:
 | `bigquery` | `project_id` (required), `dataset_id`, `schema_name`, `location`, `credentials_path`, `api_endpoint`. Auth: service-account JSON via `credentials_path`; Application Default Credentials when unset; anonymous against `api_endpoint` (emulator) |
 | `snowflake` | `account`, `user`, `authenticator` (`snowflake` → requires `password`; `snowflake_jwt` → requires `private_key_path` [+ `private_key_passphrase`]; `programmatic_access_token` → requires `token`), `role`, `warehouse`, `database_name`, `schema_name` |
 | `duckdb` | `database_name` (the database file path — DuckDB is file-based), `schema_name` (default `main`) |
+| `sqlite` | `database_name` (the database file path, its parent folders created on open, or `:memory:`), `busy_timeout_ms` (default `5000`). `schema_name` is always `main` |
 | `azure_blob_storage` | `storage_account_name`, `sas_token` |
 | `s3_blob_storage` | `endpoint_url`, `region_name`, `access_key_id`, `secret_access_key`, `bucket_name` |
 | `local` | `base_path` |
@@ -379,8 +380,9 @@ cannot mutate the connected database.
 The command is backed by `export_query_to_csv` on the connector base —
 an abstract method each connector implements with its native export
 path for efficiency: psycopg2 `COPY` for PostgreSQL, Arrow fetch for
-Snowflake, native `COPY TO` for DuckDB, and the client's
-`to_dataframe` materialization for BigQuery.
+Snowflake, native `COPY TO` for DuckDB, the client's
+`to_dataframe` materialization for BigQuery, and rows written from Python
+with the `csv` module for SQLite (which has no server-side export).
 
 ## Testing
 
@@ -456,7 +458,7 @@ Each connector exposes a `ConnectorDefinition` singleton — its static engine
 facts — via `DataConnector.get_connector_definition()`. The definition lives
 in the connector's `connector_definition.py` together with the engine's data
 type enum (`PostgreSQLDataTypes`, `BigQueryDataTypes`, `SnowflakeDataTypes`,
-`DuckDBDataTypes`) and carries:
+`DuckDBDataTypes`, `SQLiteDataTypes`) and carries:
 
 - `name` — the connector type string.
 - `accepted_data_types` — the engine type spellings a structure definition may
@@ -522,6 +524,45 @@ nld/connector/duckdb/
 ├── duckdb_engine.py                 → DuckDBEngine (embedded Parquet/SQL engine)
 ├── constants.py                     → DUCKDB_DIALECT
 ├── engine/duckdb_native/            → DuckDBSQLConnector, wrapper, adapters
+├── service/                         → reader, profiler, capabilities, deploy DDL builder
+└── sqlglot/                         → dialect DDL/DML builders
+```
+
+### SQLite Connector
+
+SQLite is a full connector type (`type = "sqlite"`) on the standard library
+`sqlite3` driver — no extra dependency. It follows the standard layout, with
+its engine under `engine/sqlite_native/`, and supports structure deployment,
+the deployment metadata backend, the flow execution and `by_source_tst`
+incremental state backends, and data profiling, all inside the database file.
+
+- **One namespace.** SQLite has a single, always-attached schema, `main`: every
+  declared schema resolves to it and a `schema.table` path to `table`, so a
+  structure written for a PostgreSQL schema deploys unchanged on a local file.
+  The deployment metadata tables share the file with the deployed structures.
+- **Catalog.** There is no `information_schema`; every catalog query reads
+  `sqlite_master` and the `pragma_*` table-valued functions.
+- **Types.** Declared types are stored and read back verbatim;
+  `comparable_data_type_aliases` collapses every accepted spelling onto its
+  storage affinity (`INTEGER`, `TEXT`, `REAL`, `NUMERIC`, `BLOB`), so two
+  spellings of the same physical column never read as drift. Datetimes are
+  stored as ISO 8601 UTC text, JSON and nested models as JSON text.
+- **Connection.** Opened in autocommit mode (the connector issues `BEGIN` /
+  `COMMIT` / `ROLLBACK` itself), with `journal_mode=WAL` (file databases),
+  `foreign_keys=ON` and `busy_timeout` set from `busy_timeout_ms`.
+- **Deployment.** `ALTER TABLE` only adds, renames and drops columns, so a type,
+  nullability or default change goes through the data-preserving rebuild, and
+  column defaults are declared in the `CREATE TABLE` (see
+  `structure-deployment.md`).
+
+```
+nld/connector/sqlite/
+├── __init__.py                      → Plugin (default: sqlite_native engine)
+├── sqlite_credential.py             → SQLiteCredential (database_name, schema_name="main", busy_timeout_ms)
+├── sqlite_structure.py              → SQLiteStructure
+├── connector_definition.py          → SQLiteDataTypes + SQLiteConnectorDefinition (affinity aliases)
+├── constants.py                     → SQLITE_DIALECT, SQLITE_SCHEMA
+├── engine/sqlite_native/            → SQLiteSQLConnector, wrapper, pydantic adapter
 ├── service/                         → reader, profiler, capabilities, deploy DDL builder
 └── sqlglot/                         → dialect DDL/DML builders
 ```
@@ -614,7 +655,8 @@ classDiagram
 
 Engine selection happens at the plugin level: each connector package's
 `__init__.py` exposes a `Plugin` whose `connector_class` is the default
-engine's connector (psycopg2 for PostgreSQL, duckdb_native for DuckDB).
+engine's connector (psycopg2 for PostgreSQL, duckdb_native for DuckDB,
+sqlite_native for SQLite).
 
 A connection substitutes its own connector class through the
 `custom_connector` config key — a dotted class path that must subclass the

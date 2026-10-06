@@ -18,9 +18,21 @@ These characterisations tag fields that track the lifecycle of a record at the *
 | Characterisation | Column Name | Data Type | Default | Description |
 |-----------------|-------------|-----------|---------|-------------|
 | `rec_insert_tst` | `ts_inserted_at` | TIMESTAMP WITH TIME ZONE | CURRENT_TIMESTAMP | When the record was created at this layer |
-| `rec_last_update_tst` | `ts_updated_at` | TIMESTAMP WITH TIME ZONE | CURRENT_TIMESTAMP | When the record was last updated at this layer |
 | `rec_insert_by` | `ds_inserted_by` | CHARACTER VARYING | | User/process that created the record |
+| `rec_last_update_tst` | `ts_updated_at` | TIMESTAMP WITH TIME ZONE | CURRENT_TIMESTAMP | When the record was last updated at this layer |
 | `rec_last_update_by` | `ds_updated_by` | CHARACTER VARYING | | User/process that last updated the record |
+
+`rec_insert_by` and `rec_last_update_by` are built-in nld-core
+characterisations: a created-by / updated-by column is matched by its
+characterisation, never by its name. Both are single-field-per-structure, like
+their timestamp counterparts.
+
+The two user columns are **not** filled by the framework. A flow execution has
+no acting user, so nld-core never injects a value into them: they are written by
+the application (or the source query) that owns the record. What the framework
+does apply is the insert-only rule — the `rec_insert_by` field is excluded from
+the UPSERT `UPDATE SET` exactly like `rec_insert_tst`, so the creator of a row
+survives every later update.
 
 ### Logical Deletion Tracking
 
@@ -85,7 +97,7 @@ These characterisations modify how the NLD UPSERT process handles specific field
 
 | Characterisation | Effect | Typically Applied To |
 |-----------------|--------|---------------------|
-| `exclude_from_upsert_update` | Field is **not updated** during UPSERT (preserves original value on conflict) | `rec_insert_tst` — insertion timestamp should never change after first insert |
+| `exclude_from_upsert_update` | Field is **not updated** during UPSERT (preserves original value on conflict) | Any insert-only field. The framework itself excludes `rec_insert_tst` and `rec_insert_by`, so the characterisation is needed only for other fields |
 | `exclude_from_upsert_match` | Field is **not compared** when determining if a record has changed | Timestamp fields (`rec_last_update_tst`, `rec_deletion_tst`, `rec_source_*_tst`, `rec_previous_layer_*_tst`) — prevents timestamp drift from triggering unnecessary updates |
 
 ## Field Template Mechanics

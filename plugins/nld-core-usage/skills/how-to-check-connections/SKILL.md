@@ -124,7 +124,7 @@ Available connections:
 ```
 
 Each entry shows the connection `name`, its `type` (`postgresql`,
-`bigquery`, `snowflake`, `duckdb`, …), and its **selectable** profiles.
+`bigquery`, `snowflake`, `duckdb`, `sqlite`, …), and its **selectable** profiles.
 The profile list reports `default` whenever the connection declares
 parameters directly (the implicit default profile), followed by every
 named profile — so a connection with both surfaces `default` *and* its

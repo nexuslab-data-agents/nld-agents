@@ -43,6 +43,7 @@ available`.
 | [BigQuery](./bigquery.md) | `bigquery` | `pydantic` |
 | [Snowflake](./snowflake.md) | `snowflake` | `pydantic` |
 | [DuckDB](./duckdb.md) | `duckdb` | `pydantic` |
+| [SQLite](./sqlite.md) | `sqlite` | `pydantic` |
 | [Local file](./local.md) | `local` | `pydantic`, `duckdb` |
 | [S3 blob storage](./s3-blob-storage.md) | `s3_blob_storage` | `pydantic`, `duckdb` |
 
@@ -75,27 +76,26 @@ The per-connector and per-strategy tables use:
 
 ### Execution backend
 
-Header reads (`get-state`, `get-history`) are derived from
-`retrieve_latest_execution_state` on the base
-`ExecutionBackendStateManager`, so every execution backend supports
-them. `get-steps` depends on whether the backend reads step rows back:
+The read accessors live on the base `ExecutionBackendStateManager`:
+headers come from `retrieve_latest_execution_state`, and steps from the
+abstract `_get_steps_for(flow_uid)` hook every backend implements, so
+every execution backend supports all three reads:
 
 | Connector / engine | `get-state` | `get-history` | `get-steps` |
 |--------------------|:-----------:|:-------------:|:-----------:|
 | `postgresql` / `pydantic` | ✅ | ✅ | ✅ |
-| `bigquery` / `pydantic` | ✅ | ✅ | `[]` |
-| `snowflake` / `pydantic` | ✅ | ✅ | `[]` |
-| `duckdb` / `pydantic` | ✅ | ✅ | `[]` |
+| `bigquery` / `pydantic` | ✅ | ✅ | ✅ |
+| `snowflake` / `pydantic` | ✅ | ✅ | ✅ |
+| `duckdb` / `pydantic` | ✅ | ✅ | ✅ |
+| `sqlite` / `pydantic` | ✅ | ✅ | ✅ |
 | `local` / `pydantic` | ✅ | ✅ | ✅ |
 | `local` / `duckdb` | ✅ | ✅ | ✅ |
 | `s3_blob_storage` / `pydantic` | ✅ | ✅ | ✅ |
 | `s3_blob_storage` / `duckdb` | ✅ | ✅ | ✅ |
 
-PostgreSQL splices step rows from `*_execution_step_history` back into
-the read. The other three pydantic-table backends (BigQuery, Snowflake,
-DuckDB) store step rows in the same kind of table but do not join them
-on read, so `get-steps` returns `[]` while the header reads work. The
-file and artifact backends (local, S3) persist steps inline (JSON / a
+The table backends (PostgreSQL, BigQuery, Snowflake, DuckDB, SQLite)
+read step rows from `*_execution_step_history` filtered on `flow_uid`.
+The file and artifact backends (local, S3) persist steps inline (JSON / a
 JSON column) and rehydrate them on read.
 
 ### Incremental backend
@@ -103,15 +103,16 @@ JSON column) and rehydrate them on read.
 `compute` (preview) resolves the next run's processing state in memory
 from `retrieve_current_state`, so it is available wherever the flow
 runs. `get-state` needs the `read_processing_state` /
-`read_post_processing_state` accessors; for `by_source_tst` and
-`by_key` they are implemented on PostgreSQL and Snowflake.
+`read_post_processing_state` accessors; they are implemented on
+PostgreSQL and Snowflake for both `by_key` and `by_source_tst`, on S3
+blob storage for `by_key`, and on SQLite for `by_source_tst`.
 `compute --persist` needs the planned-state write surface, gated on
 both `FlowIncrementalDefinition.supports_planned_state` (strategy
 layer; `by_key` and `by_source_tst` opt in) and
 `IncrementalBackendStateManager.supports_planned_state` (backend
 layer; `PostgreSQLIncrementalBackendMixin`,
-`SnowflakeIncrementalBackendMixin`, and `S3IncrementalBackendMixin`
-opt in). `get-planned` and
+`SnowflakeIncrementalBackendMixin`, `SQLiteIncrementalBackendMixin` and
+`S3IncrementalBackendMixin` opt in). `get-planned` and
 `nld flow execute --planned-state-policy` /
 `--state-compute-only` read or write the same slot, so they share the
 `compute --persist` column.
@@ -123,17 +124,18 @@ opt in). `get-planned` and
 | `by_key` | `duckdb` / `pydantic` | ✅ | ❌ | ✅ | ❌ |
 | `by_key` | `local` / `pydantic` | ✅ | ❌ | ✅ | ❌ |
 | `by_key` | `local` / `duckdb` | ✅ | ❌ | ✅ | ❌ |
-| `by_key` | `s3_blob_storage` / `pydantic` | ✅ | ❌ | ✅ | ✅ |
-| `by_key` | `s3_blob_storage` / `duckdb` | ✅ | ❌ | ✅ | ✅ |
+| `by_key` | `s3_blob_storage` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
+| `by_key` | `s3_blob_storage` / `duckdb` | ✅ | ✅ | ✅ | ✅ |
 | `by_key` | `snowflake` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
 | `by_source_tst` | `postgresql` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
 | `by_source_tst` | `bigquery` / `pydantic` | ✅ | ❌ | ✅ | ❌ |
 | `by_source_tst` | `snowflake` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
 | `by_source_tst` | `duckdb` / `pydantic` | ✅ | ❌ | ✅ | ❌ |
 | `by_source_tst` | `local` / `pydantic` | ✅ | ❌ | ✅ | ❌ |
+| `by_source_tst` | `sqlite` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
 | `no_increment` | any / `pydantic`, `duckdb` | ✅ (no-op) | ❌ | ✅ (empty) | — |
 
 `by_source_tst` has no S3 backend and
-no DuckDB-engine backend. `no_increment` is a connector-agnostic
+no DuckDB-engine backend; `by_key` has no SQLite backend. `no_increment` is a connector-agnostic
 pass-through: it persists no state, so `get-state` has nothing to read
 and there is no planned-state slot.

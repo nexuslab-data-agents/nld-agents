@@ -170,9 +170,9 @@ with ResolutionContext.with_registry(obj_dict):
 
 **File:** `core/nld/pydantic/namespace.py`
 
-Validated, normalized namespace string that subclasses `str` for full backward
-compatibility. Represents a hierarchical position in the entity tree using
-dot-separated levels.
+Validated, normalized namespace string that subclasses `str`, so it is accepted
+wherever a plain string is. Represents a hierarchical position in the entity
+tree using dot-separated levels.
 
 **Validation rules:**
 
@@ -198,6 +198,12 @@ NldNamespace(".").depth  # 0
 # Path conversion
 ns.to_path()                          # "source/raw/customers"
 NldNamespace.from_path("source/raw")  # NldNamespace("source.raw")
+
+# Lineage (segment-wise, so "source" does not contain "sourced")
+NldNamespace("source").contains("source.raw")        # True
+NldNamespace("source.raw").is_related_to("source")   # True (ancestor or descendant)
+NldNamespace("source").append("raw.daily")           # NldNamespace("source.raw.daily")
+NldNamespace("source.raw.daily").relative_to("source")  # NldNamespace("raw.daily")
 ```
 
 ### 2.5 NldNamespacedBaseModelWrapper
@@ -215,7 +221,12 @@ wrapper = NldNamespacedBaseModelWrapper(
 )
 wrapper.model      # The Structure instance
 wrapper.namespace  # NldNamespace("source.raw")
+wrapper.id         # "source.raw.<structure name>" (the bare name at the root)
 ```
+
+`id` is defined for named models only (`TypeError` otherwise). It is the
+qualified key the registry uses for a structure or flow whose name exists in
+several namespaces (see `entity-registry-design.md`).
 
 ### 2.6 NldEntityReference
 
@@ -281,7 +292,7 @@ This is a generic mechanism that works with any `NldBaseModel` subclass.
 | `register_subclass(key_value, class_path)` | Registers a subclass class path for a key value |
 
 If a model does not implement these methods, `_resolve_entity_class()` returns
-the base type unchanged. Currently `Structure` implements this pattern, mapping
+the base type unchanged. `Structure` implements this pattern, mapping
 `connector_type` values to connector-specific subclasses (e.g.
 `PostgreSQLStructure`).
 
