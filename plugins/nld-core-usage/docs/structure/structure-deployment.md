@@ -17,7 +17,7 @@ nld structure deploy [--name <structure>] [--namespace <ns>]
 | Option | Effect |
 |--------|--------|
 | `--name` | Deploy one structure (TABLE only; its own namespace is resolved from the registry) |
-| `--namespace` | Deploy one deployment unit — the namespace and its descendants on the same deploy target, widened to its deploy group (see `flow-deployment.md` §4b); without it, the whole project |
+| `--namespace` | Deploy one deployment unit — opt-in with `deploy: {unit: true}` — the namespace and its descendants on the same deploy target, widened to its deploy group (see `flow-deployment.md` §4b); with `--name`, it only locates the structure; without it, the whole project |
 | `--preview` | Compute and print diff + DDL; execute nothing, record nothing. Exit `2` when changes are pending, `0` when in sync |
 | `--output` | With `--preview`, write the change entries as a JSON array to this path (written even when empty) |
 | `--adopt` | On drift: record the live schema as a flagged `state_refresh` baseline, then deploy against it. Also permits dependent-view drops |

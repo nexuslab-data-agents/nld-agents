@@ -21,7 +21,7 @@ nld flow deploy [--name <flow>] [--namespace <ns>]
 | Option | Semantics |
 |---|---|
 | `--name` | Scope to one flow (bare names ambiguous across namespaces require `--namespace`) |
-| `--namespace` | Deploy one deployment unit: the namespace and its descendants on the same deploy target, widened to its deploy group (§4b) |
+| `--namespace` | Deploy one deployment unit — opt-in: only a namespace declaring `deploy: {unit: true}` or a deploy group — the namespace and its descendants on the same deploy target, widened to its deploy group (§4b). With `--name`, it only locates the flow |
 | `--downstream` / `--upstream` | Expand the scope through the flow dependency graph (transitive, across structures) |
 | `--interactive` / `--no-interactive` | Default `--interactive`: prompt (`Proceed with deployment?`, default No) before applying a non-empty change set. `--no-interactive` applies without prompting (CI) |
 | `--preview` | Compute and print the change set (including structure DDL) against the live target, apply nothing. Exit `2` when changes are pending, `0` when in sync |
@@ -120,6 +120,22 @@ and structures tagged `target_structure_is_managed_by_flow_execution`.
 
 ## 4b. Namespace deployment units and deploy groups
 
+Deploying a namespace on its own is **opt-in**: `--namespace <ns>` is only
+accepted for a namespace declaring `deploy: {unit: true}` (or a deploy group)
+in the `namespaces` block of `nld_project.yml`. Any other namespace —
+including one inside a declared namespace — refuses with
+`NamespaceDeployNotEnabledError` before anything is read, naming the declared
+namespace containing it; a project declaring nothing deploys as a whole
+only. With `--name`, `--namespace` only locates the flow: a single flow
+deploys without declaration or unit scoping.
+
+```yaml
+namespaces:
+  marketing:
+    deploy:
+      unit: true          # nld flow deploy --namespace marketing
+```
+
 `--namespace <ns>` deploys one **deployment unit**: the namespace and every
 descendant that resolves to the same **deploy target** — the connection,
 database and schema of its nearest `namespaces.<ns>.structure` mapping. A
@@ -135,9 +151,9 @@ option selected the whole namespace subtree, across schemas.)
   and tables managed by flow execution never count. With `--name`, only the
   named flow (and its lineage) is checked.
 - **Deploy groups.** Namespaces declaring the same
-  `namespaces.<ns>.deploy.group` always deploy together: deploying a member,
-  a namespace inside a member's unit, or an ancestor whose unit contains a
-  member deploys every member's unit, and a flow may target a table of
+  `namespaces.<ns>.deploy.group` always deploy together: a member is
+  deployable on its own, and deploying a member, or a declared ancestor whose
+  unit contains a member, deploys every member's unit, and a flow may target a table of
   another unit of its group.
 
   ```yaml
@@ -266,7 +282,8 @@ flow gets no state/history row, so the next run recomputes the same change.
 |---|---|---|
 | `metadata_backend_connector` | `nld_project.yml` | Connection whose active schema hosts all deploy metadata; required for `nld flow deploy` and for change files |
 | `namespaces.<ns>.structure.{default_connection_name, database_name, schema_name}` | `nld_project.yml` | Deploy target per structure namespace; also delimits the deployment units of `--namespace` |
-| `namespaces.<ns>.deploy.group` | `nld_project.yml` | Deploy group: the namespaces sharing it always deploy together |
+| `namespaces.<ns>.deploy.unit` | `nld_project.yml` | Allows `--namespace <ns>` deploys (opt-in) |
+| `namespaces.<ns>.deploy.group` | `nld_project.yml` | Deploy group: the namespaces sharing it always deploy together (members are deployable) |
 | `flow.additional_flow_task_types` | `nld_project.yml` | Task-class resolution feeding the Python hash |
 | `external_source`, `target_structure_is_managed_by_flow_execution` | structure tags | Exclude a structure from deployment |
 

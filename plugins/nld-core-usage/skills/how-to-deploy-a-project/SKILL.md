@@ -51,7 +51,7 @@ nld flow deploy --no-interactive          # CI
 
 # Scoped
 nld flow deploy --name <flow> [--namespace <ns>]
-nld flow deploy --namespace <ns>            # one deployment unit (+ its deploy group)
+nld flow deploy --namespace <ns>            # one deployment unit (+ its deploy group), opt-in
 nld flow deploy --name <flow> --downstream   # include transitive dependents
 nld flow deploy --name <flow> --upstream     # include transitive ancestors
 ```
@@ -59,8 +59,11 @@ nld flow deploy --name <flow> --upstream     # include transitive ancestors
 `--preview` exits `2` when changes are pending, `0` when in sync — the CI
 gate contract. A declined prompt cancels cleanly (exit 0, nothing applied).
 
-`--namespace` deploys one **deployment unit** — the namespace and its
-descendants mapped to the same connection and schema; a descendant mapped
+`--namespace` deploys one **deployment unit**, only for a namespace that
+`nld_project.yml` declares with `deploy: {unit: true}` (or a deploy group);
+any other namespace is refused, so a project declaring nothing deploys as a
+whole only. The unit is the namespace and its descendants mapped to the
+same connection and schema; a descendant mapped
 elsewhere is left out, and a namespace declaring `deploy: {group: <name>}`
 brings every member of its group. A flow writing another unit's table
 refuses the deploy before any DDL. Units on distinct schemas can deploy in
