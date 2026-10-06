@@ -25,7 +25,9 @@ query from a co-located `.sql` file and materializes its result as a table.
   from the flow definition's `write_strategy` field (defaults to `OVERWRITE`).
 - **DataFlowTask** (`core/nld/flow/task/data_flow_task.py`) provides the base
   lifecycle: pre-processing (state retrieval, source state, processing state
-  determination) -> `run_flow()` -> post-processing (state saving, execution status).
+  determination) -> `run_flow()` -> data quality checks (when declared) ->
+  post-processing (state saving, execution status) -> outcome reporting
+  (alert and scheduler outcome line).
 
 ---
 
@@ -344,6 +346,9 @@ Deploy changed flows and their target structures:
 - Resolve pending `.deployments/` change files (flow renames, planned reloads)
 - Track every run and flow version in the metadata backend via
   `FlowDeployMetadataManager`
+- Deploy the whole project by default, or one opt-in deployment unit with
+  `--namespace` (a namespace declaring `deploy: {unit: true}` or a deploy
+  group), locking its targets while applying
 
 See `flow-deployment.md` for the full architecture.
 

@@ -6,8 +6,8 @@ This document describes the standard YAML format for defining data structures in
 
 | Property | Type | Required | Description |
 |----------|------|----------|-------------|
-| `name` | string | Yes | Unique identifier (typically file name without extension) |
-| `connector_type` | string | No | Target backend: `postgresql`, `snowflake`, `flat_file`, `pandas`, `pydantic` |
+| `name` | string | Yes | Identifier, unique within its namespace (typically file name without extension). The same name may exist in several namespaces: `<namespace>.<name>` then designates one copy (see `entity-registry-design.md` → "Same-name entities across namespaces") |
+| `connector_type` | string | No | Target backend: `postgresql`, `snowflake`, `bigquery`, `duckdb`, `sqlite` (each resolving to its connector subclass), or `flat_file`, `pandas`, `pydantic` |
 | `structure_type` | string | Yes | Object type: `TABLE`, `VIEW`, `FLAT_FILE` |
 | `description` | string | No | Full description of the structure |
 | `short_description` | string | No | Brief description for display purposes |
@@ -18,7 +18,7 @@ This document describes the standard YAML format for defining data structures in
 | `origin` | dict[str, Any] | No | Definition origin and flow relationships (e.g., `creation_method`, `loading_flows`) |
 | `options` | dict[str, Any] | No | Additional options for the structure |
 | `characterisations` | list | No | Structure-level characterisations |
-| `enforce_field_order` | boolean | No | Whether deployment enforces the declared column order on the physical table. Unset falls back to the connector's `enforce_field_order_default` capability (PostgreSQL and Snowflake enforce by default; BigQuery and DuckDB do not). When enforced, an order mismatch triggers a data-preserving REBUILD — see `structure-deployment.md` |
+| `enforce_field_order` | boolean | No | Whether deployment enforces the declared column order on the physical table. Unset falls back to the connector's `enforce_field_order_default` capability (PostgreSQL and Snowflake enforce by default; BigQuery, DuckDB and SQLite do not). When enforced, an order mismatch triggers a data-preserving REBUILD — see `structure-deployment.md` |
 | `pre_deployment_sql_hook` | list[string] | No | SQL statements run before the structure's deployment DDL. The structure's list overrides a template's; Jinja-rendered with `schema`, `structure_name`, `object_path`, and project variables |
 | `post_deployment_sql_hook` | list[string] | No | SQL statements run after the structure's deployment DDL. Same override and rendering rules as `pre_deployment_sql_hook` |
 | `fields` | dict | Yes | Field definitions (keyed by field name) |
@@ -206,8 +206,10 @@ namespaces:
         - external_source
 ```
 
-All structures under the `source.external_crm` namespace (and child namespaces)
-will inherit the `external_source` tag without needing to declare it individually.
+All structures whose namespace resolves to this mapping — `source.external_crm`
+and its descendants that declare no closer `structure` mapping — carry the
+`external_source` tag without declaring it individually. Tags are not merged
+across levels: a descendant with its own mapping gets only that mapping's tags.
 
 **File:** `core/nld/structure/config/structure_config.py` (StructureNamespaceMapping)<br/>
 **Injection:** `core/nld/project/project.py` (_apply_structure_config_tags)
@@ -586,6 +588,49 @@ is stored, so only a change that regeneration would apply counts (a new SQL
 filter does not). `nld structure validate` reports it as `STALE` (a warning),
 `nld flow deploy` warns before deploying its flow, and
 `nld structure generate --check` exits non-zero with the diff.
+
+### Exporting a Structure as a Pydantic Model
+
+**File:** `core/nld/structure/export/pydantic_model_builder.py` (exported from
+`nld.structure`)
+
+`build_pydantic_model(structure, mode=..., exclude_characterisations=..., model_name=...)`
+turns a structure (templates included, through `get_all_fields()`) into an
+`NldBaseModel` subclass, so an application serving an API over a structure does
+not restate its fields. `build_json_schema(...)` takes the same arguments and
+returns the model's JSON Schema.
+
+| `mode` | Shape | Required fields | Default class name |
+|---|---|---|---|
+| `read` (default) | The stored row | Every `mandatory` field | `<StructureName>` |
+| `create` | The row a caller sends | `mandatory` fields without a `default_value` (a literal or an SQL expression the engine fills) | `<StructureName>Create` |
+| `patch` | A partial update | None; every field defaults to `None` and unknown keys are rejected (`extra="forbid"`) | `<StructureName>Patch` |
+
+- `exclude_characterisations` drops the fields carrying any of the listed
+  characterisations, matched against the field's own characterisations and the
+  structure characterisations linking it — `["primary key", "rec_insert_tst"]`
+  drops the key fields and the insert timestamp. Names are compared
+  case-insensitively, spaces, `-` and `_` being equivalent.
+- Nested `fields` become nested models; a string `length` becomes `max_length`,
+  a numeric one `max_digits` / `decimal_places`; the field `description` reaches
+  the schema; a `default_value` convertible to the field type becomes the model
+  default (an SQL expression such as `CURRENT_TIMESTAMP` gives `None`).
+- Only portable data types are exported (`DATA_TYPE_TO_PYTHON_TYPE`: character
+  types → `str`, integers → `int`, `numeric`/`decimal` → `Decimal`, floating
+  types → `float`, `boolean`, `date`, `time`, `timestamp[tz]`, `uuid`, and
+  `json`/`jsonb`/`variant` → `Any`). Any other type, or an unknown mode, raises
+  `StructureExportError`.
+
+```python
+from nld.structure import build_json_schema, build_pydantic_model
+
+CustomerCreate = build_pydantic_model(
+    structure,
+    mode="create",
+    exclude_characterisations=["primary key", "rec_insert_tst", "rec_last_update_tst"],
+)
+schema = build_json_schema(structure, mode="patch")
+```
 
 ### Complete Example
 

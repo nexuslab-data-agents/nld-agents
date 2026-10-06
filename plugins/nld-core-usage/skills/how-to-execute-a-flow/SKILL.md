@@ -87,7 +87,10 @@ the matching section below.
 
 Scope is optional: `--namespace <ns>` runs every flow of a namespace, and
 omitting both `--name` and `--namespace` runs **every flow in the project**,
-in dependency order.
+in dependency order. Flows in different namespaces may share a name: a
+`--name` matching several of them is refused as ambiguous unless one lives
+in the requested namespace itself (the root namespace when `--namespace` is
+omitted), so add `--namespace <ns>` to pick one.
 
 ### Common options (all incremental types)
 

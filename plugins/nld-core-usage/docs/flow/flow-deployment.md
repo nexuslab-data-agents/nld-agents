@@ -140,21 +140,23 @@ namespaces:
 descendant that resolves to the same **deploy target** — the connection,
 database and schema of its nearest `namespaces.<ns>.structure` mapping. A
 descendant mapped to another target is a unit of its own: it is left out and
-named in the log (`deploy it with --namespace <child>`). Without
-`--namespace`, the whole project deploys. (nld-core > 0.1.2a5; before, the
-option selected the whole namespace subtree, across schemas.)
+named in the log (`deploy it with --namespace <child>`). Membership is
+computed from the namespace configuration alone, so it also answers for the
+namespace of a deployed flow that no longer exists in the project. Without
+`--namespace`, the whole project deploys.
 
 - **Schema boundary.** A selected flow whose target table belongs to a
   namespace outside the scope refuses the deploy with
   `NamespaceDeployScopeError` while planning — a preview refuses the same
   way, nothing is read from or written to a target. Views, external sources
-  and tables managed by flow execution never count. With `--name`, only the
-  named flow (and its lineage) is checked.
+  and tables managed by flow execution never count. A `--name` deploy has
+  no unit scope, so the check does not apply to it.
 - **Deploy groups.** Namespaces declaring the same
   `namespaces.<ns>.deploy.group` always deploy together: a member is
   deployable on its own, and deploying a member, or a declared ancestor whose
-  unit contains a member, deploys every member's unit, and a flow may target a table of
-  another unit of its group.
+  unit contains a member, deploys every member's unit (groups overlapping
+  each other close transitively), and a flow may target a table of another
+  unit of its group.
 
   ```yaml
   namespaces:
@@ -165,6 +167,12 @@ option selected the whole namespace subtree, across schemas.)
       deploy:
         group: customer
   ```
+  The `deploy` facet applies to the namespace declaring it only — never to
+  its descendants through a nearest-ancestor lookup — and is rejected on a
+  wildcard key; a facet declaring neither `unit: true` nor a `group`, and a
+  group with a single member (a typo in the other members' group name), fail
+  the project load. `nld project info` lists the deployable namespaces and the
+  deploy groups.
 - **Metadata.** Previously deployed flows and `REMOVED` detection use the
   same membership rule, so a unit deploy never reads another unit's flows as
   `REMOVED` nor its own as `NEW`.
@@ -202,9 +210,10 @@ schema-wide prefetched snapshot.
   drops them (deepest first) and re-executes the VIEW flows that manage them
   (shallowest first) after the DDL. The VIEW flows are looked up in every
   namespace deploying to the same schema, not only in the deploy scope — a
-  view another namespace owns on a shared schema is dropped all the same. A
-  dependent view no nld VIEW flow manages fails the deploy before anything
-  is dropped.
+  view another namespace owns on a shared schema is recreated all the same.
+  When same-name views exist in several namespaces, every VIEW flow targeting
+  that name is re-executed. A dependent view no nld VIEW flow manages fails
+  the deploy before anything is dropped.
 
 ## 6. Deployment change files
 

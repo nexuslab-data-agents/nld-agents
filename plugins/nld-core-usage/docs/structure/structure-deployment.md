@@ -1,7 +1,7 @@
 # Structure Deployment
 
 Structure deployment synchronizes YAML structure definitions with a target
-database (PostgreSQL, BigQuery, Snowflake, DuckDB). The diff is always
+database (PostgreSQL, BigQuery, Snowflake, DuckDB, SQLite). The diff is always
 recomputed against the live target: the desired state from the assets (D) is
 compared with the actual database schema (A) under the control of the recorded
 state (R) held in the metadata backend.
@@ -26,8 +26,9 @@ nld structure deploy [--name <structure>] [--namespace <ns>]
 
 Without `--name`, the scope is every TABLE structure of the deployment unit
 (or of the project) that is not an external source and not managed by flow
-execution. An applied run holds the deploy lock of its targets and records
-its scope, exactly as `nld flow deploy` does. Live tables with no
+execution. With a `metadata_backend_connector`, an applied run holds the
+deploy lock of its targets and records its scope, exactly as
+`nld flow deploy` does (`flow-deployment.md` §4b). Live tables with no
 matching asset are never diffed, dropped, or recorded — they are invisible to
 structure deploy. Views are deployed by `nld flow deploy` VIEW flows, never by
 structure deploy.
@@ -48,7 +49,10 @@ structure deploy.
 | `nld/structure/deploy/structure_metadata_backend_manager.py` | Metadata tables: state, history, deploy-run records |
 | `nld/structure/deploy/metadata_recorder.py` | History/state writes, backend identity (`uid`) resolution across renames |
 | `nld/structure/deploy/structure_schema_history.py` | Schema snapshot + hash models |
-| `nld/deploy/change_file_loader.py` | `.deployments/` change-file loading, ordering, immutability |
+| `nld/deploy/change_file_loader.py` | `.deployments/` change-file loading, ordering, immutability, directive scoping |
+| `nld/deploy/change_log_manager.py` | Change-file applied-log (`_nld_deployment_change`, `_nld_deployment_change_directive`) |
+| `nld/deploy/namespace_deploy_scope.py` | Deployment units, deploy groups, deploy targets and lock keys of a `--namespace` deploy |
+| `nld/deploy/deployment_lock_manager.py` / `deployment_scope_manager.py` | Deploy lock (`_nld_deployment_lock`) and scope record (`_nld_deployment_scope`) |
 | `nld/connector/base/deploy_capabilities.py` | `ConnectorDeployCapabilities` base + ANSI type aliases |
 
 ## Diff computation
@@ -81,15 +85,16 @@ with `ddl_applied=false` and summary "definition updated (no schema changes)".
 |--------|-------------|-----|
 | `CREATE` | Table absent | CREATE TABLE + defaults + indexes/unique constraints (PK inline) |
 | `ALTER` | Table exists, field/characterisation diffs | Per-diff ALTER statements; declared renames lead the sequence |
-| `REBUILD` | Order mismatch, or a default change on an engine without `alter_column_set_default` | Backup-and-swap (below) |
+| `REBUILD` | Order mismatch; a default change on an engine without `alter_column_set_default`; a type, length, precision or nullability change on an engine without `alter_column_type` (SQLite) | Backup-and-swap (below) |
 | `NONE` | Hashes unchanged | — |
 
 The backup-and-swap REBUILD: build `<name>__nld_new` from the desired
 definition, `INSERT … SELECT` the intersection of columns in desired order
 with casts to the declared types, rename the old table to
 `<name>__nld_backup_<ts>` (suffix minted once per run), rename the new copy
-into place, and re-add the comparable characterisations. The old table is
-archived, never dropped. PostgreSQL performs the swap atomically in one
+into place, and re-add the comparable characterisations. On an engine without
+`alter_add_primary_key` (SQLite) the primary key is declared inline in the
+rebuilt table instead. The old table is archived, never dropped. PostgreSQL performs the swap atomically in one
 transaction; other engines run per-statement.
 
 `--rebuild` is the separate destructive path: `DROP TABLE IF EXISTS` (no
@@ -141,8 +146,10 @@ path:
   connection. The `nld flow deploy` path pins every target's state/history to
   the connection's active schema; the `nld structure deploy` path keeps each
   target's state/history under the target's deploy schema name and writes the
-  run record (`_nld_structure_deployment`) and the change-file applied-log
-  (`_nld_deployment_change`) to the active schema.
+  run record (`_nld_structure_deployment`), the change-file applied-log
+  (`_nld_deployment_change`, `_nld_deployment_change_directive`), the scope
+  record (`_nld_deployment_scope`) and the deploy lock
+  (`_nld_deployment_lock`) to the active schema.
 
 - **`_nld_structure_state`** — one row per structure (PK
   `namespace, structure_name`): `object_path`, `structure_type`,
@@ -239,12 +246,14 @@ refused when the target structure is a VIEW.
 
 `ConnectorDeployCapabilities` parameterizes the engine differences:
 
-| Capability | postgresql | bigquery | snowflake | duckdb |
-|---|---|---|---|---|
-| `alter_column_set_default` | yes | yes | no (default change ⇒ REBUILD) | yes |
-| `enforce_field_order_default` | yes | no | yes | no |
-| `rename_column_in_place` / `rename_table_in_place` | yes | no | yes | yes |
-| `comparable_characterisations` | INDEX, PRIMARY_KEY, UNIQUE | PRIMARY_KEY | PRIMARY_KEY, UNIQUE | INDEX, PRIMARY_KEY, UNIQUE |
+| Capability | postgresql | bigquery | snowflake | duckdb | sqlite |
+|---|---|---|---|---|---|
+| `alter_column_set_default` | yes | yes | no (default change ⇒ REBUILD) | yes | no (default change ⇒ REBUILD) |
+| `alter_column_type` | yes | yes | yes | yes | no (type/nullability change ⇒ REBUILD) |
+| `alter_add_primary_key` | yes | yes | yes | yes | no (key declared inline on REBUILD) |
+| `enforce_field_order_default` | yes | no | yes | no | no |
+| `rename_column_in_place` / `rename_table_in_place` | yes | no | yes | yes | yes |
+| `comparable_characterisations` | INDEX, PRIMARY_KEY, UNIQUE | PRIMARY_KEY | PRIMARY_KEY, UNIQUE | INDEX, PRIMARY_KEY, UNIQUE | INDEX, PRIMARY_KEY, UNIQUE |
 
 All engines share the ANSI alias set (`CHARACTER VARYING→VARCHAR`,
 `DECIMAL→NUMERIC`, `INT→INTEGER`, `TIMESTAMP WITHOUT TIME ZONE→TIMESTAMP`)
@@ -252,9 +261,15 @@ plus connector-specific aliases (e.g. Snowflake folds every integer spelling
 into NUMERIC, the character family — `TEXT`, `CHAR`, `STRING` — into VARCHAR,
 and maps `TIMESTAMP` to `TIMESTAMP_NTZ`; Snowflake's INFORMATION_SCHEMA reads
 every character column back as TEXT, so without the alias a VARCHAR asset
-would drift permanently against its own live column). Comparable forms only
+would drift permanently against its own live column; SQLite collapses every
+spelling onto its storage affinity, so two spellings of the same physical
+column never read as drift). Comparable forms only
 decide **whether** a type changed — a `FieldDiff` carries the declared
 spellings, so rendered DDL keeps the asset's own type spelling.
+
+SQLite has a single always-attached namespace: a declared schema resolves to
+`main` and a `schema.table` path to `table`, so a structure written for a
+PostgreSQL schema deploys unchanged on a database file.
 
 ## Bootstrap of an existing database
 

@@ -31,14 +31,14 @@ Activate this guide when working on:
 - `environments` in `nld_project.yml`, the `--env` flag, or `NLD__ENVIRONMENT`
 - `scheduling/` YAML definitions (`FlowTask` entities)
 - `nld/scheduling/` code (models, resolver, graph, validator, tasks)
-- The `nld scheduling` CLI (validate / deps / frequency / info)
+- The `nld scheduling` CLI (validate / deps / frequency / list / info)
 - Cross-project (`nld_project_catalog.yml`) dependency declarations
 - The `scheduling` block of a namespace in `nld_project.yml` (retry budget,
   alerting) and how a flow execution raises an alert (`nld/flow/alerting/`)
 
 ## Environments
 
-`nld_project.yml` gains an optional `environments` block. An environment selects
+`nld_project.yml` accepts an optional `environments` block. An environment selects
 a connection profile and may override project variables for that environment
 only.
 
@@ -69,15 +69,16 @@ Models (`nld/project/environment_config.py`):
 When environments are declared, the resolved name must be one of them
 (otherwise `NldUnknownEnvironmentError`).
 
-> `Project` also gained a free-form `properties: dict[str, Any]` key-value field
+> `Project` also carries a free-form `properties` mapping (`dict[str, str]`)
 > for platform metadata that the core model does not need to interpret.
 
 ## FlowTask entity
 
 Built-in entity `scheduling` (`folder_name="scheduling"`,
-`category=data_flow`), one file per scheduled flow under
-`scheduling/<ns path>/<name>.yaml`. Defined in
-`nld/scheduling/models/scheduling.py`.
+`category="Scheduling"`), one file per scheduled flow under
+`scheduling/<ns path>/<name>.yaml` — or
+`<namespace folder>/scheduling/<sub path>/<name>.yaml` for a namespace stored
+as a namespace folder. Defined in `nld/scheduling/models/scheduling.py`.
 
 ### `FlowTask(NldNamedBaseModel)`
 
@@ -88,6 +89,7 @@ Built-in entity `scheduling` (`folder_name="scheduling"`,
 | `params` | `dict[str, Any]` | Platform-specific knobs (data_sub_product, process_type, runner hints…). The core model never grows an attribute for these. |
 | `environments` | `dict[str, EnvironmentScheduling]` | Per-environment scheduling, keyed by environment name. |
 | `frequency` | `ExecutionFrequency \| None` | Intended execution cadence of the asset, used as the default across environments. See **Execution frequency** below. |
+| `max_attempts` | `int \| None` (1–10) | Retry budget of this task alone, overriding the namespace-level one. See **Scheduling policy** below. |
 
 Helpers: `for_environment(env)`, `is_active_in(env)` (present **and** `enabled`
 **and** has a `trigger`), `merged_params(env)` (flow-level `params` overlaid with
@@ -219,49 +221,72 @@ alerting off is therefore explicit: `alerting: {enabled: false}` on the
 nearer level. `nld scheduling info --name <task>` prints both values with the
 declaring line.
 
-`AlertingConfig` types `enabled` (default true), `transports` (the
-technologies by name — required when enabled, so a reader can tell exactly
-what a namespace alerts through), `alert_on` (at least one state, any case, a
-typo fails at project load; default `[FAILED]`) and
-`alert_after_consecutive_failures` (declared, not applied yet). Each named
-transport may carry a block of its own non-secret settings under its name
-(`slack.channel`, `telegram.chat_id`); transport names and settings keys are
-validated against the transport registry when the project loads.
+`max_attempts` (integer 1–10, default 1) counts the first attempt: `1` means
+no retry, `2` one retry. A `FlowTask`'s own `max_attempts` wins over every
+namespace level; otherwise the nearest level carrying a `scheduling` block
+decides, whatever it holds — a nearer level declaring only `alerting` gets
+the default budget of 1.
+
+`AlertingConfig` (`extra="forbid"`) types `enabled` (default true),
+`transports` (the technologies by name, lower-cased, no repeats — required
+when enabled, so a reader can tell exactly what a namespace alerts through),
+`alert_on` (at least one `SchedulingExecutionState` — `SUCCESS`, `WARNING`,
+`FAILED`, `KILLED`, `CANCELLED` — in any case, a typo failing at project load;
+default `[FAILED]`) and `alert_after_consecutive_failures` (integer ≥ 1,
+default 1; validated and shown by `nld scheduling info`, while nld's own
+alerting does not read it). Each named transport may carry a block of its own
+non-secret settings under its name (`slack.channel`, `telegram.chat_id`).
+Transport names, and the settings keys of the built-in transports, are
+validated against the transport registry when the project loads; the
+settings of a transport added through `flow.additional_alert_transports`
+are checked when a flow first builds it, so loading a project never imports
+its Python code.
 
 **One declaration, two alerting layers.** The same block drives:
 
-- **nld itself** (`nld/flow/alerting/`): at the end of `DataFlowTask.run`, the
+- **nld itself** (`nld/flow/alerting/`): once `DataFlowTask.run` ends, the
   outcome is mapped on a level — a flow exception or a `blocking` quality
   violation is `FAILED` on a failed execution; an `error`-severity violation
-  is `FAILED` too but the execution completes (the pipeline goes on); a
-  `warning`-severity violation is `WARNING`. If the level is in `alert_on`,
-  nld posts the alert itself through every declared transport this
-  environment configures. Transports live in
-  `nld/flow/alerting/transports/`: built-in `slack` (an incoming webhook,
-  `NLD__ALERTING__SLACK__WEBHOOK_URL`) and `telegram` (a bot,
-  `NLD__ALERTING__TELEGRAM__BOT_TOKEN`, plus `NLD__ALERTING__TELEGRAM__CHAT_ID`
-  or the `chat_id` setting); a platform adds one with a `FlowAlertTransport`
-  subclass (`name`, `required_env_vars`, `settings_keys`,
-  `from_environment`, `send`) declared under `flow.additional_alert_transports`
-  in `nld_project.yml`. A declared transport whose secret is not in the
-  environment is skipped, never an error. The execution context owns a
-  `FlowAlertingProvider` (`context.alerting`, built when the project is
-  initialised) that hands each flow its `FlowAlertingService`; the task
-  itself builds nothing. The transport-neutral runtime side comes from the
+  is `FAILED` too but the execution completes (the pipeline goes on); any
+  other violation is `WARNING`. nld raises only these two levels. If the
+  level is in `alert_on`, nld posts the alert itself through every declared
+  transport this environment configures; the message names the flow, the
+  environment, the project, the execution status and the violated checks or
+  the error. Transports live in `nld/flow/alerting/transports/`: built-in
+  `slack` (an incoming webhook, `NLD__ALERTING__SLACK__WEBHOOK_URL`; the
+  `channel` setting is informational, the webhook decides where the message
+  goes) and `telegram` (a bot, `NLD__ALERTING__TELEGRAM__BOT_TOKEN`, posting
+  to `NLD__ALERTING__TELEGRAM__CHAT_ID` or, when that variable is unset, the
+  `chat_id` setting). A platform adds one with a `FlowAlertTransport`
+  subclass (`name`, `required_env_vars`, `optional_env_vars`,
+  `settings_keys`, `from_environment`, `send`) declared under
+  `flow.additional_alert_transports` (`name` + `transport_class`) in
+  `nld_project.yml`; its class is imported on first lookup only. A declared
+  transport whose required secret is not in the environment is skipped with
+  a log line, and a misconfigured one (Telegram without a chat id) is skipped
+  with a warning — never an error. The execution context owns a
+  `FlowAlertingProvider` (`context.alerting_provider`, built when the project
+  is initialised, replaceable with `set_alerting_provider`) that hands each
+  flow the `FlowAlertingService` in force for its namespace; the task itself
+  builds nothing. The transport-neutral runtime side comes from the
   scheduler as environment variables:
   `NLD__ALERTING__OUTCOME_LINE_TEMPLATE` (a `string.Template` with `$status`,
   `$alerted`, `$level`, printed once after the run so the scheduler can read
   the outcome back), `NLD__ALERTING__ATTEMPT` / `NLD__ALERTING__MAX_ATTEMPTS`
-  (a failure is alerted on the last attempt only; earlier ones are retried)
-  and `NLD__ALERTING__EXECUTION_REFERENCE` (quoted in the message). Delivery
-  problems are logged, never raised: alerting cannot fail a run.
+  (a failure is alerted on the last attempt only; earlier ones are retried),
+  `NLD__ALERTING__EXECUTION_REFERENCE` (the scheduler's execution id, quoted
+  in the message) and `NLD__ALERTING__EXECUTION_URL` (the run's page in the
+  scheduler's UI, `http(s)` only: the message links the reference to it).
+  The environment named in the message is `NLD__ENVIRONMENT`, or the
+  project's resolved environment. Delivery problems are logged, never
+  raised: alerting cannot fail a run.
 - **the scheduler**: a generator (nld-scheduling-generator for Kestra) reads
   `SchedulingPolicy.alerting()` to label each flow and to hand the pod the
   variables above — for each named transport, the variables its class
   declares, mapped to the platform's secret keys; the scheduler's own alert
-  reacts to failures nld could not
-  report (a pod that never started, an out-of-memory kill) and stays quiet
-  when the outcome line says nld already alerted.
+  reacts to failures nld could not report (a pod that never started, an
+  out-of-memory kill) and stays quiet when the outcome line says nld already
+  alerted.
 
 Run by hand with none of the variables set, nld neither posts nor prints
 anything; the declaration only describes what scheduled runs do.
@@ -286,19 +311,24 @@ In `nld/scheduling/services/`:
   `count_by_frequency()`); each `SchedulingFrequencyEntry` exposes the declared
   `frequency`, the `upstream_frequency` it is checked against, `is_declared` and
   `is_inconsistent`.
-- **`SchedulingPolicy`** — resolves a task's retry budget
-  (`resolve_max_attempts`) and alerting (`alerting()` = the config in force or
-  None, `resolve_alerting()` = the declaration with its origin) from the
-  namespace-scoped `scheduling` block, see above.
+- **`SchedulingPolicy`** — bound to one project's
+  `scheduling_namespace_config`; resolves a task's retry budget
+  (`max_attempts()`, `resolve_max_attempts()` = the value with its origin)
+  and alerting (`alerting()` = the config in force or None,
+  `resolve_alerting()` = the declaration with its origin) from the
+  namespace-scoped `scheduling` block, see above. `alerting_for_namespace()`
+  answers the same question for a namespace alone — the path a running flow,
+  which has no task, takes.
 
 ## CLI
 
 ```
 nld scheduling validate  --env <env>
-nld scheduling deps      --env <env> [--format json|...] [--task-name <t>]
+nld scheduling deps      --env <env> [--format json|mermaid] [--task-name <t>]
                                      [--namespace <ns>] [--upstream] [--downstream]
                                      [--override-output-folder-path <dir>]
 nld scheduling frequency --env <env> [--frequency <value>]
+nld scheduling list      [--namespace <ns>] [--env <env>]
 nld scheduling info      --name <task> [--namespace <ns>]
 ```
 
@@ -313,11 +343,18 @@ nld scheduling info      --name <task> [--namespace <ns>]
   cadence its triggers allow, and a status (`ok` / `undeclared` /
   `inconsistent`), plus a per-cadence breakdown. `--frequency` narrows the
   report to one cadence ("which assets are daily?").
-- `info` — one scheduled task's declaration: its retry policy and alerting
-  (each with the `nld_project.yml` line that decided it), params and
-  per-environment triggers.
+- `list` — every scheduled task as a table (name, namespace, flow,
+  frequency, effective max attempts, environments with their trigger kind).
+  `--env` keeps only the tasks active in that environment ("what runs in
+  prd?") and shows the environment's frequency.
+- `info` — one scheduled task's declaration: its frequency, retry policy and
+  alerting (each with the `nld_project.yml` line that decided it), params
+  and per-environment triggers.
 
-The first three are environment-aware (`--env`, same precedence as above).
+`validate`, `deps` and `frequency` are environment-aware (`--env`, same
+precedence as above) and load the whole project, since the trigger graph
+crosses namespaces. `list` and `info` load only the lineage of `--namespace`
+when it is given.
 
 ## Examples
 

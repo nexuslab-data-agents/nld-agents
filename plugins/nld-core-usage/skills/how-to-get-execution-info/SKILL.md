@@ -54,7 +54,7 @@ semantics), see the `guide-flows` and `guide-incremental` skills.
   `_get_steps_for(flow_uid)` hook that every backend implements. Every
   backend that supports writes therefore supports execution reads —
   headers and step lists alike: PostgreSQL, BigQuery, Snowflake,
-  DuckDB, S3 blob storage, and the local file backend. Row-based
+  DuckDB, SQLite, S3 blob storage, and the local file backend. Row-based
   backends implement `_get_steps_for` against their
   `_nld_execution_step_history` table; blob and local backends resolve
   inline steps from the loaded execution payloads.
@@ -118,8 +118,13 @@ Under `--format json` (and in every `--output` file), the payloads are:
 `null` fields are stripped from every payload (`exclude_none=True`).
 
 Under the default `--format text`, the same data is rendered as a
-concise summary suitable for terminal reading. Pipe with `--format json`
-when feeding the output to `jq` or another consumer.
+concise summary suitable for terminal reading. `get-steps` opens with an
+execution overview block (flow UID, status, strategy, start/end, duration,
+rows, error) and then lists the steps in a table whose `rows`, `files`,
+`check` (data quality verdict: `PASS|WARN|FAIL|SKIP` with violations,
+observed and expected values) and `error` columns appear only when a step
+carries a value. Pipe with `--format json` when feeding the output to `jq`
+or another consumer.
 
 ---
 
@@ -193,7 +198,7 @@ nld flow state execution get-history --name wttj_companies_extraction \
   --namespace source_web_hr
 ```
 
-The registry currently resolves the flow at its new location (e.g.
+The registry resolves the flow at its new location (e.g.
 `wttj.extraction`), but rows written before the move carry the old
 `flow_namespace`. Pass `--namespace` to read the historical rows
 directly.
@@ -244,7 +249,7 @@ target by `determine_parameters_for_flow_definition` (composed
 `get-steps` is served from the same `FlowExecutionInfo` payload, so the
 step list is available too.
 
-### BigQuery / Snowflake / DuckDB
+### BigQuery / Snowflake / DuckDB / SQLite
 
 The CLI reads from these row-based backends via the shared
 `get_latest_execution_info` / `get_execution_history` implementations
@@ -252,10 +257,11 @@ on `ExecutionBackendStateManager`, which select the latest header from
 `_nld_execution_state` / `_nld_execution_history` and attach steps via
 each backend's `_get_steps_for(flow_uid)` — a query against
 `_nld_execution_step_history`. `get-state`, `get-history`, and
-`get-steps` return populated step lists on all three backends.
+`get-steps` return populated step lists on all four backends.
 
 For ad-hoc analysis, the same tables are reachable via each
-connector's native CLI (`bq query`, `snowsql`, `duckdb`).
+connector's native CLI (`bq query`, `snowsql`, `duckdb`, `sqlite3` — on
+SQLite every table lives in the database file's `main` schema).
 
 ### Local file backend
 

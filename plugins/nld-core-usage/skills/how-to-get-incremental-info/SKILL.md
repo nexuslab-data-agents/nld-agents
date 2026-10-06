@@ -61,8 +61,9 @@ skill.
   `nld_project.yml`); otherwise the CLI raises a clear RuntimeError.
 - `get-state` (default) and `--processing-only` need
   `read_post_processing_state` / `read_processing_state` on the primary
-  backend. PostgreSQL implements both; the other backends inherit a
-  `NotImplementedError` default on the live-state read accessors.
+  backend: PostgreSQL and Snowflake (both types), S3 blob storage
+  (`by_key`) and SQLite (`by_source_tst`) implement them; the other
+  backends inherit a `NotImplementedError` default.
 - `compute` (read-only) runs wherever the flow runs — it resolves the
   next processing state in memory from `retrieve_current_state`. The
   CLI prints "not supported" for `no_increment` flows because the
@@ -72,8 +73,8 @@ skill.
   `FlowIncrementalDefinition.supports_planned_state` (set on `by_key`
   and `by_source_tst`) **and** the backend's
   `IncrementalBackendStateManager.supports_planned_state` (set on
-  PostgreSQL and S3). When either layer is off the CLI emits a "not
-  supported" notice and `--persist` returns `persisted=False` instead
+  PostgreSQL, Snowflake, SQLite and S3). When either layer is off the CLI
+  emits a "not supported" notice and `--persist` returns `persisted=False` instead
   of letting the backend read raise.
 
 ---
@@ -108,13 +109,9 @@ nld flow state incremental get-state --name <flow> [--namespace <ns>]
 
 `null` fields are stripped from every payload (`exclude_none=True`).
 
-> **Breaking change (nld-core ≥ the release carrying this flip).** The
-> default `get-state` now returns the **authoritative current state**
-> (previously it returned the processing state). The old
-> `--include-post-processing` flag is gone; use `--processing-only` for
-> the previous default behaviour. The default JSON payload is now the
-> state object itself, not a `{"processing_state", "post_processing_state"}`
-> wrapper.
+> Plain `get-state` returns the **authoritative current state**; pass
+> `--processing-only` for the processing state the last run left behind.
+> Either way the JSON payload is the state object itself.
 
 The shape of the state depends on the flow's incremental type:
 
@@ -267,7 +264,7 @@ would resolve.
 | `--name <flow>` / `--namespace <ns>` | Flow selection, as for `get-state`. |
 | `--persist` | Persist the computed processing state to the state backend as a `PLANNED` plan, cancelling any prior `PLANNED` plan for the same flow. Without it, `compute` is read-only. |
 | `--requestor <user>` | Identifier recorded on the persisted plan. Defaults to the current OS user (`getpass.getuser()`, falling back to `"unknown"`). Only meaningful with `--persist`. |
-| `--source-request-authorized` | Pre-authorize the source-side queries that `retrieve_source_state` issues. When omitted and the flow's incremental definition declares `requires_source_state_retrieval` (only `by_key` today), the CLI prompts for confirmation before touching the source. |
+| `--source-request-authorized` | Pre-authorize the source-side queries that `retrieve_source_state` issues. When omitted and the flow's incremental definition declares `requires_source_state_retrieval` (`by_key` among the built-in types), the CLI prompts for confirmation before touching the source. |
 | `--format text\|json`, `--output`, `--override-output-folder-path <dir>` | Same rendering / file-output convention as `get-state`. The fixed file name is `flow_state_incremental_compute.json`. |
 
 ### Output shape
@@ -304,8 +301,8 @@ prior `PLANNED` plan for the same flow to `CANCELLED`, so at most one
 `PLANNED` plan exists per flow at a time. Persisting requires both
 `supports_planned_state=True` on the incremental definition
 (strategies `by_key` and `by_source_tst`) and on the primary backend
-(PostgreSQL and S3 mixins). When either layer is off, `--persist`
-prints `persisted=False` and `get-planned` reports "Planned states are
+(PostgreSQL, Snowflake, SQLite and S3 mixins). When either layer is off,
+`--persist` prints `persisted=False` and `get-planned` reports "Planned states are
 not supported for this flow" instead of attempting a backend read. See
 `execution-and-incremental-design.md` §4.5 "Planned-state slot" for the
 storage layout, lifecycle, and per-strategy freshness rules.
@@ -410,15 +407,22 @@ where flow_namespace = 'source.raw'
 so `compute --persist` and `get-planned` work. The table names match
 the PostgreSQL section above.
 
+### SQLite
+
+`by_source_tst` is fully supported (no `by_key` backend exists):
+`read_processing_state` / `read_post_processing_state` back `get-state`,
+and `SQLiteIncrementalBackendMixin` opts into `supports_planned_state`.
+The table names match the PostgreSQL section above; every table lives in
+the database file's `main` schema.
+
 ### BigQuery / DuckDB
 
-The shared abstract accessors for the live processing-state and
-post-processing-state tables are in place but the concrete read
-overrides have not been wired, so `get-state` raises
-`NotImplementedError` on these backends. Read via the connector's
-native CLI against the same table names. `compute` (read-only) still
-works through `retrieve_current_state`; `--persist` is unavailable
-because these backends do not opt into `supports_planned_state`.
+These backends do not implement `read_processing_state` /
+`read_post_processing_state`, so `get-state` raises
+`NotImplementedError`. Read via the connector's native CLI against the
+same table names. `compute` (read-only) works through
+`retrieve_current_state`; `--persist` is unavailable because these
+backends do not opt into `supports_planned_state`.
 
 ### S3 blob / local file
 
@@ -428,10 +432,9 @@ from the flow's `S3Structure` target by
 `determine_parameters_for_flow_definition` — composed `s3_root_prefix`
 + `s3_folder_path`.
 
-- processing state:
-  `<state-root>/<flow_uid>/processed_state.<json|parquet>`
-- post-processing state:
-  `<state-root>/<incremental_type>_state.<json|parquet>`
+- processing state (one file per run, next to that run's `data/`
+  folder): `<s3_root_path>/<run timestamp>/state/key_processed_state.<json|parquet>`
+- post-processing state: `<state-root>/key_state.<json|parquet>`
 - state-plan index (all plans for the flow, keyed by `plan_state_uid`):
   `<state-root>/state_plans.<json|parquet>`
 - per-plan processing-state payload (one folder per plan):

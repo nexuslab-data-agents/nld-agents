@@ -6,10 +6,12 @@ description: >
   adopt/allow-drift/rebuild), the flow deploy path (`nld flow deploy`:
   definition-hash change detection, baselines, view recreation, planned
   reloads), repository-only impact analysis (`nld deploy impact`), the
-  `.deployments/` change files (renames, reloads, backfill defaults), and
-  the metadata backend tables that make deployments auditable and
-  exactly-once. Read when working on deploy code in nld/structure/deploy/,
-  nld/flow/deploy/, or nld/deploy/, or reasoning about what a deploy will do.
+  `.deployments/` change files (renames, reloads, backfill defaults),
+  opt-in namespace deploys (deployment units, deploy groups, the deploy lock
+  and `nld deploy unlock`), and the metadata backend tables that make
+  deployments auditable and exactly-once. Read when working on deploy code
+  in nld/structure/deploy/, nld/flow/deploy/, or nld/deploy/, or reasoning
+  about what a deploy will do.
 user-invocable: false
 ---
 
@@ -24,8 +26,10 @@ and audited.
 Activate this guide when the agent is working on:
 - Structure deploy code in `nld/structure/deploy/`
 - Flow deploy code in `nld/flow/deploy/` or `nld/flow/task/data_flow_deploy_task.py`
-- Deployment-wide code in `nld/deploy/` (impact analysis, change files)
-- `.deployments/` change files or the `metadata_backend_connector` setting
+- Deployment-wide code in `nld/deploy/` (impact analysis, change files,
+  namespace deploy scope, deploy lock)
+- `.deployments/` change files, the `metadata_backend_connector` setting, or
+  the `deploy` facet of a namespace in `nld_project.yml`
 - CI deploy gates, drift errors, or the deploy metadata tables (`_nld_*`)
 
 ## Document Resolution
@@ -40,13 +44,14 @@ bundled copy.
 
 ## The deployment model
 
-Three commands share one model:
+Three commands share one model, plus a lock-maintenance command:
 
 | Command | Role | Needs DB |
 |---|---|---|
 | `nld deploy impact --git-base <ref>` | Classify changed + downstream-impacted assets from the repository alone | no |
 | `nld structure deploy` | Diff and apply TABLE structures directly | yes |
 | `nld flow deploy` | Detect changed flows, deploy their target structures, record flow versions, resolve directives | yes |
+| `nld deploy unlock [--target <connection>:<schema>]` | List the deploy locks, or release the one a killed deploy left behind | yes |
 
 Shared principles:
 
@@ -63,8 +68,18 @@ Shared principles:
   surface as reviewable drop+add in preview instead of silently applying.
 - **Exactly-once directives.** Schema intentions that a diff cannot infer
   (renames, reloads, one-shot backfills) are declared in `.deployments/`
-  change files, applied chronologically once, and logged in
-  `_nld_deployment_change`.
+  change files, applied chronologically once, directive by directive, and
+  logged in `_nld_deployment_change_directive` / `_nld_deployment_change`.
+- **Namespace deploys are opt-in.** Without `--namespace` the whole project
+  deploys. `--namespace <ns>` is accepted only for a namespace declaring
+  `deploy: {unit: true}` or a deploy group (`deploy: {group: <name>}`), and
+  deploys its **deployment unit** — the namespace and its descendants mapped
+  to the same connection and schema — widened to every member of its group.
+  It never writes outside that scope, applies only the change-file
+  directives whose subject belongs to it, and locks its targets
+  (`<connection>:<schema>`) while applying, so units on distinct schemas
+  deploy concurrently. With `--name`, `--namespace` only locates the asset.
+  Full rules: `flow-deployment.md` §4b.
 - **Identity is backend-held.** Each asset's stable `uid` is minted by the
   backend on first record (deploy or adopt) and carried across declared
   renames; asset YAML never contains it.
@@ -100,14 +115,15 @@ the failure recorded.
 Deployment behavior is parameterized by `ConnectorDeployCapabilities`
 (`nld/connector/base/deploy_capabilities.py`, one subclass per connector):
 
-| Capability | postgresql | bigquery | snowflake | duckdb |
-|---|---|---|---|---|
-| ALTER COLUMN SET/DROP DEFAULT | yes | yes | no — a default change triggers REBUILD | yes |
-| `enforce_field_order_default` | yes | no | yes | no |
-| Declared renames in place (`rename_field` / `rename_structure`) | yes | no — refused | yes | yes |
-| Comparable characterisations | INDEX, PRIMARY_KEY, UNIQUE | PRIMARY_KEY | PRIMARY_KEY, UNIQUE | INDEX, PRIMARY_KEY, UNIQUE |
-| Dependent-view detection | yes | yes | yes | yes |
-| Atomic rebuild swap (single transaction) | yes | no | no | no |
+| Capability | postgresql | bigquery | snowflake | duckdb | sqlite |
+|---|---|---|---|---|---|
+| ALTER COLUMN SET/DROP DEFAULT | yes | yes | no — a default change triggers REBUILD | yes | no — a default change triggers REBUILD |
+| ALTER COLUMN type / nullability | yes | yes | yes | yes | no — the change triggers REBUILD |
+| `enforce_field_order_default` | yes | no | yes | no | no |
+| Declared renames in place (`rename_field` / `rename_structure`) | yes | no — refused | yes | yes | yes |
+| Comparable characterisations | INDEX, PRIMARY_KEY, UNIQUE | PRIMARY_KEY | PRIMARY_KEY, UNIQUE | INDEX, PRIMARY_KEY, UNIQUE | INDEX, PRIMARY_KEY, UNIQUE |
+| Dependent-view detection | yes | yes | yes | yes | yes |
+| Atomic rebuild swap (single transaction) | yes | no | no | no | no |
 
 Type comparison folds ANSI aliases for every engine plus connector-specific
 aliases (e.g. Snowflake folds every integer spelling into NUMERIC and maps
@@ -116,10 +132,10 @@ aliases (e.g. Snowflake folds every integer spelling into NUMERIC and maps
 
 `reload` directives depend on the flow's incremental **state backend**, not
 the deploy connector: planning a full refresh requires a backend with
-planned-state support (PostgreSQL, Snowflake, and S3 blob storage state
-backends) and a state-tracking incremental type (`by_key`,
-`by_source_tst`). Otherwise the directive records a warning outcome and a
-manual `nld flow execute <flow> --full` is advised; stateless flows record
+planned-state support for the flow's state-tracking incremental type —
+PostgreSQL and Snowflake (`by_key`, `by_source_tst`), S3 blob storage
+(`by_key`), SQLite (`by_source_tst`). Otherwise the directive records a
+warning outcome and a manual `nld flow execute <flow> --full` is advised; stateless flows record
 `no-op (every run is already a full refresh)`.
 
 ## Metadata backend
@@ -139,7 +155,10 @@ must pre-exist.
 | `_nld_flow_history` | flow deploy | append-only flow deployment events |
 | `_nld_flow_deployment` | flow deploy | one row per `nld flow deploy` run (status + counters) |
 | `_nld_flow_deployment_flow_change` / `_nld_flow_deployment_structure_change` | flow deploy | per-asset outcomes of a run |
-| `_nld_deployment_change` | both | applied-log of change files (exactly-once, content-hashed) |
+| `_nld_deployment_change` | both | applied-log of fully applied change files (exactly-once, content-hashed) |
+| `_nld_deployment_change_directive` | both | one row per resolved directive, so a file can complete over several namespace deploys |
+| `_nld_deployment_scope` | both | scope of each applied run (requested namespace or name, units, groups, locked targets) |
+| `_nld_deployment_lock` | both | deploy-lock claims, one per run per `<connection>:<schema>` target |
 
 The history tables alone reconstruct what was deployed, what DDL ran, and
 when — the audit trail is the backend, not the git history of any artifact.
@@ -151,9 +170,11 @@ when — the audit trail is the backend, not the git history of any artifact.
 Directives are grouped by target asset — `changes.structures.<name>` entries
 declare `rename_field`, `rename_structure`, or `backfill_default`;
 `changes.flows.<name>` entries declare `rename_flow` or `reload` (renames
-keyed by the pre-rename name). Applied files are immutable (content-hash
-checked); unapplied files older than an applied one are an out-of-order
-error. Full format: `structure-deployment.md`.
+keyed by the pre-rename name). A file with any applied directive is
+immutable (content-hash checked); an unapplied directive older than an
+applied one touching a common asset is an out-of-order error, while
+directives on unrelated assets apply independently. Full format:
+`structure-deployment.md`.
 
 ## Typical lifecycles
 

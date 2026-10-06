@@ -40,7 +40,7 @@ for execution and incremental state) live at
 Consult them when asked whether a backend supports `get-state`,
 `get-steps`, or `compute --persist`.
 
-### Key Sections (900 lines — read by section, not in full)
+### Key Sections (long — read by section, not in full)
 
 | Task | Section |
 |------|---------|
@@ -86,6 +86,17 @@ The execution state has its own, genuinely global rule
 (`save_execution_state()` runs for `FULL`, `DELTA`, `BACKFILL_DELTA`);
 do not confuse it with the per-type incremental-state rule above.
 
+### Source availability is declared, not inferred
+
+`FlowIncrementalDefinition.source_availability` (`SourceAvailability`:
+`full` | `partial`, default `full`) states whether one read of the source
+presents its complete extent; every built-in type keeps `full`. A flow
+whose source is only partially visible per read (a rotating listing)
+overrides it in its YAML with `incremental: {type: ..., source_availability: partial}`. Like
+`source_selection` and `target_update_granularity`, it is declarative
+metadata the execution lifecycle does not branch on — see
+`execution-and-incremental-design.md` §2.5.0.
+
 ### CLI parameters must be registered on the strategy definition
 
 CLI flags such as `--full`, `--with-delta`, `--pull-from`, `--pull-to` only
@@ -98,7 +109,7 @@ exposed by `DataFlowDefinition.resolve_incremental_logic()` — the single
 canonical resolver. The resolver picks the per-flow `incremental` strategy
 first, then the task class `_INCREMENTAL_LOGIC` ClassVar, then
 `NO_INCREMENT_FLOW_INCREMENTAL_LOGIC`. The task class itself does not
-expose incremental params on `get_init_params()` anymore — that responsibility
+expose incremental params on `get_init_params()` — that responsibility
 sits entirely on the definition. A flag missing from `param_definitions`
 is silently dropped, and `resolve_strategy()` then falls back to the default
 (typically `DELTA`) — even if the user passed `--full`.
@@ -116,8 +127,8 @@ and the backend. `FlowIncrementalDefinition.supports_planned_state`
 default `False`) declares backend-side capability. The built-ins set
 strategy support on `by_key` and `by_source_tst`; the
 `PostgreSQLIncrementalBackendMixin`, `SnowflakeIncrementalBackendMixin`,
-and `S3IncrementalBackendMixin` set backend support so every backend
-built on them inherits it. A
+`SQLiteIncrementalBackendMixin` and `S3IncrementalBackendMixin` set
+backend support so every backend built on them inherits it. A
 flow recomputes the processing state whenever either layer is off,
 regardless of the `--planned-state-policy` value on
 `nld flow execute`.
@@ -136,10 +147,10 @@ core/nld/flow/incremental/
 ├── models/                              # leaf layer: data/definition models
 │   ├── state.py                         # FlowState, FlowSourceState, FlowProcessingState; FlowStatePlan, FlowPlannedProcessingState, FlowPlannedProcessingDetailedState
 │   ├── logic.py                         # FlowIncrementalLogic, FlowIncrementalDefinition, param defs
-│   ├── config.py                        # IncrementalConfig
+│   ├── config.py                        # IncrementalConfig (incl. per-flow source_availability override)
 │   ├── events.py
 │   ├── manifest.py                      # FlowIncrementalTypeManifest
-│   ├── referential.py                   # state/selection/granularity enums, IncrementalPlanStatus
+│   ├── referential.py                   # state/selection/availability/granularity enums, IncrementalPlanStatus
 │   ├── request.py
 │   └── constants.py
 ├── base/                                # abstract managers + SQL filter (depends downward on models)
@@ -149,6 +160,7 @@ core/nld/flow/incremental/
 │   ├── plan.py                          # BackendStatePlanRow + state_plan_to_row / row_to_state_plan helpers
 │   ├── postgresql/backend_mixin.py      # PostgreSQLIncrementalBackendMixin (state-plan I/O)
 │   ├── snowflake/backend_mixin.py       # SnowflakeIncrementalBackendMixin (state-plan I/O)
+│   ├── sqlite/backend_mixin.py          # SQLiteIncrementalBackendMixin (state-plan I/O)
 │   └── s3_blob_storage/backend_mixin.py # S3IncrementalBackendMixin (state-plan I/O)
 ├── services/
 │   ├── factory.py                       # resolves a name to its logic/manager/backend via the registry

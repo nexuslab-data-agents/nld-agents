@@ -3,7 +3,7 @@ name: how-to-set-up-a-project
 description: >
   Initialize a new nld project, or audit and update an existing one, by walking
   every configuration point nld-core reads: the `nld_project.yml` keys and its
-  namespace facets (structure, flow, scheduling/alerting, folder), connections
+  namespace facets (structure, flow, scheduling/alerting, folder, deploy), connections
   and profiles in `.nld/`, environments and variables, the entity tree and
   namespace folders, extension points, the deployment metadata backend, and the
   commit/CI guardrails. Reports each point as set, missing or invalid, proposes
@@ -51,8 +51,10 @@ facet). This skill is the procedure; that document is the reference.
 
 The project root is the directory holding `nld_project.yml`. Commands resolve
 it from `--root-folder-path`, then `NLD__ROOT_FOLDER_PATH`, then the current
-directory. The config folder (connections, `.env`) defaults to `<root>/.nld`
-(`NLD__CONFIG_FOLDER_PATH` overrides it).
+directory. The config folder (connections, `.env`) is `NLD__CONFIG_FOLDER_PATH`
+when set, otherwise `.nld` under the **current directory** — not under
+`--root-folder-path` — so run the commands from the project root, or export
+`NLD__CONFIG_FOLDER_PATH`.
 
 In **Update** mode, start with:
 
@@ -60,21 +62,26 @@ In **Update** mode, start with:
 nld project info          # resolved configuration + namespaces + entity counts
 ```
 
-It prints every resolved setting: metadata backend, properties, namespace
-folders, Python additional paths, additional entities, variables,
-environments, the `flow` block, and each namespace's structure, flow and
-scheduling settings. Keep it as the baseline of the report.
+It prints the metadata backend, properties, namespace folders, deployable
+namespaces and deploy groups, Python additional paths, additional entities,
+variables, environments, the `flow` block's task types, incremental types and
+quality rules, and each namespace's structure, flow and scheduling settings,
+then the namespaces and entity counts. Keep it as the baseline of the report;
+read `additional_entity_paths` and `flow.additional_alert_transports` from the
+file itself.
 
 A project that fails to load names its problem. The usual causes:
 
 | Error mentions | Cause | Fix |
 |---|---|---|
-| `config/structure.yaml` / `config/flow.yaml` is no longer read | Pre-0.1.2a3 layout | Move the mappings into the `namespaces` block, delete the files |
-| `Unknown facets` for a namespace | Typo, or a facet that does not exist | Facets are `structure`, `flow`, `scheduling`, `folder` |
+| `Unknown facets` for a namespace | Typo, or a facet that does not exist | Facets are `structure`, `flow`, `scheduling`, `folder`, `deploy` |
 | `cannot be declared as a namespace folder` | `folder: true` on `.` or on a wildcard key | Only exact, non-root keys can be folders |
 | `uses the segment ... reserved for an entity folder` | A namespace folder named like `flows`, `structure`, `templates`... | Rename the namespace |
+| `cannot declare a 'deploy' facet` / `declares nothing` / `is declared by a single namespace` | `deploy` on a wildcard key, without `unit: true` nor `group`, or a group with one member | `deploy` only on exact keys, with `unit: true` and/or a `group` shared by at least two namespaces |
 | `names an unknown transport` / `does not accept settings` | Alerting typo | Built-in transports: `slack` (`channel`), `telegram` (`chat_id`) |
 | `Invalid path ... in python_additional_paths` | A path with `/` | Use dotted module notation |
+| `Additional entity path ... does not exist` / `is not importable` | A wrong `additional_entity_paths` entry, or its package not installed | Fix the path, or install the package in the project environment |
+| `Additional entity name ... conflicts with a built-in entity type` | An `additional_entities` entry reusing a built-in name | Rename the entity type |
 | `must contain 'name' field` | Missing `name` | Add it |
 
 ## Step 2: Project skeleton
@@ -107,7 +114,10 @@ holds namespace `sales.raw`). **Namespace folders** invert that layout for
 chosen namespaces: with `namespaces.sales.folder: true`, the sales entities
 live under `<entity_path>/sales/structure/`, `<entity_path>/sales/flows/`...,
 which keeps one source's assets together. Shared entities (templates,
-characterisations, governance) stay at the top of `entity_path`.
+characterisations, governance) usually stay at the top of `entity_path`. A
+namespace lives in exactly one place: once it is a folder, any of its files left
+in the type-first tree fails the load (`NamespaceFolderConflictException`), so
+move all its entity types together.
 
 Python flows resolve their task class from
 `<entity_path>.flows.<namespace>.<flow_name>` (or
@@ -149,7 +159,7 @@ Audit every key, set or not:
 | `version` | recommended | Bumped with releases of the project | none |
 | `entity_path` | entities are not at the root | Directory exists; a package when flows carry Python | `.` |
 | `properties` | platform tooling reads them | Free-form strings only; the core ignores them | none |
-| `namespaces` | always in practice | See the facet checklist below | no defaults: every flow and structure must name its connections |
+| `namespaces` | always in practice | See the facet checklist below | no defaults: deploying, profiling or SQL-reading a structure fails with `Namespace '<ns>' not found in structure config`, and a flow without its own `state_backend_connector` has no state backend |
 | `environments` | always (scheduling), several targets | `default` names a declared value; each `connection_profile` exists for the connections it uses | no environment |
 | `variables` | SQL hooks use `{{ var }}` | Every variable a hook references is declared, or provided as `NLD__VAR__<NAME>` | none |
 | `metadata_backend_connector` | `nld flow deploy`, change files | Names a connection; its schema exists (the tables are created, not the schema) | deploy cannot record state |
@@ -158,7 +168,7 @@ Audit every key, set or not:
 | `flow.additional_quality_rules` | custom data quality rules | `name`, `rule_class` importable; no name collision | built-in rules only |
 | `flow.additional_alert_transports` | alert transports beyond slack/telegram | `name`, `transport_class` importable | `slack`, `telegram` |
 | `python_additional_paths` | shared Python code outside the flow modules | Keys only `flows`, `sql_transformations`; dotted paths | none |
-| `additional_entity_paths` | entities shipped in a package or another folder | `pkg://<package>[/<subdir>]` installed, or a path relative to the root | none |
+| `additional_entity_paths` | entities shipped in a package or another folder | `pkg://<package>[/<subdir>]` installed (not zipped), or an existing directory, absolute or relative to the root; project entities override them | none |
 | `additional_entities` | project-defined entity types | `name` not a built-in type; `model_type` importable; `folder_name` exists | none |
 
 ### Namespace facets
@@ -173,6 +183,7 @@ settings at `.` and override only where a layer differs.
 | `flow` | `default_state_backend_connector` set wherever flows run (or each flow declares its own `state_backend_connector`) |
 | `scheduling` | `max_attempts` (1-10, default 1): give retries only to flows calling unreliable external systems. `alerting`: see Step 6 |
 | `folder` | `true` only on exact, non-root namespaces whose assets are grouped in their own folder; the folder actually exists on disk |
+| `deploy` | Only when a namespace is deployed on its own (`--namespace <ns>` on `nld flow deploy` / `nld structure deploy`): `unit: true`, or a `group` shared by the namespaces that must deploy together. Exact keys only; the declaration applies to that namespace alone, a descendant needing its own to be deployable on its own. Without any, the project deploys as a whole (`guide-deployment`) |
 
 ## Step 4: Connections
 
@@ -234,6 +245,9 @@ Details: `guide-scheduling` (environments, FlowTask scheduling).
     it (`how-to-deploy-a-project`).
   - Database already live: seed the metadata with
     `how-to-bootstrap-deployment-backend` instead of redeploying.
+  - Parts of the project released separately (one source, one schema):
+    declare them as deploy units or groups (`namespaces.<ns>.deploy`, see the
+    facet checklist); a project deployed as a whole needs no `deploy` facet.
 - **Scheduling**: one FlowTask per flow and environment under `scheduling/`
   (`guide-scheduling`); `nld scheduling validate --env <env>` for each
   environment.

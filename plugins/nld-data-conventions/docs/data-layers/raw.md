@@ -129,7 +129,7 @@ The view uses `ROW_NUMBER() OVER (PARTITION BY <key> ORDER BY ts_updated_at DESC
 | Dedup view structure | `assets/<ns>/structure/v_raw_<prefix>_<entity>_latest.yml` | View structure |
 
 > Paths assume the namespace-folder layout (`<ns>` declared with `folder: true`
-> in `nld_project.yml`). A product still on the legacy type-first layout uses
+> in `nld_project.yml`). A namespace without `folder: true` is stored type first, under
 > `assets/flows/<ns>/…` and `assets/structure/<ns>/…` instead.
 
 ## Column Conventions

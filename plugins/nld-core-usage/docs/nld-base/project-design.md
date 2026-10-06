@@ -20,7 +20,7 @@ flowchart LR
     A[StandardTask] -->|execution_context| B[NldExecutionContext]
     B -->|.project| C[Project]
     C -->|.entity_registry| D[NldEntityRegistry]
-    D -->|get_structure<br/>get_field<br/>get_org<br/>...| E["NldNamespacedBaseModelWrapper&lt;T&gt;"]
+    D -->|get_structure<br/>get_field<br/>get_field_template<br/>...| E["NldNamespacedBaseModelWrapper&lt;T&gt;"]
     E -->|.model| F[NldBaseModel instance]
     E -->|.namespace| G[NldNamespace]
 ```
@@ -68,10 +68,21 @@ Central execution context accessible throughout task execution via `contextvars`
 context = NldExecutionContext(
     task_request=request,
     with_project=True,  # optionally load project at init
+    additional_entity_paths=["pkg://shared_assets/assets"],  # optional extra entity roots
 )
 ```
 
 Resolves folder paths from: task request → environment variables → defaults.
+The project root is `ROOT_FOLDER_PATH` (`--root-folder-path`) →
+`NLD__ROOT_FOLDER_PATH` → the current directory; the configuration folder is
+`CONFIG_FOLDER_PATH` → `NLD__CONFIG_FOLDER_PATH` → `.nld` under the **current
+directory** (not under the project root). The context loads `<config>/.env`
+without overriding variables already set, then the connections of
+`<config>/secrets.toml` merged with the `NLD__DATA_CONNECTION__*` variables.
+
+`init_execution_context(...)` and `load_project(root_folder_path, ...)`
+(`core/nld/task/context/bootstrap.py`) wrap this for external services; both
+accept `additional_entity_paths`.
 
 **Context variable pattern (global access without parameter passing):**
 
@@ -113,11 +124,11 @@ entities from filesystem, and is held by the execution context.
 | `version` | `str \| None` | Optional version string |
 | `entity_path` | `str` | Relative path to entities folder (default: `"."`) |
 | `environments` | `EnvironmentsConfig` | Named environments (connection profile + variable overrides); active env resolved by `--env` → `NLD__ENVIRONMENT` → `default`. See `guide-scheduling`. |
-| `properties` | `dict[str, Any]` | Free-form key-value metadata the core does not interpret (platform hints). |
+| `properties` | `dict[str, str] \| None` | Free-form key-value metadata the core does not interpret (platform hints). |
 | `metadata_backend_connector` | `str \| None` | Connection holding the deployment metadata tables (`_nld_structure_*`, `_nld_flow_*`). Required by `nld flow deploy` and change files. See `guide-deployment`. |
 | `variables` | `dict[str, str]` | Jinja variables for SQL hooks (structure and flow `pre/post` hooks). An `NLD__VAR__<NAME>` environment variable overrides `<name>`. |
 | `python_additional_paths` | `dict[str, list[str]]` | Extra Python modules (dotted notation, no slash) searched for flow task classes (`flows`) and SQL rendering transformations (`sql_transformations`). Unknown keys are rejected. |
-| `additional_entity_paths` | `list[str]` | Extra entity roots loaded *before* the project ones, so a project entity overrides a packaged one: a path relative to the project root, or `pkg://<package>[/<subdir>]` for an installed package. |
+| `additional_entity_paths` | `list[str]` | Extra entity roots loaded *before* the project ones, in declaration order, so a project entity overrides a packaged one with the same key in the same namespace: an absolute path, a path relative to the project root, or `pkg://<package>[/<subdir>]` for an installed package. Resolved on access (`additional_entities_root_folder_paths`): a root that is not an existing directory, or a package installed zipped, raises `NldProjectError`. |
 | `additional_entities` | `list[AdditionalEntityConfig]` | Project-defined entity types (`name`, `model_type`, `folder_name`, optional `display_name`, `category`, `search_direction`, `always_load`, `file_format`). A name colliding with a built-in type is rejected. |
 | `flow_config` | `FlowProjectConfig` | General flow configuration from the `flow` block: `additional_flow_task_types`, `additional_incremental_types`, `additional_quality_rules`, `additional_alert_transports`. |
 | `flow_namespace_config` | `FlowNamespaceConfig` | Namespace-scoped flow settings from `namespaces.<ns>.flow`. |
@@ -137,7 +148,10 @@ project = Project.from_yaml(
 ```
 
 This reads `nld_project.yml` from the root path, creates the `NldEntityRegistry`,
-and optionally loads all entities from the filesystem.
+and optionally loads all entities from the filesystem. An optional
+`additional_entity_paths=[...]` argument is appended to the roots the project
+file declares, so an embedding application can contribute entity roots the
+project itself does not know about.
 
 **Project file format (`nld_project.yml`):**
 
@@ -216,23 +230,32 @@ is what lets a wildcard win over a broader exact key, so with both `.` and
 
 | Facet | Fields | Model |
 |-------|--------|-------|
-| `structure` | `default_connection_name`, `database_name`, `schema_name`, `tags` | `StructureNamespaceMapping` |
+| `structure` | `default_connection_name`, `database_name`, `schema_name` (all three required), `tags` | `StructureNamespaceMapping` |
 | `flow` | `default_state_backend_connector` (a connection name, or `{primary, secondary}`) | `FlowNamespaceMapping` |
 | `scheduling` | `max_attempts` (1–10, default 1), `alerting` | `SchedulingNamespaceMapping` |
-| `folder` | `true` / `false` — exact, non-root keys only (nld-core ≥ 0.1.2a5) | collected into `Project.folder_namespaces` |
-| `deploy` | `unit` (bool) and/or `group` — at least one, exact (non-wildcard) keys only, applied to the declaring namespace without hierarchy resolution; a group needs at least two members (nld-core > 0.1.2a5) | `DeployNamespaceMapping`, collected into `Project.deploy_namespace_config` — `unit: true` allows `--namespace` deploys of that namespace (opt-in), the namespaces sharing a group always deploy together (see `flow-deployment.md` §4b) |
+| `folder` | `true` / `false` — exact, non-root keys only | collected into `Project.folder_namespaces` |
+| `deploy` | `unit` (bool) and/or `group` — at least one, exact (non-wildcard) keys only, applied to the declaring namespace without hierarchy resolution; a group needs at least two members | `DeployNamespaceMapping`, collected into `Project.deploy_namespace_config` — `unit: true` allows `--namespace` deploys of that namespace (opt-in), the namespaces sharing a group always deploy together (see `flow-deployment.md` §4b) |
 
 The block is transposed at load into one config per facet, reachable on the
 project as `structure_namespace_config`, `flow_namespace_config` and
 `scheduling_namespace_config` (all `NamespaceMappingConfig` subclasses,
-`core/nld/pydantic/namespace_mapping.py`). An unknown facet name raises rather
-than being ignored.
+`core/nld/pydantic/namespace_mapping.py`), plus `folder_namespaces` and
+`deploy_namespace_config`, which apply to the declaring namespace only. An
+unknown facet name raises rather than being ignored.
+
+The `structure` mapping a namespace resolves to is the deploy target of its
+structures (connection, database, schema) and the schema SQL flows read them
+from. Deploying, profiling (`nld structure audit run`) or rendering SQL over a
+structure whose namespace resolves to no mapping fails with `Namespace '<ns>'
+not found in structure config`. Its `tags` are added to every structure whose
+namespace resolves to that mapping.
 
 #### The `scheduling` facet: retries and alerting
 
 `max_attempts` is the attempt budget the scheduler gives each flow of the
-namespace (1 = no retry). nld reads the current attempt from the environment
-and alerts on a failure only at the final attempt.
+namespace (1 = no retry). A `FlowTask` overrides it for one task with its own
+`max_attempts` (same 1–10 range). nld reads the current attempt from the
+environment and alerts on a failure only at the final attempt.
 
 `alerting` declares through which technologies, and on what, the flows of the
 namespace alert:
@@ -240,7 +263,7 @@ namespace alert:
 | Key | Default | Meaning |
 |-----|---------|---------|
 | `transports` | — (required when enabled) | Transport names: built-in `slack`, `telegram`, or one registered through `flow.additional_alert_transports` (`name`, `transport_class`) |
-| `alert_on` | `[FAILED]` | Execution states raising an alert: `SUCCESS`, `WARNING`, `FAILED` |
+| `alert_on` | `[FAILED]` | Execution states raising an alert: `SUCCESS`, `WARNING`, `FAILED`, `KILLED`, `CANCELLED` |
 | `alert_after_consecutive_failures` | `1` | Scheduler-side threshold before alerting |
 | `enabled` | `true` | `false` is the explicit opt-out of a namespace (needs no transport) |
 | `<transport>` | — | Non-secret settings of one transport: `slack.channel`, `telegram.chat_id` |
@@ -250,16 +273,9 @@ Secrets never live in the project file: each transport reads them from
 `NLD__ALERTING__TELEGRAM__BOT_TOKEN`), and a transport whose secret is absent is
 silently disabled. Resolution walks past levels that declare no `alerting`, so a
 root declaration covers every namespace until one declares its own. Unknown
-transports and unknown settings keys fail the project load.
-
-> **Upgrade note (0.1.2a3).** `namespaces` replaces the former
-> `config/structure.yaml` and `config/flow.yaml`, and the top-level
-> `flow` block absorbs `additional_flow_task_types` (previously in
-> `config/flow.yaml`) together with `additional_incremental_types` and
-> `additional_quality_rules` (previously top-level keys). Those files are no
-> longer read, and a project that still carries either one fails to load with an
-> error naming the file — they must be merged into `nld_project.yml` and
-> deleted. `additional_entities` and `python_additional_paths` stay top-level.
+transport names, and settings keys a built-in transport does not accept, fail
+the project load; the settings of a transport registered through
+`flow.additional_alert_transports` are checked when a flow first builds it.
 
 ## 5. StandardTask
 
@@ -275,7 +291,7 @@ class MyTask(StandardTask):
         # Access entities through the execution context
         registry = self.execution_context.entity_registry
         structure = registry.get_structure("my_table")
-        org = registry.get_org("default")
+        template = registry.get_field_template("rec_insert_tst")
 ```
 
 **Initialization:** Calls `NldExecutionContext.require_current()` to obtain the
@@ -309,10 +325,12 @@ with NldExecutionContext(task_request=request, with_project=True) as context:
     # Returns: NamespacedStructure
     #   .model     → Structure instance
     #   .namespace → NldNamespace where it was found
+    # A name held by several namespaces resolves to the copy stored in the
+    # requested namespace; "source.raw.raw_orders" designates it from anywhere.
 
-    # 6. Retrieve org config (search_direction="parents")
-    ns_org = registry.get_org(
-        entity_key="default",
+    # 6. Retrieve a field template (search_direction="parents")
+    ns_template = registry.get_field_template(
+        entity_key="rec_insert_tst",
         namespace=NldNamespace("source.raw"),
     )
     # Searches: "source.raw" → "source" → "." until found

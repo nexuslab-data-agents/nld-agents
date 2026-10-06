@@ -24,9 +24,8 @@ you are recommending (Step 4) instead of generalising from another type.
 Two axes drive the choice and are easy to confuse:
 
 - **Source selection** — how the type selects at the source (no
-  selection / always full / partial, and on what basis). It follows from
-  the type's anchor: source-anchored types select partially on their
-  dimension, target-anchored types read the source in full.
+  selection, or partial and on what basis). It follows from the type's
+  anchor: source-anchored types select partially on their dimension.
 - **Source availability** — whether one read of the source presents its
   complete extent (a table: yes; a rotating listing, a windowed API: no).
   This characterises the *source*, not the type, and it is what decides
@@ -168,6 +167,7 @@ defaults are usually right; only diverge when there is a clear reason.
 | `type` | (required) | Must match the type chosen in Step 3. |
 | `persist_initial_processing_state` | `True` | Disable only for very small / very fast flows where the extra write is wasteful. |
 | `immediate_step_persistence` | `True` | Disable when the flow has many short steps and the per-step write cost dominates; accept that intermediate progress is lost on crash. |
+| `source_availability` | unset (the type's `full`) | Set `partial` when one read of the source does not present its complete extent (a rotating listing, a windowed API). Declarative: it records the fact for readers and tooling; the execution does not branch on it. |
 
 ### Step 6: Verify backend + engine support
 
@@ -177,7 +177,7 @@ not implemented, either:
 
 - Recommend a supported alternative backend/engine, or
 - Tell the user which backend module they would need to add and point at
-  `nld/flow/incremental/{type}/backend/` for the file naming convention.
+  `nld/flow/incremental/impl/{type}/backend/` for the file naming convention.
 
 ### Step 7: Report the recommendation
 

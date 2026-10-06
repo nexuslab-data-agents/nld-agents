@@ -70,5 +70,5 @@ For each consumer entity:
 | Structure    | `assets/<sub_product>/structure/v_<entity>.yml`            | Table / view schema |
 
 > Paths assume the namespace-folder layout (`<sub_product>` declared with `folder: true`
-> in `nld_project.yml`). A product still on the legacy type-first layout uses
+> in `nld_project.yml`). A namespace without `folder: true` is stored type first, under
 > `assets/flows/<sub_product>/…` and `assets/structure/<sub_product>/…` instead.

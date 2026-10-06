@@ -22,10 +22,10 @@ These characterisations tag fields that track the lifecycle of a record at the *
 | `rec_last_update_tst` | `ts_updated_at` | TIMESTAMP WITH TIME ZONE | CURRENT_TIMESTAMP | When the record was last updated at this layer |
 | `rec_last_update_by` | `ds_updated_by` | CHARACTER VARYING | | User/process that last updated the record |
 
-`rec_insert_by` and `rec_last_update_by` are part of the nld-core built-in
-catalogue from **0.1.2a4** — before that release only `rec_deletion_by`
-existed, and a created-by / updated-by column had to be matched by its name.
-Both are single-field-per-structure, like their timestamp counterparts.
+`rec_insert_by` and `rec_last_update_by` are built-in nld-core
+characterisations: a created-by / updated-by column is matched by its
+characterisation, never by its name. Both are single-field-per-structure, like
+their timestamp counterparts.
 
 The two user columns are **not** filled by the framework. A flow execution has
 no acting user, so nld-core never injects a value into them: they are written by
@@ -97,7 +97,7 @@ These characterisations modify how the NLD UPSERT process handles specific field
 
 | Characterisation | Effect | Typically Applied To |
 |-----------------|--------|---------------------|
-| `exclude_from_upsert_update` | Field is **not updated** during UPSERT (preserves original value on conflict) | Any insert-only field. `rec_insert_tst` and `rec_insert_by` are already excluded by the framework itself, so the characterisation is only needed on top of that for other fields |
+| `exclude_from_upsert_update` | Field is **not updated** during UPSERT (preserves original value on conflict) | Any insert-only field. The framework itself excludes `rec_insert_tst` and `rec_insert_by`, so the characterisation is needed only for other fields |
 | `exclude_from_upsert_match` | Field is **not compared** when determining if a record has changed | Timestamp fields (`rec_last_update_tst`, `rec_deletion_tst`, `rec_source_*_tst`, `rec_previous_layer_*_tst`) — prevents timestamp drift from triggering unnecessary updates |
 
 ## Field Template Mechanics

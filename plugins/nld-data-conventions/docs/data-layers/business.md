@@ -274,5 +274,5 @@ For each business entity:
 | View SQL      | `assets/<sub_product>/flows/v_r_<entity>.sql` *(optional)*    | Display view SQL     |
 
 > Paths assume the namespace-folder layout (`<sub_product>` declared with `folder: true`
-> in `nld_project.yml`). A product still on the legacy type-first layout uses
+> in `nld_project.yml`). A namespace without `folder: true` is stored type first, under
 > `assets/flows/<sub_product>/…` and `assets/structure/<sub_product>/…` instead.

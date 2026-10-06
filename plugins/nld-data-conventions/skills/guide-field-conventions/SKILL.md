@@ -19,7 +19,7 @@ Activate this guide when the agent is:
 - Adding or modifying field characterisations in field templates
 - Working with record lifecycle tracking fields (ts_inserted_at, ts_updated_at)
 - Working with logical deletion fields (fl_deleted, ts_deleted_at)
-- Working with UPSERT behavior (exclude_from_match, exclude_from_update)
+- Working with UPSERT behavior (exclude_from_upsert_match, exclude_from_upsert_update)
 
 ## Documentation
 
@@ -40,12 +40,12 @@ Activate this guide when the agent is:
 
 **Field characterisations** — metadata annotations on field templates:
 - Record lifecycle: `rec_insert_tst`, `rec_insert_by`, `rec_last_update_tst`, `rec_last_update_by`
-  (the two `_by` columns are built-in from nld-core 0.1.2a4; the framework never
-  fills them, but it keeps `rec_insert_by` out of the UPSERT `UPDATE SET`)
-- Logical deletion: `rec_deletion_flag`, `rec_deletion_tst`
-- Source tracking: `src_extraction_tst`, `src_insert_tst`, `src_update_tst`
+  (the framework never fills the two `_by` columns, but it keeps `rec_insert_by`
+  out of the UPSERT `UPDATE SET`)
+- Logical deletion: `rec_deletion_flag`, `rec_deletion_tst`, `rec_deletion_by`
+- Source tracking: `rec_source_extraction_tst`, `rec_source_insert_tst`, `rec_source_last_update_tst`
 - Data format: `epoch_ms` (timestamp as Unix epoch milliseconds)
-- UPSERT control: `exclude_from_match`, `exclude_from_update`
+- UPSERT control: `exclude_from_upsert_match`, `exclude_from_upsert_update`
 
 ## Cross-References
 

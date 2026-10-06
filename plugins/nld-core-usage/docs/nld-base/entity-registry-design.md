@@ -27,6 +27,8 @@ and search for entities of a given type.
 | `search_direction` | `str` | `"children"` or `"parents"` (default: `"children"`) |
 | `category` | `str \| None` | Display category for grouping |
 | `display_name` | `str \| None` | Human-readable name |
+| `always_load` | `bool` | Loaded even under a selective load (default: `False`) — see "Selective / lazy entity loading" |
+| `allow_same_name_across_namespaces` | `bool` | Keep every copy of a name declared in several namespaces instead of picking one by priority (default: `False`; `True` for `structure` and `flows`) — see "Same-name entities across namespaces" |
 
 ## 2. Search Direction
 
@@ -42,7 +44,7 @@ When duplicates exist, the entity **closest to root** takes priority.
 **Use case:** Data entities inherited downward (structures, fields, flows).
 
 ```
-Namespace tree:        Lookup for "my_table" at namespace "source":
+Namespace tree:        Lookup for "my_field" at namespace "source":
 
   .                    1. Check "source"         → found (v1)
   └── source           2. Check "source.raw"     → found (v2)
@@ -51,16 +53,20 @@ Namespace tree:        Lookup for "my_table" at namespace "source":
                        Result: v1 (closest to root wins)
 ```
 
+Structures and flows search children too, but never choose among same-name
+copies by depth — see "Same-name entities across namespaces" in §3.
+
 ### Direction: `"parents"`
 
 Searches from the given namespace **upward** into parent namespaces.
 When duplicates exist, the entity **closest to the current namespace** takes priority.
 
 **Use case:** Configuration / vocabulary / governance entities inherited from
-root (org, adapters, templates, business dictionary, structure & flow owners).
+root (adapters, templates, field characterisation definitions, business
+dictionary, structure & flow owners).
 
 ```
-Namespace tree:        Lookup for "org_config" at namespace "source.raw":
+Namespace tree:        Lookup for "tracking" at namespace "source.raw":
 
   .                    1. Check "source.raw"  → not found
   └── source           2. Check "source"      → found (v2)
@@ -104,6 +110,34 @@ When an entity name exists in multiple namespaces:
 - `"children"` search → selects the **root** namespace (closest to root).
 - Uses `select_by_namespace_priority()` utility internally.
 
+**Same-name entities across namespaces:**
+
+An entity type declared with `allow_same_name_across_namespaces=True` —
+`structure` and `flows` among the built-ins — keeps every copy of a name instead
+of selecting one by priority, so `sales.customer` and `marketing.customer` are
+two distinct structures.
+
+- **Bulk accessors** (`get_entities()`, `get_entities_as_dict()`,
+  `get_entity_keys()`, `get_<entity>_dict()`) return every visible copy. A name
+  held by a single copy is keyed by its bare name; a name held by several copies
+  is keyed by each copy's qualified id (`<namespace>.<name>`, the wrapper `id`).
+- **Single lookups** (`get_entity()`, `get_<entity>()`) accept the bare name or
+  the qualified `<namespace>.<name>` key. Among several matching copies, the one
+  stored in the requested namespace itself is returned; otherwise a single
+  visible copy is returned, and several raise `AmbiguousEntityException`, which
+  lists the candidate ids. Qualify the name, or pass the namespace holding the
+  copy.
+
+```
+structure/sales/customer.yml       get_structure("customer", namespace="sales")      → sales.customer
+structure/marketing/customer.yml   get_structure("sales.customer")                    → sales.customer
+                                   get_structure("customer")                          → AmbiguousEntityException
+                                   get_structure_dict() keys → ["marketing.customer", "sales.customer"]
+```
+
+`nld structure list` and `nld flow list` show the plain name next to its
+namespace, same-name copies side by side.
+
 ## 4. NldEntityRegistry
 
 **File:** `core/nld/service/nld_entity_registry.py`
@@ -111,25 +145,28 @@ When an entity name exists in multiple namespaces:
 Extends `EntityProvider` with typed convenience accessors for each standard entity
 type. This is the primary interface used by application code to access entities.
 
-**Standard entity types** (non-exhaustive — connector plugins and project
-`additional_entity_definitions` extend the set):
+**Standard entity types** (the project's `additional_entities` extend the set):
 
 | Entity Type | Model Class | Folder | Search Direction | Category |
 |-------------|-------------|--------|-----------------|----------|
-| `org` | `Organisation` | `config/org` | parents | Configuration |
 | `field` | `Field` | `templates/field` | children | Structure |
-| `structure` | `Structure` | `structure` | children | Structure |
+| `structure` | `Structure` | `structure` | children (same name allowed across namespaces) | Structure |
 | `structure_model` | `StructureModel` | `structure_model` | children | Structure |
 | `structure_audit` | `StructureAudit` | `audits/structure` | children | Structure |
 | `field_adapter` | `FieldAdapter` | `templates/field_adapter` | parents | Structure Configuration |
+| `field_characterisation_definition` | `FieldCharacterisationDefinition` | `characterisations/field` | parents | Structure Configuration |
 | `field_format_adapter` | `FieldFormatAdapter` | `templates/field_format_adapter` | parents | Structure Configuration |
 | `field_template` | `FieldTemplate` | `templates/field_template` | parents | Structure Configuration |
 | `structure_adapter` | `StructureAdapter` | `templates/structure_adapter` | parents | Structure Configuration |
-| `flows` | `DataFlowDefinition` | `flows` | children | Data Flow |
-| `scheduling` | `FlowTask` | `scheduling` | children | Data Flow |
+| `structure_template` | `StructureTemplate` | `templates/structure_template` | parents | Structure Configuration |
+| `flows` | `DataFlowDefinition` | `flows` | children (same name allowed across namespaces) | Data Flow |
+| `scheduling` | `FlowTask` | `scheduling` | children | Scheduling |
 | `business_dictionary` | `BusinessDictionary` | `business/dictionary` | parents | Vocabulary |
 | `structure_owner` | `StructureOwner` | `governance/structure` | parents | Governance |
 | `flow_owner` | `FlowOwner` | `governance/flow` | parents | Governance |
+
+Seed CSV files live in a `seeds/` folder next to the entity folders without
+being an entity type (`seeds/<ns path>/<structure>.csv`).
 
 > The governance, scheduling, and business-dictionary entities have their own
 > guides (`guide-governance`, `guide-scheduling`, `guide-business-dictionary`).
@@ -138,24 +175,26 @@ type. This is the primary interface used by application code to access entities.
 
 ```python
 # Example for "structure" entity type
-registry.get_structure_dict(namespace)          # dict[name → NamespacedStructure]
+registry.get_structure_dict(namespace)          # dict[key → NamespacedStructure]
 registry.get_structure_keys(namespace)          # list[str]
 registry.list_structure_keys(namespace)         # list[str] (all descendants)
 registry.get_structure(entity_key, namespace)   # NamespacedStructure
 registry.get_structures(entity_keys, namespace) # list[NamespacedStructure]
-registry.get_structures_as_dict(keys, ns)       # dict[name → NamespacedStructure]
+registry.get_structures_as_dict(keys, ns)       # dict[key → NamespacedStructure]
 ```
+
+The key is the entity name, or the qualified `<namespace>.<name>` for a name
+held by several namespaces (see "Same-name entities across namespaces").
 
 ## 5. Typed Wrappers
 
-**File:** `core/nld/service/nld_entities.py`
-
 Type-specific subclasses of `NldNamespacedBaseModelWrapper` that provide strong typing
-for entity retrieval results — e.g. `NamespacedOrganisation` (wraps `Organisation`),
-`NamespacedField`, `NamespacedFieldAdapter`, `NamespacedFieldTemplate`,
-`NamespacedStructureAdapter`, `NamespacedStructure`, `NamespacedDataFlowDefinition`,
-and the equivalents for the newer entities (`NamespacedFlowTaskModel`,
-`NamespacedStructureOwner`, `NamespacedFlowOwner`).
+for entity retrieval results — e.g. `NamespacedField`, `NamespacedFieldAdapter`,
+`NamespacedFieldTemplate`, `NamespacedStructureAdapter`, `NamespacedStructure`,
+`NamespacedDataFlowDefinition`, `NamespacedFlowTaskModel`,
+`NamespacedStructureOwner`, `NamespacedFlowOwner`. Each is defined next to its
+model; `core/nld/service/nld_entities.py` re-exports the field, structure,
+flow and scheduling ones.
 
 ---
 
@@ -166,8 +205,8 @@ directly to namespaces.
 
 ```
 entities_root/
-├── config/org/
-│   └── default.yml              → Organisation "default" at namespace "."
+├── characterisations/field/
+│   └── nps_score.yml            → FieldCharacterisationDefinition "nps_score" at namespace "."
 ├── structure/
 │   ├── customers.yml            → Structure "customers" at namespace "."
 │   └── source/
@@ -196,7 +235,7 @@ entities_root/
 
 ### Namespace folders
 
-*Since nld-core 0.1.2a5.* By default the tree is **type first**: one folder per entity type, the namespace
+By default the tree is **type first**: one folder per entity type, the namespace
 being the path below it. A namespace declared with `folder: true` in the
 `namespaces` block of `nld_project.yml` is stored **namespace first** instead: its
 entities live in `<namespace path>/<folder_name>/`, the namespace being the folder
@@ -236,12 +275,14 @@ Rules:
 - **One location per namespace** — a namespace is owned by the deepest declared
   folder containing it, or by the type-first tree when none does. Entities of a
   namespace found anywhere else raise `NamespaceFolderConflictException` (e.g.
-  `structure/web/x.yml` while `web` is a namespace folder). Migrate one namespace at
-  a time.
+  `structure/web/x.yml` while `web` is a namespace folder), so a namespace moves
+  into its folder in one step, every entity type at once.
 - Folders may be multi-level (`source.web`) and nested (`source` and `source.web`).
 - `folder` must be a boolean, cannot be set on a wildcard key nor on the root, and
-  no folder segment may reuse a top-level entity folder name (`flows`,
-  `structure`, `templates`, `seeds`, `config`, …).
+  no folder segment may reuse a top-level entity folder name: the first segment
+  of every entity type's `folder_name` (`flows`, `structure`, `structure_model`,
+  `audits`, `templates`, `characterisations`, `scheduling`, `business`,
+  `governance`, and those of the project's `additional_entities`) or `seeds`.
 - Additional entity roots (`additional_entity_paths`) are always read type first.
 
 ### Selective / lazy entity loading
@@ -251,7 +292,7 @@ caller can load only the entity types it needs instead of the whole project.
 `EntityProvider.get_required_entity_definitions` resolves the **transitive
 closure** of a request — it introspects each entity's Pydantic model to follow
 embedded sub-models and `NldEntityReference` targets — so, e.g., loading
-`flows` no longer pulls in unrelated structure models. Every CLI command
+`flows` does not pull in unrelated structure models. Every CLI command
 declares the entity types it touches (`structure list` → `structure`,
 `flow *` → `flows`, `business dict *` → `business_dictionary`, …) and loads only
 those. Loading is **incremental**: multiple tasks in one process accumulate
@@ -270,7 +311,7 @@ Two consequences worth remembering:
 
 ### Namespace-scoped loading
 
-*Since nld-core 0.1.2a5.* `load_entities(namespace=...)` (on `EntityProvider`, `NldEntityRegistry`, `Project`
+`load_entities(namespace=...)` (on `EntityProvider`, `NldEntityRegistry`, `Project`
 and `NldExecutionContext`) loads only the **lineage** of a namespace: its ancestors
 (which it inherits from), itself and its descendants. Namespace folders outside
 that lineage are not scanned at all. The scope applies to every entity type of
@@ -282,9 +323,9 @@ list/info/validate`, `structure model list/info`, `structure audit
 list/info/render`, `flow list/info`, `scheduling list/info`, `business dict
 list/find`, `ownership list`, `project info/entity-info`. Commands that need
 cross-namespace lineage or resolve links to structures elsewhere keep a full load:
-flow execute/deploy/state, `deploy impact`, structure deploy, `structure model
-validate`, `structure audit validate`, `ownership resolve`, `scheduling
-deps/validate`.
+flow execute/deploy/state/deps, `deploy impact`, structure deploy, `structure
+generate`, `structure model validate`, `structure audit run/validate`,
+`ownership resolve`, `scheduling deps/validate`.
 
 ## 7. Namespace Resolution with Search Direction
 
@@ -310,7 +351,8 @@ flowchart TB
 
 | Entity Type | Direction | Namespaces Searched | Priority |
 |-------------|-----------|---------------------|----------|
-| `structure` | children | `source.raw`, `source.raw.*` | Root (shallowest) |
-| `org` | parents | `source.raw`, `source`, `.` | Deepest (closest to current) |
+| `field` | children | `source.raw`, `source.raw.*` | Root (shallowest) |
+| `structure` | children | `source.raw`, `source.raw.*` | Copy in `source.raw`, else the single visible copy, else ambiguous |
+| `field_template` | parents | `source.raw`, `source`, `.` | Deepest (closest to current) |
 | `field_adapter` | parents | `source.raw`, `source`, `.` | Deepest (closest to current) |
-| `flows` | children | `source.raw`, `source.raw.*` | Root (shallowest) |
+| `flows` | children | `source.raw`, `source.raw.*` | Copy in `source.raw`, else the single visible copy, else ambiguous |

@@ -34,8 +34,8 @@ the state but absent from the inventory is never processed, not even by
 | `duckdb` / `pydantic` | ✅ | ❌ | ✅ | ❌ |
 | `local` / `pydantic` | ✅ | ❌ | ✅ | ❌ |
 | `local` / `duckdb` | ✅ | ❌ | ✅ | ❌ |
-| `s3_blob_storage` / `pydantic` | ✅ | ❌ | ✅ | ✅ |
-| `s3_blob_storage` / `duckdb` | ✅ | ❌ | ✅ | ✅ |
+| `s3_blob_storage` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
+| `s3_blob_storage` / `duckdb` | ✅ | ✅ | ✅ | ✅ |
 | `snowflake` / `pydantic` | ✅ | ✅ | ✅ | ✅ |
 
 Backend modules live under `core/nld/flow/incremental/impl/by_key/backend/`.
@@ -46,9 +46,11 @@ Backend modules live under `core/nld/flow/incremental/impl/by_key/backend/`.
   (`retrieve_current_state`, `write_processing_state`,
   `write_post_processing_state`, plus the partial-state variants for
   immediate per-key persistence).
-- **`get-state`** — `get_processing_state` /
-  `get_post_processing_state` are implemented on PostgreSQL and
-  Snowflake only.
+- **`get-state`** — `read_processing_state` /
+  `read_post_processing_state` are implemented on PostgreSQL, Snowflake
+  and S3 blob storage (the latest run's
+  `<s3_root_path>/<run timestamp>/state/key_processed_state.<ext>` and
+  `<s3_root_path>/state/key_state.<ext>`).
 - **Snowflake** — `SnowflakeByKeyStateBackendManager`
   (`impl/by_key/backend/snowflake_with_pydantic.py`) covers the full
   lifecycle: state rows in `_nld_incremental_by_key_state`, the
@@ -64,11 +66,11 @@ Backend modules live under `core/nld/flow/incremental/impl/by_key/backend/`.
   `<state-root>/state_plans.<json|parquet>` for state-plan metadata
   plus per-plan
   `<state-root>/plans/<plan_state_uid>/by_key_planned_processing_state.<json|parquet>`
-  for the detailed-state payload). On S3 the planned-state write
-  works even though the live-state `get-state` accessors do not.
+  for the detailed-state payload).
 - **`get-planned`** (`nld flow state incremental get-planned`) lists the
   PLANNED plans from the same slot, so it is available on the same
-  backends as `compute --persist` (PostgreSQL and S3).
+  backends as `compute --persist` (PostgreSQL, Snowflake and S3).
+- **SQLite** — no `by_key` backend is registered.
 - **Planned-state freshness** — `by_key` overrides
   `is_planned_processing_state_fresh` to return `True` for every plan:
   a plan may legitimately re-request a key that a later run already

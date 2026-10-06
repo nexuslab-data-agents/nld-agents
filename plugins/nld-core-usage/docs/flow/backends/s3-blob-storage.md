@@ -24,8 +24,8 @@ under `core/nld/flow/execution/backend/` (shared base
 
 | Strategy | Engine | Flow execution | `get-state` | `compute` | `compute --persist` |
 |----------|--------|:--------------:|:-----------:|:---------:|:-------------------:|
-| `by_key` | `pydantic` | ✅ | ❌ | ✅ | ✅ |
-| `by_key` | `duckdb` | ✅ | ❌ | ✅ | ✅ |
+| `by_key` | `pydantic` | ✅ | ✅ | ✅ | ✅ |
+| `by_key` | `duckdb` | ✅ | ✅ | ✅ | ✅ |
 | `by_source_tst` | `pydantic`, `duckdb` | — | — | — | — |
 | `no_increment` | `pydantic`, `duckdb` | ✅ (no-op) | ❌ | ✅ (empty) | — |
 
@@ -36,10 +36,12 @@ Backend modules: `impl/by_key/backend/s3_blob_storage_base.py`,
 - **Flow execution** (`by_key`) — `retrieve_current_state`,
   `write_processing_state`, `write_post_processing_state` are
   implemented for both engines.
-- **`get-state`** — the read accessors are not overridden; the base
-  raises `NotImplementedError`. The persisted-plan slot is writable on
-  S3 even though the live-state read accessors are not — `compute
-  --persist` and `get-state` are independent.
+- **`get-state`** — `read_processing_state` /
+  `read_post_processing_state` are implemented on the shared `by_key` S3
+  base: the processing state is the latest run's
+  `<s3_root_path>/<run timestamp>/state/key_processed_state.<json|parquet>`
+  (each run's state sits next to its `data/` folder), the post-processing
+  state `<s3_root_path>/state/key_state.<json|parquet>`.
 - **`compute`** — resolves the next run's processing state in memory
   from `retrieve_current_state`.
 - **`compute --persist`** and **`get-planned`** — the `by_key` S3 base

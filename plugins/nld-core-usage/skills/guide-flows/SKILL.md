@@ -58,7 +58,7 @@ project-local path. If not found, read the bundled copy.
 | Incremental filtering in SQL | "4. Incremental Filtering" |
 | SQL file resolution and naming | "7. SQL File Resolution" |
 | Configuration reference | "8. Configuration Reference" |
-| State backend connector formats (legacy string vs primary/secondary mapping) | "8.3 State Backend Connector Formats" |
+| State backend connector formats (bare string shorthand vs primary/secondary mapping) | "8.3 State Backend Connector Formats" |
 | Error handling | "9. Error Handling" |
 
 **flow-execute-internals.md** — Mermaid-driven walkthrough of the
@@ -123,6 +123,9 @@ secondary), see `state_backend_connector` in §8.3 of
   `guide-incremental` skill.
 - For the post-write data quality checks (the `quality_checks` block,
   severities, DATA_QUALITY steps), see the `guide-data-quality` skill.
+- For the alert a flow execution raises on its outcome (namespace-scoped
+  `scheduling.alerting`, transports, the scheduler's outcome line), see the
+  `guide-scheduling` skill.
 - For structure targets referenced by flows, see the `guide-structures` skill.
 - For the deployment system as a whole (drift model, change files, impact
   analysis, metadata backend) see the `guide-deployment` skill; for the

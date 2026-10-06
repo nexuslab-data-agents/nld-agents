@@ -147,6 +147,13 @@ The two levels are combined once, on the result itself — `is_valid`,
 `is_step_failure` and `is_blocking` — so the step converter and the flow
 task read a decision instead of recomposing the table above.
 
+The same outcome sets the level of the alert nld raises once the run ends,
+when the flow's namespace declares `scheduling.alerting`: a `blocking`
+violation (failed execution) and an `error`-severity step failure are
+`FAILED` alerts, any other violation a `WARNING` alert, each sent only when
+`alert_on` lists it. The violated checks are listed in the message. See the
+`guide-scheduling` skill, "Scheduling policy: retries and alerting".
+
 ## 5. Result recording and display
 
 Each evaluated check appends one execution step with the category

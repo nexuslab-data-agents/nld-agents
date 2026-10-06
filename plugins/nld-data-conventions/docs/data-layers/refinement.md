@@ -193,5 +193,5 @@ For each refined entity:
 | Structure | `assets/<ns>/structure/refined_<prefix>_<entity>.yml` | Table schema |
 
 > Paths assume the namespace-folder layout (`<ns>` declared with `folder: true`
-> in `nld_project.yml`). A product still on the legacy type-first layout uses
+> in `nld_project.yml`). A namespace without `folder: true` is stored type first, under
 > `assets/flows/<ns>/…` and `assets/structure/<ns>/…` instead.

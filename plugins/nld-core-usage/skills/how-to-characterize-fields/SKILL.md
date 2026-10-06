@@ -129,7 +129,7 @@ For each field, walk these in order:
      (`ds_inserted_by`, `ds_updated_by`, an application's `cd_created_by` …) →
      the built-in `rec_insert_by` / `rec_last_update_by`, not a functional
      characterisation. One field each per structure; the deletion counterpart is
-     `rec_deletion_by`. Available from nld-core 0.1.2a4.
+     `rec_deletion_by`.
    - string/int encoded date or time (`YYYYMMDD`, `HHMMSS`, …) → `functional_date`
      / `functional_time` with a `format` attribute (e.g. `yyyymmdd`, `ddmmyyyy`,
      `hhmmss`, `hhmm`).

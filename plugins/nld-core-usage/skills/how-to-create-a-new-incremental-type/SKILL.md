@@ -78,19 +78,21 @@ deployment needs the others.
 
    | Axis | Question | Values |
    |------|----------|--------|
-   | Anchor | which side drives the selection | source / target / none |
-   | Source selection | is a selection pushed to the source, on what basis | none / always-full / partial + basis — **derived from the anchor** |
+   | Anchor | which side drives the selection | source / none |
+   | Source selection | is a selection pushed to the source, on what basis | none / partial + basis — **derived from the anchor** |
    | Dimension | the unit selected and remembered | key, time window, scope, … |
    | Change detection | what signals a change | key inventory, extraction tst, functional update tst, none |
 
-   A source-anchored type selects partially on its dimension; a
-   target-anchored type reads the source in full and decides target-side.
-   Keep this separate from **source availability** (whether one read of
+   A source-anchored type selects partially on its dimension. Keep this
+   separate from **source availability** (whether one read of
    the source shows its complete extent) — that characterises the source,
    not the type, and it governs whether absence-based deletion and
-   `OVERWRITE` are legal. If your type's state model matches an existing
-   type and only the filter differs, prefer adding a parameter to that
-   type over creating a new one.
+   `OVERWRITE` are legal. The definition declares its assumption in
+   `FlowIncrementalDefinition.source_availability` (`full` by default,
+   or `partial`), and a flow overrides it with
+   `incremental.source_availability`. If your type's state model matches
+   an existing type and only the filter differs, prefer adding a parameter
+   to that type over creating a new one.
 
    Name: `^[a-z][a-z0-9_]*$` is the convention, ideally
    `by_<anchor>_<dimension>`. It must not collide with a built-in or

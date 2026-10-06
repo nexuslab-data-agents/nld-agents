@@ -79,9 +79,11 @@ accessors.
 
 ## 3. Filesystem Layout
 
-Dictionary files live under `business/dictionary/` at the project root. The
-folder path under `business/dictionary/` is the namespace; the file is named
-after the namespace leaf:
+Dictionary files live under `business/dictionary/` in the project entity path
+(in a namespace folder declared with `folder: true`, under
+`<folder path>/business/dictionary/`). The folder path under
+`business/dictionary/` is the namespace; the file is named after the namespace
+leaf:
 
 ```
 business/

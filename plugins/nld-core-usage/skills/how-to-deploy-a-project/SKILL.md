@@ -82,11 +82,11 @@ target refuses and names the holder (`nld deploy unlock --target
   never reported as removed.
 - Each changed flow's target structure deploys first: the diff is computed
   against the live target and resolves to `CREATE` (table absent), `ALTER`
-  (field/characterisation diffs), or `REBUILD` (order enforcement or an
-  engine-unsupported default change — backup-and-swap, the old table
-  archived as `__nld_backup_<ts>`). Flows deploy in topological order; a
-  failure cascade-skips its transitive dependents and the run ends
-  `partial`/`failed` in `_nld_flow_deployment`.
+  (field/characterisation diffs), or `REBUILD` (order enforcement, or a
+  default or type change the engine cannot apply in place — backup-and-swap,
+  the old table archived as `__nld_backup_<ts>`). Flows deploy in
+  topological order; a failure cascade-skips its transitive dependents and
+  the run ends `partial`/`failed` in `_nld_flow_deployment`.
 - Dependent views dropped by table DDL are recreated by re-executing their
   VIEW flows within the same run. A dependent view no nld VIEW flow manages
   fails the deploy before anything is dropped.
@@ -96,7 +96,9 @@ target refuses and names the holder (`nld deploy unlock --target
   previews as a destructive DROP + ADD instead; `backfill_default` fills a
   column's NULLs once; `reload` plans a full refresh the next
   `nld flow execute` consumes (deploy itself never runs the flow — check
-  with `nld flow state incremental get-planned`).
+  with `nld flow state incremental get-planned`). A `--namespace` deploy
+  applies only the directives whose subject belongs to its unit; the others
+  stay pending for the deploy that owns them.
 - Structures tagged `external_source` or
   `target_structure_is_managed_by_flow_execution`, and live tables with no
   matching asset, are never touched.
