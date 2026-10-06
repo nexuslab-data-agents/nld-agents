@@ -30,7 +30,7 @@ predecessors:
 | Option | Required | Meaning |
 |--------|----------|---------|
 | `perimeter` | yes | Where a DELTA run finds its periods (see below) |
-| `granularity` | yes | `DAY` (`2026-07-14`), `WEEK` (ISO, Monday start, `2026-W29`), `MONTH` (`2026-07`) or `YEAR` (`2026`) — the period key format |
+| `granularity` | yes | `DAY` (`2026-07-14`), `WEEK` (`2026-W29`, see `week_start`), `MONTH` (`2026-07`) or `YEAR` (`2026`) — the period key format |
 | `period_field` | yes | Target column holding the period (DATE or TIMESTAMP); the scoped delete applies to it |
 | `source_period_field` | no | Same column on the MASTER predecessors, when its name differs (default `period_field`) |
 | `scan_field` | no | Modification timestamp scanned on the MASTER predecessors (default: their `rec_last_update_tst` field) |
@@ -38,6 +38,7 @@ predecessors:
 | `lookback_periods` | no | `rolling` only — number of periods of the window (default 1) |
 | `include_current_period` | no | `rolling` only — the window ends with the current period instead of the last complete one |
 | `max_periods_per_run` | no | Refuses a run selecting more periods (use `--limit` to split it) |
+| `week_start` | no | `WEEK` only — `MONDAY` (default: ISO weeks keyed `2026-W29`) or `SUNDAY` (weeks keyed by their Sunday, `2026-07-12`; any day given on the command line is moved to its Sunday) |
 
 Perimeters:
 
@@ -140,8 +141,9 @@ that run's data folder. Backend modules live under
   `_nld_incremental_by_target_period_processing_state` (one row per run,
   periods as JSON) and
   `_nld_incremental_plans_by_target_period_planned_processing_state`.
-- **Calendar changes** — the state records its granularity and timezone; a
-  run whose options differ is refused (period keys would be misread).
+- **Calendar changes** — the state records its granularity, timezone and
+  week start; a run whose options differ is refused (period keys would be
+  misread).
   Clear the flow's state, then rerun with `--full`.
 - **Source requests** — `compute` asks for `--source-request-authorized`
   only when the resolved run scans (`FULL`, or `DELTA` of `discovered`).
