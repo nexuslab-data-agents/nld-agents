@@ -57,6 +57,7 @@ project-local path. If not found, read the bundled copy.
 | Write strategy details and architecture | "3. Write Strategies" |
 | Incremental filtering in SQL | "4. Incremental Filtering" |
 | SQL file resolution and naming | "7. SQL File Resolution" |
+| Input table paths of rendered queries, cross-database inputs on Snowflake | "7.3 Input Table Paths" |
 | Configuration reference | "8. Configuration Reference" |
 | State backend connector formats (bare string shorthand vs primary/secondary mapping) | "8.3 State Backend Connector Formats" |
 | Error handling | "9. Error Handling" |
