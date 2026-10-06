@@ -334,13 +334,3 @@ surface validation errors (e.g. an invalid `grammatical_class`) that a `grep`
 would miss. After any edit, run `nld business dict list --namespace <ns>` and
 `nld business dict find --term <name> --synonym --namespace <ns>`, and confirm the
 term resolves from the file you edited (`source_namespace`).
-
-> **First-class validator (`nld business dict validate`).** Add a dedicated
-> `nld business dict validate` command (in `nld/business/task/` +
-> `nld/cli/business/`, with a task-level test) to validate a namespace in one
-> deterministic step: `grammatical_class` is in the allowed enum; every
-> `preferred_term` / `related_terms` reference resolves (or is a deliberate
-> forward reference); each `TermTranslation` is well-formed; the file's `name`
-> equals its namespace leaf; and there is no `examples: []` / `synonyms: []`
-> noise. This is the canonical "missing CLI → extend nld-core" candidate for the
-> dictionary.
