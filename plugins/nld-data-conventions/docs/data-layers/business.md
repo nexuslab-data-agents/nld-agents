@@ -258,7 +258,8 @@ more specific name may be defined.
 A view selects only structures of its own data product. PostgreSQL ties a view
 to every object it reads, so a view reading another product's table or view
 blocks the deployments that rebuild or drop that object. Data read from another
-product goes into a table (e.g. a `T_` technical table), never a view.
+product goes into a table named by its layer's table convention (e.g. `W_` in the
+business layer, `DIM_` in the consumer layer), never a view.
 
 ## Templates
 
