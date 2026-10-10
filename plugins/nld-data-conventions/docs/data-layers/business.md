@@ -253,8 +253,12 @@ Each business table (except working tables) is typically paired with a
 display view that exposes it to the next layer. The view prefixes the
 underlying table name with `V_` (e.g. `V_R_FR_LEGAL_UNIT_ACTIVITY` for
 `R_FR_LEGAL_UNIT_ACTIVITY`). When the view filters or derives from the data, a
-more specific name may be defined (e.g. the audit view
-`V_R_VIDEO_GAME_UNMATCHED_HLTB`).
+more specific name may be defined.
+
+A view selects only structures of its own data product. PostgreSQL ties a view
+to every object it reads, so a view reading another product's table or view
+blocks the deployments that rebuild or drop that object. Data read from another
+product goes into a table (e.g. a `T_` technical table), never a view.
 
 ## Templates
 
