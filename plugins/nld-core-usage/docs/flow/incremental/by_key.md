@@ -15,12 +15,12 @@ update timestamp when the source reports one.
 |------|----------|
 | Params declared | `--full`, `--keys`, `--limit`, `--with-delta` |
 | `FULL` | `--full` — every key the inventory presents (re-attempts terminal keys) |
-| `DELTA` | no params — inventory keys minus terminal ones (`SUCCEEDED`, `PERMANENTLY_EXCLUDED`), except the `SUCCEEDED` keys the source updated since their last success |
+| `DELTA` | no params — inventory keys minus terminal ones (`SUCCEEDED`, `PERMANENTLY_EXCLUDED`); with `reprocess_updated_keys`, except the `SUCCEEDED` keys the source updated since their last success |
 | `BACKFILL` | `--keys` and/or `--limit` — exactly that selection, terminal keys included |
 | `BACKFILL_DELTA` | `--keys`/`--limit` + `--with-delta` — that selection minus terminal keys, with the same exception for updated `SUCCEEDED` keys |
 | Rejected | `--full` + `--with-delta` raises; `BACKFILL` / `BACKFILL_DELTA` without `--keys` or `--limit` is refused |
 | State advancement | **all four** strategies merge the run's per-key outcomes into the authoritative state |
-| Options | `incremental.options.reprocess_updated_keys` (default `true`) |
+| Options | `incremental.options.reprocess_updated_keys` (default `false`, opt-in) |
 
 Keys are always selected from the **source inventory**: a key present in
 the state but absent from the inventory is never processed, not even by
@@ -29,8 +29,9 @@ the state but absent from the inventory is never processed, not even by
 
 ## Source updates
 
-A key that succeeded is selected again by `DELTA` and `BACKFILL_DELTA`
-when the source reports it changed since. The flow task fills
+In a flow that opts in, a key that succeeded is selected again by
+`DELTA` and `BACKFILL_DELTA` when the source reports it changed since. The
+flow task fills
 `ByKeySingleKeySourceState.last_updated_at` in `retrieve_source_state`
 (e.g. Steam's `GetAppList` `last_modified`), and the comparison runs per
 key:
@@ -48,16 +49,21 @@ key:
   again on the next run.
 
 The timestamp travels with the processing state and the planned detail,
-so a run executed from a precomputed plan stores it too. It is on by
-default; a flow whose source timestamps must not trigger re-processing
-opts out:
+so a run executed from a precomputed plan stores it too. It is off by
+default, so upgrading nld-core changes no flow's selection; a flow whose
+keys must follow the source opts in:
 
 ```yaml
 incremental:
   type: by_key
   options:
-    reprocess_updated_keys: false
+    reprocess_updated_keys: true
 ```
+
+Every flow records `source_last_updated_at`, opted in or not: the by_key
+SQL state tables need the column before the upgrade (PostgreSQL,
+Snowflake, BigQuery, DuckDB — see ADR 0003 in nld-core), and a flow
+using `options` needs an nld-core version that has it.
 
 Re-selection can multiply the work of one run (the first run after a
 source starts reporting timestamps re-selects every key updated since its
