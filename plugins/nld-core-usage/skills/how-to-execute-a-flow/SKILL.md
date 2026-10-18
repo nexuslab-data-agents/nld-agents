@@ -4,8 +4,9 @@ description: >
   Run an nld flow locally with `nld flow execute` — the generic CLI mechanics:
   determine the flow's incremental type first with `nld flow info`, then apply
   the runtime options that incremental type accepts (`--limit`/`--keys` for
-  BY_KEY, `--pull-from`/`--pull-to` for BY_SOURCE_TST, none for NO_INCREMENT),
-  plus the common `--full` / `--with-delta` options. Use when you want to execute
+  BY_KEY, `--pull-from`/`--pull-to` for BY_SOURCE_TST, `--periods` /
+  `--period-from` / `--period-to` / `--limit` for BY_TARGET_PERIOD, none for
+  NO_INCREMENT), plus the common `--full` / `--with-delta` options. Use when you want to execute
   or bound-test any nld flow (extraction, ingestion, SQL) from the shell. The
   product-specific setup (secrets, venv, where the product lives) is layered on
   top by the platform skill.
@@ -63,6 +64,7 @@ Read the **`Incremental:`** line of the output. It is one of:
 | `no_increment` | No delta tracking — every run is a full run. |
 | `by_source_tst` | Delta by a source timestamp watermark. |
 | `by_key` | Delta by a key-state machine. |
+| `by_target_period` | Delta by whole calendar periods of the target. |
 
 The flow name is the YAML filename without extension (e.g. `<entity>_extraction`
 for `.../flows/<sub>/<entity>_extraction.yaml`), resolved via `nld_project.yml`.
@@ -101,10 +103,11 @@ types deliberately differ:
 | Option | Effect |
 |--------|--------|
 | `--full` | Force the **FULL** strategy — process the whole source state, ignoring delta/incremental state. Honoured by every type. |
-| `--with-delta` | Delta modifier. **`by_key`**: combined with `--limit`/`--keys` it selects BACKFILL_DELTA (skipping keys already terminal), and combined with `--full` it **raises**. **`by_source_tst`**: declared but never read — passing it changes nothing (use `--pull-from` alone for a delta-style backfill). **`no_increment`**: not declared. |
+| `--with-delta` | Delta modifier. **`by_key`**: combined with `--limit`/`--keys` it selects BACKFILL_DELTA (skipping keys already terminal), and combined with `--full` it **raises**. **`by_source_tst`**: declared but never read — passing it changes nothing (use `--pull-from` alone for a delta-style backfill). **`by_target_period`**: combined with the period params it selects BACKFILL_DELTA (skipping periods already SUCCEEDED), and combined with `--full` it **raises**. **`no_increment`**: not declared. |
 
 > The incremental-specific options below (`--limit`, `--keys`, `--pull-from`,
-> `--pull-to`) are **runtime passthrough parameters** of the incremental logic,
+> `--pull-to`, `--periods`, `--period-from`, `--period-to`) are **runtime
+> passthrough parameters** of the incremental logic,
 > **not** Click options of `nld flow execute`. They do **not** appear in
 > `nld flow execute --help` — that is by design. Trust them; never gate on
 > `--help` or treat their absence from it as an error. A passthrough option that
@@ -198,20 +201,71 @@ nld flow execute --name <entity>_extraction
 
 ---
 
+## `by_target_period`
+
+Each run **replaces whole calendar periods of the target** (days, ISO weeks,
+months or years) and records the outcome per period. Where a DELTA run finds
+its periods depends on the flow's declared `perimeter` (`declared`,
+`discovered` or `rolling`) — read it with `nld flow info` before bounding a
+run.
+
+| Option | Required | Effect |
+|--------|----------|--------|
+| `--periods=<p1,p2,...>` | No | Process exactly those periods. Selects **BACKFILL** — succeeded periods included. |
+| `--period-from=<p>` `[--period-to=<p>]` | No | Process that range. Selects BACKFILL; without `--period-to` the range runs to the current period. |
+| `--limit=<N>` | No | Cap any strategy to its **N oldest** periods; the rest are `EXCLUDED`. This is how a run refused by `max_periods_per_run` is split. |
+| `--full` | No | Force FULL — every period in the source **and** every period already recorded, so a period that vanished from the source is emptied. Period params are ignored (logged as `IncrementalParameterIgnored`). |
+| `--with-delta` | No | With the period params, runs BACKFILL_DELTA — the declared periods minus the `SUCCEEDED` ones. |
+
+```
+# bounded test over the 2 oldest pending periods
+nld flow execute --name sales --limit=2
+
+# rebuild one quarter
+nld flow execute --name sales --period-from=2026-01 --period-to=2026-03
+
+# normal delta: the perimeter's periods plus the pending ones
+nld flow execute --name sales
+```
+
+> **Period literals must match the flow's granularity** — `2026-07-14` for
+> `DAY`, `2026-W29` for ISO `WEEK` (or the Sunday date when
+> `week_start: SUNDAY`), `2026-07` for `MONTH`, `2026` for `YEAR`. A
+> mismatch is refused with the expected format.
+
+> **A `declared` perimeter has no delta of its own**: a DELTA run without
+> period params is refused. The caller (usually a scheduler) is the one
+> that knows which period to build.
+
+> **State rule for this type**: all four strategies record the period
+> outcome, and a period that fails becomes `FAILED` even if it succeeded
+> before. Every DELTA also retries the pending periods of earlier runs —
+> failed ones, and discovered periods a `--limit` left out. The scan
+> watermark advances only on a successful run whose periods came from a
+> scan (`DELTA` of `discovered`, and `FULL`), never on a backfill.
+
+> **A failure between the delete and the insert leaves the period empty**
+> and `FAILED`; the next DELTA retries it. The two are separate statements.
+
+---
+
 ## Critical rules
 
 ### ALWAYS
 - Run `nld flow info --name <flow>` **first** to read the incremental type, then
   pick options from the matching section.
 - Run from a directory with `nld_project.yml`.
-- Use `--limit=N` (BY_KEY) **alone** for a bounded test.
+- Use `--limit=N` **alone** for a bounded test (BY_KEY: N keys;
+  BY_TARGET_PERIOD: the N oldest periods).
 
 ### NEVER
 - Combine `--full` with `--limit`/`--keys`/`--pull-from`/`--pull-to` (the bound
   becomes a full run).
-- Pass a BY_KEY option (`--limit`, `--keys`) to a `by_source_tst` or
-  `no_increment` flow, or a BY_SOURCE_TST option (`--pull-from`, `--pull-to`) to
-  any other type — it is silently dropped.
+- Pass a BY_KEY option (`--keys`) to a `by_source_tst`, `by_target_period` or
+  `no_increment` flow, a BY_SOURCE_TST option (`--pull-from`, `--pull-to`) or a
+  BY_TARGET_PERIOD option (`--periods`, `--period-from`, `--period-to`) to any
+  other type — it is silently dropped. (`--limit` is declared by both `by_key`
+  and `by_target_period`, each with its own meaning.)
 - Gate on `nld flow execute --help` for the passthrough options — they are
   incremental-type runtime params, absent from `--help` by design.
 
@@ -220,7 +274,8 @@ nld flow execute --name <entity>_extraction
 ## Cross-references
 
 - Flow lifecycle, write strategies, dependency graph: `guide-flows`.
-- Incremental types (BY_KEY, BY_SOURCE_TST, NO_INCREMENT) and their semantics:
+- Incremental types (BY_KEY, BY_SOURCE_TST, BY_TARGET_PERIOD, NO_INCREMENT)
+  and their semantics:
   `guide-incremental`, `how-to-determine-incremental-strategy`.
 - Authoring a new incremental type (and its custom passthrough params, e.g.
   `--days-from`): `how-to-create-a-new-incremental-type`.

@@ -54,7 +54,7 @@ consumer_*          (Platinum — datamarts, BI-ready)
 deduplicated views, raw structure conventions.
 
 **Refinement** — reads from `v_raw_*_latest`, semantic column naming with
-standard prefixes, proper SQL typing, primary key matching functional key.
+standard prefixes, proper SQL typing, primary key matching business key.
 
 **Business (Gold)** — consumes refined data, applies business rules, joins
 across data products, exposes business-meaningful entities.

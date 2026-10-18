@@ -3,8 +3,9 @@ name: guide-flows
 description: >
   Architectural guide for the nld-core flow system — SQLFlowTask and DataFlowTask
   lifecycle, write strategies (OVERWRITE, VIEW, INSERT, UPSERT, DELETE_INSERT,
-  UPSERT_LOGICAL_DELETE), SQL execution, query automation, incremental filtering,
-  post-write data quality checks, and the flow dependency graph.
+  DELETE_INSERT_SCOPED, UPSERT_LOGICAL_DELETE), SQL execution, query automation,
+  incremental filtering, post-write data quality checks, and the flow dependency
+  graph.
 user-invocable: false
 ---
 
@@ -18,7 +19,8 @@ write strategies, flow lifecycle, and execution pipeline.
 Activate this guide when the agent is working on:
 - Flow code in `nld/flow/`
 - SQLFlowTask or DataFlowTask implementations
-- Write strategy logic (OVERWRITE, VIEW, INSERT, UPSERT, DELETE_INSERT, UPSERT_LOGICAL_DELETE)
+- Write strategy logic (OVERWRITE, VIEW, INSERT, UPSERT, DELETE_INSERT,
+  DELETE_INSERT_SCOPED, UPSERT_LOGICAL_DELETE)
 - SQL query templates and flow YAML definitions
 - Flow dependency graph or deployment logic
 - Flow deployment subsystem in `nld/flow/deploy/` (planner, executor, deployment metadata backend)
@@ -57,6 +59,7 @@ project-local path. If not found, read the bundled copy.
 | Write strategy details and architecture | "3. Write Strategies" |
 | Incremental filtering in SQL | "4. Incremental Filtering" |
 | SQL file resolution and naming | "7. SQL File Resolution" |
+| Input table paths of rendered queries, cross-database inputs on Snowflake | "7.3 Input Table Paths" |
 | Configuration reference | "8. Configuration Reference" |
 | State backend connector formats (bare string shorthand vs primary/secondary mapping) | "8.3 State Backend Connector Formats" |
 | Error handling | "9. Error Handling" |

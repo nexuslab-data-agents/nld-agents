@@ -20,6 +20,7 @@ This document describes how to execute an `SQLFlowTask` from an nld project.
    - 3.4 [INSERT](#34-insert)
    - 3.5 [UPSERT](#35-upsert)
    - 3.6 [DELETE_INSERT](#36-delete_insert)
+     - 3.6.1 [DELETE_INSERT_SCOPED](#361-delete_insert_scoped)
    - 3.7 [UPSERT_LOGICAL_DELETE](#37-upsert_logical_delete)
    - 3.8 [Strategy Pattern Architecture](#38-strategy-pattern-architecture)
 4. [Incremental Filtering](#4-incremental-filtering)
@@ -39,6 +40,7 @@ This document describes how to execute an `SQLFlowTask` from an nld project.
 7. [SQL File Resolution](#7-sql-file-resolution)
    - 7.1 [Path Convention](#71-path-convention)
    - 7.2 [Namespace Mapping](#72-namespace-mapping)
+   - 7.3 [Input Table Paths](#73-input-table-paths)
 8. [Configuration Reference](#8-configuration-reference)
    - 8.1 [Flow Definition Fields](#81-flow-definition-fields)
    - 8.2 [Parameter Formats](#82-parameter-formats)
@@ -54,7 +56,8 @@ This document describes how to execute an `SQLFlowTask` from an nld project.
 `SQLFlowTask` reads a `.sql` file containing a SELECT query and executes it on a target
 database using a configurable write strategy. By default, the OVERWRITE strategy performs
 a `TRUNCATE TABLE` followed by `INSERT INTO ... SELECT`. Other strategies support
-incremental patterns such as INSERT, UPSERT, DELETE_INSERT, and UPSERT_LOGICAL_DELETE.
+incremental patterns such as INSERT, UPSERT, DELETE_INSERT, DELETE_INSERT_SCOPED, and
+UPSERT_LOGICAL_DELETE.
 
 ### 1.2 Class Hierarchy
 
@@ -293,11 +296,12 @@ of the `SQLWriteStrategy` abstract class.
 
 | Strategy | SQL Pattern | Requires target_structure | Requires PK |
 |----------|-------------|--------------------------|-------------|
-| `OVERWRITE` (default) | TRUNCATE + INSERT INTO ... SELECT | Yes | No |
+| `OVERWRITE` (default) | TRUNCATE + INSERT INTO ... SELECT, or an atomic table replace with `overwrite_mode: replace` | Yes | No |
 | `VIEW` | CREATE OR REPLACE VIEW AS | No | No |
 | `INSERT` | INSERT INTO ... SELECT | Yes | No |
 | `UPSERT` | INSERT ... ON CONFLICT DO UPDATE | Yes | Yes |
 | `DELETE_INSERT` | DELETE matching + INSERT | Yes | Yes |
+| `DELETE_INSERT_SCOPED` | DELETE the run's target scope + INSERT | Yes | No |
 | `UPSERT_LOGICAL_DELETE` | UPSERT + mark absent rows | Yes | Yes |
 
 ### 3.2 OVERWRITE (default)
@@ -311,6 +315,55 @@ INSERT INTO schema.table (col1, col2, ...) SELECT ...;
 ```
 
 Requires: `target_structure` on the flow definition.
+
+The two statements are auto-committed separately: a reader can see an empty table
+between them, and a failed INSERT leaves the table empty until the next run.
+
+#### Overwrite modes
+
+`write_strategy_options.overwrite_mode` chooses how OVERWRITE replaces the content:
+
+```yaml
+write_strategy: OVERWRITE
+write_strategy_options:
+  overwrite_mode: replace   # truncate_insert (default) | replace
+```
+
+| Mode | Behaviour |
+|------|-----------|
+| `truncate_insert` (default, also when unset) | TRUNCATE + INSERT as above |
+| `replace` | The content is replaced atomically: readers keep the previous content until the new one is committed, and a failed load leaves it in place |
+
+The option is set per flow. It is rejected at flow load with any write strategy other
+than OVERWRITE, and seed flows reject `replace` at run time. An undeclared option is
+left out of the flow definition hash, so existing flows keep their deploy hash.
+
+`get_write_strategy(name, write_strategy_options)` turns `replace` into
+`ReplaceOverwriteStrategy`, which keeps the OVERWRITE name (step names, incremental
+checks) and delegates to the connector's `replace_table_from_query`:
+
+| Engine | Replace mechanism |
+|--------|-------------------|
+| Snowflake | `CREATE OR REPLACE TABLE <structure columns> COPY GRANTS AS <query>`, then the UNIQUE statements structure deploy runs after its CREATE TABLE |
+| BigQuery | `CREATE OR REPLACE TABLE <structure columns> AS <query>` (no COPY GRANTS: IAM bindings set on the table itself are lost) |
+| DuckDB, SQLite | DROP + the structure deploy CREATE statements + INSERT in one transaction |
+| PostgreSQL | TRUNCATE + INSERT in one transaction: there is no `CREATE OR REPLACE TABLE`, and a dependent view forbids the DROP. Readers wait on the TRUNCATE lock until the commit |
+
+Contracts of the `replace` mode:
+
+- **The structure is the definition**: the table is rebuilt from the declared fields
+  (types, NOT NULL, defaults, primary key, then UNIQUE and index statements). The query
+  columns map to the structure fields by position, as for INSERT, and the declared
+  types win over the query's.
+- **No pre-check**: a missing table is created, so a YAML change not yet deployed is
+  applied by the flow itself.
+- **Structure hooks re-run on rebuild**: when the connector recreated the table
+  (`replace_table_recreates_table`, every engine but PostgreSQL), the structure's
+  pre/post deployment hooks run around the write, as they do for VIEW targets, since
+  whatever they set up on the previous table is gone.
+- **Row counts**: a `CREATE OR REPLACE TABLE ... AS` reports no row count, so the
+  loaded rows are counted after the swap and recorded as inserted rows of the
+  `OVERWRITE - CREATE_TABLE` step.
 
 ### 3.3 VIEW
 
@@ -400,6 +453,13 @@ path is implemented for PostgreSQL and DuckDB (shared sqlglot builder);
 Snowflake and BigQuery accept the parameters for signature
 compatibility only.
 
+A seed flow always reloads the whole CSV file, so it rejects at
+initialisation any `incremental` type but `no_increment` — an explicit
+`no_increment` stays accepted, as it is what seed flows run. The check is
+needed because the base task resolves the incremental logic from the flow
+config first: without it, a seed flow declaring `by_source_tst` runs as a
+DELTA execution tracking incremental state while still loading every row.
+
 Requires: `target_structure` with a primary key defined.
 
 ### 3.6 DELETE_INSERT
@@ -419,6 +479,30 @@ keys: PostgreSQL uses the tuple-`IN` shown above, BigQuery a correlated
 documented idiom for key-based deletes.
 
 Requires: `target_structure` with a primary key defined.
+
+#### 3.6.1 DELETE_INSERT_SCOPED
+
+Deletes every target row inside the **scope owned by the run**, then
+inserts all rows from the query. The scope is supplied by a target-scoped
+incremental type (`by_target_period`: the periods of the run) through
+`IncrementalStateManager.get_target_scope_condition()`; unlike
+`DELETE_INSERT`, rows that disappeared from the source inside the scope
+are removed too, and no primary key is required.
+
+```sql
+DELETE FROM schema.table
+WHERE dt_order >= CAST('2026-05-01' AS DATE) AND dt_order < CAST('2026-07-01' AS DATE);
+INSERT INTO schema.table (col1, col2, ...) SELECT ... WHERE <same periods on the MASTER>;
+```
+
+The delete goes through the connector's `delete_where`, rendered by the
+DML builder's `build_delete_where_query` (identifiers unquoted, BigQuery
+backtick-quotes them). The strategy refuses to run without a
+target-scoped incremental type, before any statement. A run selecting no
+period executes no statement at all.
+
+Requires: `target_structure` and an incremental type declaring
+`target_scoped` (e.g. `by_target_period`).
 
 ### 3.7 UPSERT_LOGICAL_DELETE
 
@@ -466,7 +550,8 @@ the `rec_deletion_flag` characterisation.
 The strategy selection is handled by the `get_write_strategy()` factory function in
 `nld/flow/sql/sql_write_strategy.py`. The `SQLFlowTask.run_flow()` method:
 
-1. Resolves the write strategy from the flow definition's `write_strategy` via `get_write_strategy()`
+1. Resolves the write strategy from the flow definition's `write_strategy` and
+   `write_strategy_options` via `get_write_strategy()`
 2. Resolves the `target_structure` from the flow definition if the strategy requires it
 3. Delegates execution to `write_strategy.execute(connector, table_path, sql_query, target_structure)`
 
@@ -475,11 +560,14 @@ The connector methods used by the strategies are defined on `SQLDataConnector`:
 | Method | Used by | Description |
 |--------|---------|-------------|
 | `truncate_table` | OVERWRITE | Truncate a table |
-| `insert_into_from_query` | OVERWRITE, INSERT, DELETE_INSERT | Insert from SELECT |
+| `insert_into_from_query` | OVERWRITE, INSERT, DELETE_INSERT, DELETE_INSERT_SCOPED | Insert from SELECT |
 | `create_or_replace_view` | VIEW | Create or replace a view |
 | `upsert_from_query` | UPSERT, UPSERT_LOGICAL_DELETE | Insert or update from SELECT |
 | `delete_from_query` | DELETE_INSERT | Delete matching keys from subquery |
+| `delete_where` | DELETE_INSERT_SCOPED | Delete the rows matching a sqlglot condition |
 | `mark_absent_rows_deleted` | UPSERT_LOGICAL_DELETE | Flag target rows absent from the query as logically deleted |
+| `replace_table_from_query` | OVERWRITE (`replace` mode) | Replace the table content atomically (engine mechanism in 3.2) |
+| `transaction` | `replace_table_from_query` (PostgreSQL, DuckDB, SQLite) | Context manager running the enclosed statements as one transaction: commit on exit, rollback on error |
 
 ---
 
@@ -516,6 +604,7 @@ its own SQL filter via this property:
 
 - `BySourceTstStateManager.sql_filter_manager` returns a `BySourceTstSqlFilterManager` that injects timestamp-based WHERE clauses
 - `ByKeyStateManager.sql_filter_manager` returns a `ByKeySqlFilterManager` that injects key-based IN clauses
+- `ByTargetPeriodStateManager.sql_filter_manager` returns a `ByTargetPeriodSqlFilterManager` that injects half-open period range predicates
 - `NoIncrementStateManager.sql_filter_manager` returns a `NoIncrementSqlFilterManager` that returns the query unchanged
 
 The SQL filter classes are defined in dedicated `sql_filter_manager.py` files within each
@@ -582,6 +671,7 @@ on multiple source tables in a single query.
 | `by_key` | FULL | None |
 | `by_key` | DELTA | `master.key_field IN ('key1', 'key2', ...)` |
 | `by_key` | BACKFILL / BACKFILL_DELTA | Same predicate shape as DELTA, over the keys the strategy selected |
+| `by_target_period` | every strategy | `(master.period_col >= start AND master.period_col < end) OR ...`, one range per group of contiguous periods; `1 = 0` when no period is selected |
 
 The filter shape is per incremental type, and so is the *window or key
 set* it is built from — each type resolves its own selection from its own
@@ -598,6 +688,15 @@ The filter is injected using sqlglot: the SQL query is parsed, each MASTER table
 found by name matching, and the WHERE condition is AND'ed with any existing WHERE clause.
 If the table has an alias (e.g. `FROM customers AS c`), the alias is used to qualify
 the column reference.
+
+A read qualified with a database (`SHARED_RAW.LANDING.ORDERS`) must name the
+database the predecessor's namespace is declared in: a read of the same table
+name in another database is not the predecessor and is never filtered. A read
+without database still matches by name. `SQLFlowTask` resolves each
+predecessor's declared database (`resolve_input_database_names`) and passes the
+map to `apply_sql_filter` / `apply_filter` and `retrieve_source_state_from_sql`
+as `input_database_names`; a custom incremental type implementing
+`IncrementalSqlFilterManager.apply_filter` must accept that argument.
 
 ### 4.4 YAML Examples
 
@@ -870,6 +969,50 @@ Dots in the namespace are converted to directory separators. The root namespace
 `source` declared as a namespace folder, the SQL file of a flow in
 `source.raw` is `entities/source/flows/raw/my_flow.sql`.
 
+### 7.3 Input Table Paths
+
+When a flow has no `.sql` file, its query is rendered from
+`target_from_sources_mapping`, and each predecessor is read from the table
+path its namespace mapping gives (`namespaces.<ns>.structure` in
+`nld_project.yml`):
+
+| Predecessor namespace database vs target namespace database | Rendered path |
+|---|---|
+| Same (case-insensitive), or the target has no mapping | `schema_name.table` |
+| Different, target engine Snowflake | `database_name.schema_name.table` |
+| Different, any other engine | `ValueError` at render time |
+
+Both databases are the **declared** `database_name` values, never the live
+connection's: the declarations do not change with the environment while the
+connection profiles do, so an input declared in the target's database keeps
+resolving against whatever database the connection points at.
+
+```yaml
+namespaces:
+  shared:
+    structure:
+      default_connection_name: dwh
+      database_name: SHARED_RAW      # another database of the same account
+      schema_name: LANDING
+  refined:
+    structure:
+      default_connection_name: dwh
+      database_name: ANALYTICS
+      schema_name: REFINED
+```
+
+A flow of `refined` reading `shared.customers` renders
+`FROM SHARED_RAW.LANDING.customers`. The target engine is the target
+structure's `connector_type`, or the type of the target namespace's
+`default_connection_name` connection when the structure declares none; the
+engines able to read across databases are listed by
+`supports_cross_database_read` (Snowflake only). The Snowflake role needs
+`USAGE` on the other database and schema and `SELECT` on the input tables.
+
+`DEDUPLICATED_SELECT` builds its source path from the source structure's
+`schema` / `table` properties and ignores the namespace mapping, so it does
+not qualify a cross-database input.
+
 ---
 
 ## 8. Configuration Reference
@@ -888,7 +1031,8 @@ Dots in the namespace are converted to directory separators. The root namespace
 | `predecessors.<name>.key_field` | `str` | No | Column name for `by_key` incremental filtering on the MASTER predecessor. |
 | `state_backend_connector` | `str` or `StateBackendConnector` | No | Connector(s) for persisting execution/incremental state. Accepts a bare connection-name string (shorthand, coerced to `primary`) or a mapping with `primary` (required) and optional `secondary`. Each side may itself be a bare string or the typed `StateBackendConnectorConfig` (`connector` + free-form `params` dict — e.g. `file_format` for S3). The primary backend is authoritative for all reads and for the consolidated execution history; the secondary receives a dual-write copy of per-run execution info, step info and incremental processing state, with failures logged and swallowed (post-processing incremental state stays primary-only). |
 | `target_structure` | `NldEntityReference[Structure]` | No | Dot-separated reference to a target structure entity (e.g. `staging.my_table`). Required for OVERWRITE, INSERT, UPSERT, DELETE_INSERT, and UPSERT_LOGICAL_DELETE strategies. |
-| `write_strategy` | `str` | No | Write strategy: OVERWRITE, VIEW, INSERT, UPSERT, DELETE_INSERT, or UPSERT_LOGICAL_DELETE (default: OVERWRITE) |
+| `write_strategy` | `str` | No | Write strategy: OVERWRITE, VIEW, INSERT, UPSERT, DELETE_INSERT, DELETE_INSERT_SCOPED, or UPSERT_LOGICAL_DELETE (default: OVERWRITE) |
+| `write_strategy_options.overwrite_mode` | `str` | No | OVERWRITE only: `truncate_insert` (default) or `replace` (atomic table replace, see 3.2) |
 | `params` | `list` or `dict` | No | Flow parameters |
 | `params.target_schema` | `str` | No | Database schema for the target table |
 

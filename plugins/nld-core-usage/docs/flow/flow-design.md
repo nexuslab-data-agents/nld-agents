@@ -15,8 +15,8 @@ query from a co-located `.sql` file and materializes its result as a table.
 
 - **SQL-first approach:** Most data flows are expressed as SQL SELECT statements.
   The framework reads a `.sql` file and applies a configurable **write strategy**
-  (OVERWRITE, VIEW, INSERT, UPSERT, DELETE_INSERT, or UPSERT_LOGICAL_DELETE) to
-  materialize the result. Execution, state tracking, and incremental logic are
+  (OVERWRITE, VIEW, INSERT, UPSERT, DELETE_INSERT, DELETE_INSERT_SCOPED, or
+  UPSERT_LOGICAL_DELETE) to materialize the result. Execution, state tracking, and incremental logic are
   handled transparently.
 - **SQLFlowTask** (`core/nld/flow/sql/sql_flow_task.py`) extends `DataFlowTask` and
   resolves its SQL file from the project entities root using the flow namespace and
@@ -121,7 +121,26 @@ structure definition by name, using the generic entity reference system.
 
 `DataFlowDefinition` has an optional `write_strategy` field (string). This
 specifies which SQL write strategy `SQLFlowTask` uses to materialize the query
-result. Defaults to `OVERWRITE` when not specified.
+result. Defaults to `OVERWRITE` when not specified. The optional
+`write_strategy_options` block tunes the strategy: `overwrite_mode: replace` makes
+OVERWRITE replace the table atomically instead of TRUNCATE + INSERT (see
+`flow-sql-execution.md` section 3.2).
+
+The value is validated when the YAML loads, not when the flow runs: it is
+uppercased, so capitalisation in YAML does not matter and every VIEW
+comparison (deploy planner, executor, structure generation) agrees on case,
+and it must belong to `FlowUpdateStrategies` — a typo fails at load time
+instead of running as something else. Whether the *task type* accepts the
+strategy is still checked at run time, because seed flows only accept
+OVERWRITE, INSERT and UPSERT. `overwrite_mode` is rejected at load time on
+any strategy but OVERWRITE (an unset `write_strategy` counts as OVERWRITE).
+
+**Unknown keys are rejected**
+
+`DataFlowDefinition` forbids extra top-level keys: the flow YAML fails to load
+with the offending key named. Without that, a misspelled key is dropped
+silently and its field left at the default — a misspelled `write_strategy`
+would run as OVERWRITE.
 
 **`predecessors` field**
 
@@ -152,16 +171,17 @@ runtime from connector credentials or explicit `target_schema` parameter.
 ### 3.1b SQL Write Strategies
 
 `SQLFlowTask` delegates data materialization to pluggable `SQLWriteStrategy`
-implementations (`core/nld/flow/sql/sql_write_strategy.py`). Six strategies are
-available:
+implementations (`core/nld/flow/sql/sql_write_strategy.py`). Seven strategies
+are available:
 
 | Strategy | DDL/DML | Requires Structure | Requires PK |
 |----------|---------|-------------------|-------------|
-| `OVERWRITE` | TRUNCATE + INSERT INTO ... SELECT | Yes | No |
+| `OVERWRITE` | TRUNCATE + INSERT INTO ... SELECT, or an atomic table replace with `overwrite_mode: replace` | Yes | No |
 | `VIEW` | CREATE OR REPLACE VIEW | No | No |
 | `INSERT` | INSERT INTO ... SELECT (append) | Yes | No |
 | `UPSERT` | INSERT ... ON CONFLICT DO UPDATE | Yes | Yes |
 | `DEL_INS` | DELETE matching PKs + INSERT | Yes | Yes |
+| `DEL_INS_SCOPED` | DELETE the run's target scope + INSERT (needs a target-scoped incremental type) | Yes | No |
 | `UPSERT_LOG_DEL` | UPSERT + mark absent rows as logically deleted | Yes | Yes |
 
 Strategies that require a target structure resolve it from the flow definition's

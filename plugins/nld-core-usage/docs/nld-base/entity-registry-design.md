@@ -28,7 +28,7 @@ and search for entities of a given type.
 | `category` | `str \| None` | Display category for grouping |
 | `display_name` | `str \| None` | Human-readable name |
 | `always_load` | `bool` | Loaded even under a selective load (default: `False`) — see "Selective / lazy entity loading" |
-| `allow_same_name_across_namespaces` | `bool` | Keep every copy of a name declared in several namespaces instead of picking one by priority (default: `False`; `True` for `structure` and `flows`) — see "Same-name entities across namespaces" |
+| `allow_same_name_across_namespaces` | `bool` | Keep every copy of a name declared in several namespaces instead of picking one by priority (default: `False`; `True` for `structure`, `flows` and `scheduling`) — see "Same-name entities across namespaces" |
 
 ## 2. Search Direction
 
@@ -53,8 +53,9 @@ Namespace tree:        Lookup for "my_field" at namespace "source":
                        Result: v1 (closest to root wins)
 ```
 
-Structures and flows search children too, but never choose among same-name
-copies by depth — see "Same-name entities across namespaces" in §3.
+Structures, flows and scheduled flow tasks search children too, but never
+choose among same-name copies by depth — see "Same-name entities across
+namespaces" in §3.
 
 ### Direction: `"parents"`
 
@@ -113,9 +114,10 @@ When an entity name exists in multiple namespaces:
 **Same-name entities across namespaces:**
 
 An entity type declared with `allow_same_name_across_namespaces=True` —
-`structure` and `flows` among the built-ins — keeps every copy of a name instead
-of selecting one by priority, so `sales.customer` and `marketing.customer` are
-two distinct structures.
+`structure`, `flows` and `scheduling` among the built-ins — keeps every copy of
+a name instead of selecting one by priority, so `sales.customer` and
+`marketing.customer` are two distinct structures, and the `load_customer` tasks
+scheduling each namespace's `load_customer` flow are two distinct tasks.
 
 - **Bulk accessors** (`get_entities()`, `get_entities_as_dict()`,
   `get_entity_keys()`, `get_<entity>_dict()`) return every visible copy. A name
@@ -135,8 +137,10 @@ structure/marketing/customer.yml   get_structure("sales.customer")              
                                    get_structure_dict() keys → ["marketing.customer", "sales.customer"]
 ```
 
-`nld structure list` and `nld flow list` show the plain name next to its
-namespace, same-name copies side by side.
+`nld structure list`, `nld flow list` and `nld scheduling list` show the plain
+name next to its namespace, same-name copies side by side. The scheduling
+resolver also reads a task's bare `flow` and predecessor references in the
+task's own namespace first (see `guide-scheduling`).
 
 ## 4. NldEntityRegistry
 
@@ -160,7 +164,7 @@ type. This is the primary interface used by application code to access entities.
 | `structure_adapter` | `StructureAdapter` | `templates/structure_adapter` | parents | Structure Configuration |
 | `structure_template` | `StructureTemplate` | `templates/structure_template` | parents | Structure Configuration |
 | `flows` | `DataFlowDefinition` | `flows` | children (same name allowed across namespaces) | Data Flow |
-| `scheduling` | `FlowTask` | `scheduling` | children | Scheduling |
+| `scheduling` | `FlowTask` | `scheduling` | children (same name allowed across namespaces) | Scheduling |
 | `business_dictionary` | `BusinessDictionary` | `business/dictionary` | parents | Vocabulary |
 | `structure_owner` | `StructureOwner` | `governance/structure` | parents | Governance |
 | `flow_owner` | `FlowOwner` | `governance/flow` | parents | Governance |

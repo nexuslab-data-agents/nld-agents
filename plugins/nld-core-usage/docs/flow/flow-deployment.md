@@ -34,13 +34,43 @@ Exit codes: `0` success (also empty change set, in-sync preview, or a declined
 interactive prompt); `2` preview with pending changes; `1` on raised errors
 (drift refusal, change-file errors, missing `metadata_backend_connector`,
 unmanaged dependent view, a target outside the namespace scope, a deploy
-lock held by another run). Per-flow DDL failures inside a run are caught and
-recorded (`partial`/`failed` run status) rather than turned into a nonzero
-exit code.
+lock held by another run) **and on a run that left any structure or flow
+failed**.
+
+A per-structure or per-flow DDL failure inside a run is still caught and
+recorded, so every independent change lands and the run is recorded
+`partial` or `failed` — but the command does not return normally over it.
+Once the executor has recorded the run, `FlowDeployTask` raises
+`FlowDeployFailedException` (code 42005), carrying the deployment id, the
+run status and the error of each failed structure and flow. That is what
+keeps a scheduler from reading a half-applied release as a successful one:
+without it, a deploy that left a structure undeployed would log
+"succeeded" and exit `0`. The executor still returns its result to the
+callers that inspect it.
 
 Companion commands: `nld deploy impact --git-base <ref>` (repository-only
 blast-radius analysis), `nld structure deploy` (structure-only path) and
 `nld deploy unlock` (list or release deploy locks).
+
+### 1b. Failure alerting
+
+Every failed non-preview deploy is alerted through the project's alerting
+transports before the error propagates — a deploy runs unattended in a
+scheduler pod, where an error only written to the pod log goes unread. The
+alerting in force is the deployed namespace's, the root's for a
+whole-project deploy. The alert carries one item per failed structure
+(`structure <name>`) or flow (`flow <name>`) with its error as the detail,
+the deployment id as `flow_uid`, and the exception headline as the summary;
+the outcome line is printed on stdout the way an execution's is. A
+`--preview` run alerts nothing.
+
+A deploy covers many flows at once, so there is no single flow to name:
+`FlowAlert` therefore names the **command** instead (`command`, with the
+optional `flow_name`/`flow_namespace`). Its `subject` is the flow's dotted
+identity for an execution alert and the command line otherwise — e.g.
+`nld flow deploy --namespace hltb`. Losing the alert must never hide the
+deploy error, so a problem raised while reporting is logged as a warning and
+swallowed.
 
 ## 2. Pipeline
 

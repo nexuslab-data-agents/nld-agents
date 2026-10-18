@@ -2,7 +2,7 @@
 name: guide-structure-conventions
 description: >
   NLD data conventions for structures — structure characterisations (primary_key,
-  functional_key, unique), field ordering rules, structure templates, and table
+  business_key, unique), field ordering rules, structure templates, and table
   naming conventions per layer, including the business/consumer table prefixes
   (r_ referential, f_ fact, m_ mart, w_ working, p_ parameter, t_ technical,
   dim_/dtm_ consumer, v_ display views).
@@ -21,7 +21,7 @@ Activate this guide when the agent is:
 - Naming a table or view in any layer (business prefixes: `r_` referential,
   `f_` fact, `m_` mart, `w_` working, `p_` parameter, `t_` technical;
   consumer: `dim_`/`dtm_`; display views: `v_<table>`)
-- Defining primary keys, functional keys, or unique constraints
+- Defining primary keys, business keys, or unique constraints
 - Ordering fields in a structure definition
 - Working with structure templates (raw_standard_tracking, refined_standard_tracking, etc.)
 - Working with raw, refined, business, or consumer layer structures
@@ -37,17 +37,17 @@ Activate this guide when the agent is:
 
 **Structure characterisations** — table-level metadata:
 - `primary_key` — technical unique constraint, drives UPSERT conflict resolution
-- `functional_key` — business identifier, drives DEDUPLICATED_SELECT deduplication
+- `business_key` — business identifier, drives DEDUPLICATED_SELECT deduplication
 - `unique` — additional unique constraints
 
 **Structure conventions**:
-- Functional key must always be the first field in the `fields:` section
+- Business key must always be the first field in the `fields:` section
 - Applies to `raw_*`, `v_raw_*_latest`, `refined_*`, business, and consumer structures
 - Does NOT apply to externally-managed structures (`source_*`, `landing_*`, `raw_json_*`)
-- On `raw_*` tables the `primary_key` is always the functional key fields +
+- On `raw_*` tables the `primary_key` is always the business key fields +
   `ts_src_extracted_at` (the raw layer keeps one record per extraction, so the
-  functional key alone is not unique; `ts_src_extracted_at` is
-  `exclude_from_upsert_match` so UPSERT still matches on the functional key)
+  business key alone is not unique; `ts_src_extracted_at` is
+  `exclude_from_upsert_match` so UPSERT still matches on the business key)
 
 **Structure naming by type** — the prefix encodes what a table *is* (a separate
 convention from the column-content prefixes in `guide-field-conventions`; easy to

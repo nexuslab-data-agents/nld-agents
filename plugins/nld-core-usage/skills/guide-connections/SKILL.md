@@ -39,6 +39,7 @@ When reading the reference doc, focus on the section relevant to your task:
 | Understanding connector class hierarchy | Part 2: "Class Hierarchy" |
 | Working with PostgreSQL connectors | Part 2: "PostgreSQL Connector Structure" |
 | Static engine facts (data type enums, comparable aliases, fixed precision) | Part 2: "Connector Definitions" |
+| Type-keyed engine facts (`resolve_sqlglot_dialect`, `supports_cross_database_read`) | Part 2: "Connector Definitions" |
 | DuckDB connector and the embedded `DuckDBEngine` | Part 2: "DuckDB Connector" |
 | SQLite connector (single `main` schema, storage-affinity type comparison, file-local deploy metadata) | Part 2: "SQLite Connector" |
 | Understanding engine selection (`custom_connector`) | Part 2: "Engine Selection" |

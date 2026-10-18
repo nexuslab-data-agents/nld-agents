@@ -308,6 +308,10 @@ this reporting is logged and never turns the execution into a failure
 (see the `guide-scheduling` skill, "Scheduling policy: retries and
 alerting").
 
+`nld flow deploy` reports the same way for a failed non-preview deploy,
+except that one command covers many flows: the alert names the command
+rather than a flow (see `flow-deployment.md` §1b).
+
 `nld flow execute` carries two flags that route directly into this
 pipeline:
 

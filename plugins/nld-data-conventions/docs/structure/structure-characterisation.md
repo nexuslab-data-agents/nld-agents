@@ -9,12 +9,18 @@ Structure characterisations are metadata annotations applied at the **table/view
 | Characterisation | Purpose | NLD Framework Usage | Naming Convention |
 |-----------------|---------|---------------------|-------------------|
 | `primary_key` | Technical unique constraint on the table | Used by UPSERT for conflict resolution (`ON CONFLICT`) | `pk_<structure_name>` |
-| `functional_key` | Business identifier of the entity | Used by DEDUPLICATED_SELECT for deduplication (latest record per key) | `<structure_name>__functional_key` |
-| `unique` | Additional unique constraint (not the functional key) | Enforces uniqueness on specific fields | `<structure_name>__<field>_key` |
+| `business_key` | Business identifier of the entity | Used by DEDUPLICATED_SELECT for deduplication (latest record per key) | `<structure_name>__business_key` |
+| `unique` | Additional unique constraint (not the business key) | Enforces uniqueness on specific fields | `<structure_name>__<field>_key` |
+
+`business_key` was formerly named `functional_key`. The old name still loads
+with a deprecation warning naming the structure file, so existing structures keep
+working until it is removed in a future release; rename the `characterisation:`
+value when you touch the file. The characterisation `name:` (e.g.
+`<structure_name>__functional_key`) can stay as is: no DDL is derived from it.
 
 ## Raw Layer Primary Key Rule
 
-Every `raw_*` table's `primary_key` MUST be the functional key fields **plus
+Every `raw_*` table's `primary_key` MUST be the business key fields **plus
 `ts_src_extracted_at`** (the `rec_source_extraction_tst` tracking field from the
 `raw_standard_tracking` template):
 
@@ -22,15 +28,15 @@ Every `raw_*` table's `primary_key` MUST be the functional key fields **plus
 - name: pk_raw_<domain>_<entity>
   characterisation: primary_key
   linked_fields:
-  - <functional key field(s)>
+  - <business key field(s)>
   - ts_src_extracted_at
 ```
 
-The raw layer keeps one record per source extraction, so the functional key
-alone is not unique — only the pair (functional key, extraction timestamp) is.
+The raw layer keeps one record per source extraction, so the business key
+alone is not unique — only the pair (business key, extraction timestamp) is.
 UPSERT behaviour is unchanged: `ts_src_extracted_at` carries the
 `exclude_from_upsert_match` characterisation, so conflict matching still happens
-on the functional key alone while the constraint stays honest about the table's
+on the business key alone while the constraint stays honest about the table's
 actual grain.
 
 ## YAML Syntax
@@ -56,8 +62,8 @@ characterisations:
   characterisation: unique
   linked_fields:
   - _dlt_id
-- name: raw_opendata_stock_etablissement__functional_key
-  characterisation: functional_key
+- name: raw_opendata_stock_etablissement__business_key
+  characterisation: business_key
   linked_fields:
   - siret
 - name: pk_raw_opendata_stock_etablissement

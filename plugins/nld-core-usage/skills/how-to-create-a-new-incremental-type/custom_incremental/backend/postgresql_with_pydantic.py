@@ -48,7 +48,7 @@ PSQL_PLANNED_PROCESSING_STATE_TABLE_NAME = (
 class BySourceTstWithDaysFromStateRow(NldBaseModel):
     model_config = ConfigDict(
         json_schema_extra={
-            "functional_key": {
+            "business_key": {
                 "fields": ["flow_namespace", "flow_name"],
                 "name": "fk_by_source_tst_with_days_from_state",
             }
@@ -71,7 +71,7 @@ class BySourceTstWithDaysFromStateRow(NldBaseModel):
 class BySourceTstWithDaysFromProcessingStateRow(NldBaseModel):
     model_config = ConfigDict(
         json_schema_extra={
-            "functional_key": {
+            "business_key": {
                 "fields": ["flow_namespace", "flow_name"],
                 "name": "fk_by_source_tst_with_days_from_processing_state",
             }
@@ -105,7 +105,7 @@ class BySourceTstWithDaysFromProcessingStateRow(NldBaseModel):
 class BySourceTstWithDaysFromPlannedProcessingStateRow(NldBaseModel):
     model_config = ConfigDict(
         json_schema_extra={
-            "functional_key": {
+            "business_key": {
                 "fields": ["plan_state_uid"],
                 "name": "fk_by_source_tst_with_days_from_planned_processing_state",
             },
@@ -160,7 +160,7 @@ class PostgreSQLBySourceTstWithDaysFromStateBackendManager(
             table_name=PSQL_STATE_TABLE_NAME,
             table_exists="skip",
             track_timestamps=True,
-            use_functional_key_as_primary=True,
+            use_business_key_as_primary=True,
         )
         self.pydantic_manager.create_table(
             model_class=BySourceTstWithDaysFromProcessingStateRow,
@@ -168,7 +168,7 @@ class PostgreSQLBySourceTstWithDaysFromStateBackendManager(
             table_name=PSQL_PROCESSING_STATE_TABLE_NAME,
             table_exists="skip",
             track_timestamps=True,
-            use_functional_key_as_primary=False,
+            use_business_key_as_primary=False,
         )
 
     def read_processing_state(
@@ -272,7 +272,7 @@ class PostgreSQLBySourceTstWithDaysFromStateBackendManager(
             table_name=PSQL_PLANNED_PROCESSING_STATE_TABLE_NAME,
             table_exists="skip",
             track_timestamps=True,
-            use_functional_key_as_primary=True,
+            use_business_key_as_primary=True,
         )
 
     def write_planned_processing_state(

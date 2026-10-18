@@ -53,7 +53,7 @@ structure deploy.
 | `nld/deploy/change_log_manager.py` | Change-file applied-log (`_nld_deployment_change`, `_nld_deployment_change_directive`) |
 | `nld/deploy/namespace_deploy_scope.py` | Deployment units, deploy groups, deploy targets and lock keys of a `--namespace` deploy |
 | `nld/deploy/deployment_lock_manager.py` / `deployment_scope_manager.py` | Deploy lock (`_nld_deployment_lock`) and scope record (`_nld_deployment_scope`) |
-| `nld/connector/base/deploy_capabilities.py` | `ConnectorDeployCapabilities` base + ANSI type aliases |
+| `nld/connector/base/deploy_capabilities.py` | `ConnectorDeployCapabilities` base, ANSI type aliases, `normalize_comparable_data_type` / `normalize_comparable_type_size` |
 
 ## Diff computation
 
@@ -62,9 +62,12 @@ compared against the live schema:
 
 - **FieldDiff** — `ADD` / `DROP` / `MODIFY` per column, detecting data_type,
   length, precision, nullability, and default changes. Types are normalized
-  through ANSI aliases plus the connector's `comparable_data_type_aliases`;
-  primary-key columns compare as non-nullable; defaults are compared only when
-  the asset declares one (a live serial/sequence default never churns).
+  through ANSI aliases plus the connector's `comparable_data_type_aliases`,
+  and sizes through the connector's `default_data_type_sizes`, so a bare
+  declaration and its engine default compare equal; primary-key columns
+  compare as non-nullable; defaults are compared only when the asset declares
+  one (a live serial/sequence default never churns). Every type or size diff
+  carries the live type and the full live size.
 - **CharacterisationDiff** — `ADD` / `DROP` / `MODIFY` for `PRIMARY_KEY`,
   `UNIQUE`, `INDEX`, intersected with the connector's
   `comparable_characterisations`.
@@ -254,6 +257,7 @@ refused when the target structure is a VIEW.
 | `enforce_field_order_default` | yes | no | yes | no | no |
 | `rename_column_in_place` / `rename_table_in_place` | yes | no | yes | yes | yes |
 | `comparable_characterisations` | INDEX, PRIMARY_KEY, UNIQUE | PRIMARY_KEY | PRIMARY_KEY, UNIQUE | INDEX, PRIMARY_KEY, UNIQUE | INDEX, PRIMARY_KEY, UNIQUE |
+| `default_data_type_sizes` | — | — | CHAR/CHARACTER/NCHAR (1,0), NUMERIC (38,0), TIME and the TIMESTAMP_* family (9,0), VARCHAR (16777216,0) | — | — |
 
 All engines share the ANSI alias set (`CHARACTER VARYING→VARCHAR`,
 `DECIMAL→NUMERIC`, `INT→INTEGER`, `TIMESTAMP WITHOUT TIME ZONE→TIMESTAMP`)
@@ -265,7 +269,27 @@ would drift permanently against its own live column; SQLite collapses every
 spelling onto its storage affinity, so two spellings of the same physical
 column never read as drift). Comparable forms only
 decide **whether** a type changed — a `FieldDiff` carries the declared
-spellings, so rendered DDL keeps the asset's own type spelling.
+spellings and the live type with its full size, so rendered DDL keeps the
+asset's own type spelling.
+
+**Sizes compare the same way.** `default_data_type_sizes` maps a type to the
+`(length, precision)` the engine applies to a bare declaration of it, and
+`normalize_comparable_type_size` folds a size onto `(0, 0)` when it is that
+default. A bare declaration and its explicit default spelling therefore
+compare equal in the diff, the schema snapshot and the drift gate, and a bare
+declaration keeps the `(0, 0)` size its recorded snapshots were hashed with.
+The declared type is looked up before its comparable alias, because an alias
+can merge types with distinct defaults — a bare Snowflake `CHAR` is
+`VARCHAR(1)`, so it normalizes to `(1, 0)`, while `INTEGER` and `NUMBER(38,0)`
+both normalize to `(0, 0)` and `NUMBER(18,2)` stays as declared.
+
+This is what the Snowflake reader needs: it reads
+`CHARACTER_MAXIMUM_LENGTH`, `NUMERIC_PRECISION`/`NUMERIC_SCALE` and the
+datetime precision per catalog type. Dropping any of them makes every bounded
+column read back unsized, and a deploy then plans a size-only ALTER on every
+run — rendering the TEXT fallback (`TEXT(18, 2)` on a NUMBER column) or
+losing the scale (`NUMBER(20)`). ADD COLUMN is rendered with the declared
+length and precision.
 
 SQLite has a single always-attached namespace: a declared schema resolves to
 `main` and a `schema.table` path to `table`, so a structure written for a

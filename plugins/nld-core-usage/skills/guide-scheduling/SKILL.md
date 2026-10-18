@@ -80,12 +80,25 @@ Built-in entity `scheduling` (`folder_name="scheduling"`,
 `<namespace folder>/scheduling/<sub path>/<name>.yaml` for a namespace stored
 as a namespace folder. Defined in `nld/scheduling/models/scheduling.py`.
 
+**Same-name tasks across namespaces.** Like structures and flows, a task name
+may exist in several namespaces (`allow_same_name_across_namespaces`, see
+`guide-entity-registry`): the convention of naming a task after its flow means
+`sales.load_customer` and `marketing.load_customer` each get their own task, and
+both are nodes of the scheduling graph. `get_flow_task_dict()` keys a
+duplicated name by `<namespace>.<name>`, and `get_flow_task()` rejects an
+ambiguous bare name with `AmbiguousEntityException`. A **bare** `flow` or local
+predecessor reference (`load_customer`) is looked up in the declaring task's own
+namespace first, then project-wide; qualified (`sales.load_customer`) and
+root-anchored (`.load_customer`) references are taken as written. A bare name
+that is still ambiguous fails with `NldSchedulingReferenceError` naming the
+task and the candidates.
+
 ### `FlowTask(NldNamedBaseModel)`
 
 | Field | Type | Purpose |
 |-------|------|---------|
 | `name` | `str` | Task name (inherited; file stem). |
-| `flow` | `NldEntityReference[DataFlowDefinition]` | The scheduled flow — registry-resolved and validated. |
+| `flow` | `NldEntityReference[DataFlowDefinition]` | The scheduled flow — registry-resolved and validated. A bare name is looked up in the task's namespace first. |
 | `params` | `dict[str, Any]` | Platform-specific knobs (data_sub_product, process_type, runner hints…). The core model never grows an attribute for these. |
 | `environments` | `dict[str, EnvironmentScheduling]` | Per-environment scheduling, keyed by environment name. |
 | `frequency` | `ExecutionFrequency \| None` | Intended execution cadence of the asset, used as the default across environments. See **Execution frequency** below. |
@@ -156,7 +169,7 @@ Shape shared by `predecessors`, `additional_predecessors`, and
 
 | Field | Type | Purpose |
 |-------|------|---------|
-| `name` | `NldEntityReference[FlowTask]` | The upstream **task** that must complete first (a task's trigger depends on another task's outcome). |
+| `name` | `NldEntityReference[FlowTask]` | The upstream **task** that must complete first (a task's trigger depends on another task's outcome). A bare local name is looked up in the declaring task's namespace first. |
 | `external` | `bool` (default `False`) | When `False`, resolved against the local registry — a dangling predecessor is a load-time error. When `True`, the upstream lives in another data product; the reference is informational only, never resolved/validated locally. |
 | `nld_project` | `str \| None` | For an external predecessor, the upstream **data product** (its nld project name); `name` is then the bare entity name. Only valid when `external: true` (validator enforces this). Consumers resolve `nld_project` to their platform's namespace. |
 | `states` | `list[...]` | Terminal states that satisfy the precondition. Default `["SUCCESS", "WARNING"]`. |
@@ -302,7 +315,11 @@ In `nld/scheduling/services/`:
   `get_all_predecessors()` (which already nets `predecessors` +
   `additional_predecessors` against `excluded_predecessors`). Raises
   `NldSchedulingPredecessorError` only when an additive-mode entry
-  duplicates the derived lineage.
+  duplicates the derived lineage. Bare `flow` and predecessor references are
+  resolved in the task's namespace first (see "Same-name tasks across
+  namespaces"); lineage derivation matches structures by their reference as
+  written, like `nld flow deps`, so same-name structures must be referenced
+  qualified.
 - **`SchedulingGraph`** — the environment's trigger graph. Each node carries its
   trigger kind, cron and resolved `frequency`.
 - **`SchedulingValidator`** — gates on cycles in that graph.
@@ -344,12 +361,14 @@ nld scheduling info      --name <task> [--namespace <ns>]
   `inconsistent`), plus a per-cadence breakdown. `--frequency` narrows the
   report to one cadence ("which assets are daily?").
 - `list` — every scheduled task as a table (name, namespace, flow,
-  frequency, effective max attempts, environments with their trigger kind).
+  frequency, effective max attempts, environments with their trigger kind),
+  sorted by name then namespace so same-name tasks sit side by side.
   `--env` keeps only the tasks active in that environment ("what runs in
   prd?") and shows the environment's frequency.
 - `info` — one scheduled task's declaration: its frequency, retry policy and
   alerting (each with the `nld_project.yml` line that decided it), params
-  and per-environment triggers.
+  and per-environment triggers. A same-name task is designated by
+  `--name sales.load_customer` or `--name load_customer --namespace sales`.
 
 `validate`, `deps` and `frequency` are environment-aware (`--env`, same
 precedence as above) and load the whole project, since the trigger graph

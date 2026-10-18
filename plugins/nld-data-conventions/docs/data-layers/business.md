@@ -13,8 +13,9 @@ Refined (acquisition)  →  Business (Gold)  →  Consumer (Platinum)
 ```
 
 Business products in this repository live under `<domain>/business/<product>/`
-and follow the layout described in
-[Data Product Structures §3](../general-design/product-structures.md#3-data-business-product-structure).
+and follow the layout the platform describes under "Data Business Product"
+(the `platform-guide-architecture` skill of the private `nld-data-platform`
+plugin; the layout itself is platform-specific and lives there, not here).
 
 ## Position in the Pipeline
 

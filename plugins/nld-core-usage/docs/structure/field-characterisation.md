@@ -131,7 +131,7 @@ The attribute keys recognized today are:
 | `referential` | `references` | Name of the referential / list of values (or target) the field references (e.g. `contract_type`). See §4 CODE. |
 | `multi_value` | `references` | `true` when the column holds several values concatenated (e.g. comma-separated); default `false`. See §4 CODE. |
 | `standard` | `language`, `country` | The standard the code follows (e.g. `iso_639`, `iso_3166`). See §4 CODE. |
-| `format` | `functional_date`, `functional_time` | The encoded format of the value (e.g. `yyyymmdd`, `ddmmyyyy`, `hhmmss`, `hhmm`). See §4 DATETIME. |
+| `format` | `business_date`, `business_time` | The encoded format of the value (e.g. `yyyymmdd`, `ddmmyyyy`, `hhmmss`, `hhmm`). See §4 DATETIME. |
 
 ### 4. Common Characterisations
 
@@ -157,7 +157,7 @@ project needs into its `characterisations/field/` directory (§6.2). See
 | `DATA_ENTRY` | Free-form input fields with no validation. |
 | `MEASURE` | Physical measures and amounts expressed in a unit of measure. |
 | `CURRENCY` | Monetary amounts and their currency reference. |
-| `DATETIME` | Functional dates, timestamps, and validity windows (including non-standard string-encoded formats). |
+| `DATETIME` | Business dates, timestamps, and validity windows (including non-standard string-encoded formats). |
 | `FUNCTIONAL` | Source identifiers, priorities, and other functional roles. |
 | `HIERARCHY` | Fields carrying the parent / child references of a hierarchical relationship. |
 | `REPORTING_USAGE` | Fields whose purpose is purely to support reporting layers. |
@@ -314,15 +314,15 @@ fields:
 
 | Name | Description |
 |------|-------------|
-| `functional_timestamp` | Business-meaningful timestamp (e.g. delivery received at, order created at), as opposed to a technical record timestamp. |
+| `business_timestamp` | Business-meaningful timestamp (e.g. delivery received at, order created at), as opposed to a technical record timestamp. |
 | `snapshot_date` | Date identifying the snapshot the row belongs to (e.g. stock snapshot date). |
 | `validity_start_timestamp` | Timestamp at which the entry starts being valid. |
 | `validity_end_timestamp` | Timestamp at which the entry stops being valid. |
 | `validity_start_date` | Date at which the entry starts being valid. |
 | `validity_end_date` | Date at which the entry stops being valid. |
-| `functional_date` | Functional date stored as a string or integer in a non-standard encoded format. Carries a `format` attribute giving the layout (e.g. `yyyymmdd`, `ddmmyyyy`). |
-| `functional_time` | Functional time-of-day stored as a string or integer in a non-standard encoded format. Carries a `format` attribute giving the layout (e.g. `hhmmss`, `hhmm`). |
-| `functional_year` | Business-meaningful year stored as an integer (e.g. a company creation year), as opposed to a full date. |
+| `business_date` | Business date stored as a string or integer in a non-standard encoded format. Carries a `format` attribute giving the layout (e.g. `yyyymmdd`, `ddmmyyyy`). |
+| `business_time` | Business time-of-day stored as a string or integer in a non-standard encoded format. Carries a `format` attribute giving the layout (e.g. `hhmmss`, `hhmm`). |
+| `business_year` | Business-meaningful year stored as an integer (e.g. a company creation year), as opposed to a full date. |
 | `time_period` | A period / granularity of time (e.g. `monthly`, `yearly`), typically qualifying an amount or rate. |
 
 #### 4.6 FUNCTIONAL

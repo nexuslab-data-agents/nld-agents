@@ -159,13 +159,18 @@ characterisations:
 |------|--------------|---------|
 | `primary_key` | 1 | Primary key |
 | `technical_unique_key` | 1 | Technical uniqueness (e.g. `_dlt_id`) |
-| `functional_unique_key` | 1 | Functional uniqueness |
-| `functional_key` | N | Business key (non-unique) |
+| `business_unique_key` | 1 | Business uniqueness |
+| `business_key` | 1 | Business key (non-unique) |
 | `unique` | N | Unique constraint |
 | `index` | N | Non-unique index |
 
 Naming: `<structure_name>__<suffix>` (e.g. `..._dlt_id_key`,
-`..._functional_key`, `pk_<structure_name>`).
+`..._business_key`, `pk_<structure_name>`).
+
+`functional_key` / `functional_unique_key` are the former names of
+`business_key` / `business_unique_key`. nld-core still loads them, logging a
+deprecation warning that names the file, but never write them: they will be
+removed in a future release.
 
 ---
 
@@ -193,7 +198,7 @@ reported errors and re-run until both are clean.
 - Query sample data for **every** JSON/VARIANT/ARRAY column and recurse to the
   leaves.
 - Declare `characterisations` for primary keys, unique constraints and
-  functional keys.
+  business keys.
 - Validate with `nld structure info` and `nld structure validate`.
 
 ---

@@ -299,6 +299,49 @@ context. This means tasks can only be instantiated within an active context bloc
 
 ---
 
+## 5b. What every command logs
+
+The same three events bracket every run, whether it is entered through the
+`nld` CLI (`CMD-001` / `CMD-002` / `CMD-091`, `core/nld/cli/cli_events.py`) or
+through `python -m` (`EXEC-001` / `EXEC-002` / `EXEC-091`,
+`core/nld/task/task_events.py`). Both render from the same `ExecutionInfo`.
+
+**At the start — the execution and its parameters.** The start line names the
+execution, its uuid and its start time, and is followed by a `Parameters:`
+block with the parameter values the run received, `--key=value` extra
+arguments included, one aligned line each and sorted by name:
+
+```
+Execution `flow_execute` started at 11:02:47 with uuid 0f1c…
+Parameters:
+  full: False
+  name: orders
+  root_folder_path: /work/my-project
+```
+
+- **Unset options are left out** — a `None` value or an empty multi-value
+  option never appears, so the block shows only what the run was actually
+  given.
+- **Secret-looking values are masked.** A parameter whose *name* matches
+  `password|secret|token|credential|private_key` (case-insensitive) renders
+  masked, because these lines end up in scheduler logs.
+- **Quiet commands stay quiet.** The `info`/`list` commands that hide their
+  completion line (`silent_completion`) hide the start line and its
+  parameters too, keeping their output clean for piping.
+
+**On failure — the full exception chain.** The error events render
+`traceback.format_exception`, so the log carries the original exception, each
+`raise … from` cause and every stack frame — not just `str()` of the latest
+exception, which loses the chained causes and every frame. Two helpers in
+`core/nld/utils/exception_utils.py` serve the two needs:
+
+| Helper | Output | Used by |
+|---|---|---|
+| `format_exception_traceback` | Full frames, chained causes included | `CMD-091`, `EXEC-091`, the per-flow failure log of a batch run |
+| `format_exception_chain` | One `Type: message` line per exception, joined by `  caused by: `, root cause last | The batch summary table, where a compact chain per flow is what is wanted |
+
+---
+
 ## 6. Complete Entity Access Chain
 
 The full chain from task instantiation to entity access:

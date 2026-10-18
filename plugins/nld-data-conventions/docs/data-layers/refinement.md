@@ -17,7 +17,7 @@ The refinement always reads from a **raw latest view** (`v_raw_*_latest`), which
 A **refined table** with:
 - Semantic column names using standard prefixes
 - Proper SQL data types (not raw strings)
-- A primary key matching the functional key of the raw source
+- A primary key matching the business key of the raw source
 - Tracking timestamps via the `refined_standard_tracking` template
 
 ## Field Naming Conventions
@@ -138,7 +138,7 @@ data at a finer granularity than the parent — **never** keep them as opaque
 jsonb on the parent refined table. Explode them into an **additional refined
 table at their natural granularity**:
 
-- **Primary key** = parent functional key + the element's dimension key
+- **Primary key** = parent business key + the element's dimension key
   (e.g. `id_game` + `ds_platform_name`).
 - One properly typed, prefixed **KPI column per measure** (`nb_`, `num_`, …),
   applying the usual cleaning rules (0-means-no-data → NULL, unit conversions).
