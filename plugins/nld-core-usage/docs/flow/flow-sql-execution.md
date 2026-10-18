@@ -453,6 +453,13 @@ path is implemented for PostgreSQL and DuckDB (shared sqlglot builder);
 Snowflake and BigQuery accept the parameters for signature
 compatibility only.
 
+A seed flow always reloads the whole CSV file, so it rejects at
+initialisation any `incremental` type but `no_increment` — an explicit
+`no_increment` stays accepted, as it is what seed flows run. Without that
+check the base task resolved the incremental logic from the flow config
+first, so a seed flow declaring `by_source_tst` ran as a DELTA execution
+tracking incremental state while still loading every row.
+
 Requires: `target_structure` with a primary key defined.
 
 ### 3.6 DELETE_INSERT

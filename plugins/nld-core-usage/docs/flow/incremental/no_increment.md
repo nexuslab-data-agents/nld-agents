@@ -39,6 +39,10 @@ inherits the pydantic pass-through).
   the read accessors raise `NotImplementedError`.
 - **`compute`** — runs and resolves to an empty processing state; the
   CLI reports that there is nothing to compute.
+- **Seed flows** — `SeedFlowTask` always reloads the whole CSV file, so
+  it is the only incremental type a seed flow accepts: any other type is
+  rejected at initialisation, and declaring `no_increment` explicitly is
+  accepted. Leaving `incremental` out has the same effect.
 - **`compute --persist`** — `no_increment` keeps
   `supports_planned_state=False`, so the strategy never persists a
   plan. `--persist` returns `persisted=False` and `get-planned` prints

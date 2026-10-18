@@ -126,6 +126,22 @@ result. Defaults to `OVERWRITE` when not specified. The optional
 OVERWRITE replace the table atomically instead of TRUNCATE + INSERT (see
 `flow-sql-execution.md` section 3.2).
 
+The value is validated when the YAML loads, not when the flow runs: it is
+uppercased, so capitalisation in YAML does not matter and every VIEW
+comparison (deploy planner, executor, structure generation) agrees on case,
+and it must belong to `FlowUpdateStrategies` — a typo fails at load time
+instead of running as something else. Whether the *task type* accepts the
+strategy is still checked at run time, because seed flows only accept
+OVERWRITE, INSERT and UPSERT. `overwrite_mode` is rejected at load time on
+any strategy but OVERWRITE (an unset `write_strategy` counts as OVERWRITE).
+
+**Unknown keys are rejected**
+
+`DataFlowDefinition` forbids extra top-level keys. A misspelled key used to be
+dropped silently and its field left at the default — a misspelled
+`write_strategy` ran as OVERWRITE — so the flow YAML now fails to load with the
+offending key named.
+
 **`predecessors` field**
 
 `DataFlowDefinition` has a `predecessors` dictionary mapping names to
@@ -155,8 +171,8 @@ runtime from connector credentials or explicit `target_schema` parameter.
 ### 3.1b SQL Write Strategies
 
 `SQLFlowTask` delegates data materialization to pluggable `SQLWriteStrategy`
-implementations (`core/nld/flow/sql/sql_write_strategy.py`). Six strategies are
-available:
+implementations (`core/nld/flow/sql/sql_write_strategy.py`). Seven strategies
+are available:
 
 | Strategy | DDL/DML | Requires Structure | Requires PK |
 |----------|---------|-------------------|-------------|
@@ -165,6 +181,7 @@ available:
 | `INSERT` | INSERT INTO ... SELECT (append) | Yes | No |
 | `UPSERT` | INSERT ... ON CONFLICT DO UPDATE | Yes | Yes |
 | `DEL_INS` | DELETE matching PKs + INSERT | Yes | Yes |
+| `DEL_INS_SCOPED` | DELETE the run's target scope + INSERT (needs a target-scoped incremental type) | Yes | No |
 | `UPSERT_LOG_DEL` | UPSERT + mark absent rows as logically deleted | Yes | Yes |
 
 Strategies that require a target structure resolve it from the flow definition's

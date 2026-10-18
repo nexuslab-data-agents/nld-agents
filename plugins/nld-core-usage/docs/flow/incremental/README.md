@@ -34,6 +34,10 @@ imply shared behaviour.
 | `--full` + `--with-delta` | raises | accepted, no effect | raises | n/a |
 | State advanced by | all four strategies | `FULL`, `DELTA`, `BACKFILL_DELTA` (**not** `BACKFILL`) | periods: all four; scan watermark: scan-based `DELTA` and `FULL` only | no state |
 
+A **seed flow** accepts `no_increment` only: `SeedFlowTask` reloads the
+whole CSV file on every run, so any other type is rejected at
+initialisation.
+
 Full rules and the axis model behind them:
 [`../execution-and-incremental-design.md`](../execution-and-incremental-design.md)
 §2.4.1 and §2.5.0.
