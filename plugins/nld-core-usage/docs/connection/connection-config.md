@@ -468,6 +468,13 @@ type enum (`PostgreSQLDataTypes`, `BigQueryDataTypes`, `SnowflakeDataTypes`,
 - `fixed_precision_data_types` — types whose precision is fixed by the engine
   and never reported by the structure readers.
 
+Facts needed where no connector instance exists (rendering a flow query
+from its YAML) are keyed by connector type in `nld/connector/base/sql.py`:
+`resolve_sqlglot_dialect(connector_type)` and
+`supports_cross_database_read(connector_type)` — true for Snowflake only,
+whose queries read `database.schema.table` across the databases of an
+account (see `flow-sql-execution.md` §7.3).
+
 Deployment-specific engine behavior lives separately in
 `ConnectorDeployCapabilities` (`service/deploy_capabilities.py`), reached via
 `get_deploy_capabilities()` — see `structure-deployment.md` for the

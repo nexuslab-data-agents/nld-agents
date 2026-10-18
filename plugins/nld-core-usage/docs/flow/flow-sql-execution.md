@@ -40,6 +40,7 @@ This document describes how to execute an `SQLFlowTask` from an nld project.
 7. [SQL File Resolution](#7-sql-file-resolution)
    - 7.1 [Path Convention](#71-path-convention)
    - 7.2 [Namespace Mapping](#72-namespace-mapping)
+   - 7.3 [Input Table Paths](#73-input-table-paths)
 8. [Configuration Reference](#8-configuration-reference)
    - 8.1 [Flow Definition Fields](#81-flow-definition-fields)
    - 8.2 [Parameter Formats](#82-parameter-formats)
@@ -681,6 +682,15 @@ found by name matching, and the WHERE condition is AND'ed with any existing WHER
 If the table has an alias (e.g. `FROM customers AS c`), the alias is used to qualify
 the column reference.
 
+A read qualified with a database (`SHARED_RAW.LANDING.ORDERS`) must name the
+database the predecessor's namespace is declared in: a read of the same table
+name in another database is not the predecessor and is never filtered. A read
+without database still matches by name. `SQLFlowTask` resolves each
+predecessor's declared database (`resolve_input_database_names`) and passes the
+map to `apply_sql_filter` / `apply_filter` and `retrieve_source_state_from_sql`
+as `input_database_names`; a custom incremental type implementing
+`IncrementalSqlFilterManager.apply_filter` must accept that argument.
+
 ### 4.4 YAML Examples
 
 **by_source_tst with DELTA:**
@@ -951,6 +961,50 @@ Dots in the namespace are converted to directory separators. The root namespace
 (`.`) means the SQL file is placed directly under `entities/flows/`. With
 `source` declared as a namespace folder, the SQL file of a flow in
 `source.raw` is `entities/source/flows/raw/my_flow.sql`.
+
+### 7.3 Input Table Paths
+
+When a flow has no `.sql` file, its query is rendered from
+`target_from_sources_mapping`, and each predecessor is read from the table
+path its namespace mapping gives (`namespaces.<ns>.structure` in
+`nld_project.yml`):
+
+| Predecessor namespace database vs target namespace database | Rendered path |
+|---|---|
+| Same (case-insensitive), or the target has no mapping | `schema_name.table` |
+| Different, target engine Snowflake | `database_name.schema_name.table` |
+| Different, any other engine | `ValueError` at render time |
+
+Both databases are the **declared** `database_name` values, never the live
+connection's: the declarations do not change with the environment while the
+connection profiles do, so an input declared in the target's database keeps
+resolving against whatever database the connection points at.
+
+```yaml
+namespaces:
+  shared:
+    structure:
+      default_connection_name: dwh
+      database_name: SHARED_RAW      # another database of the same account
+      schema_name: LANDING
+  refined:
+    structure:
+      default_connection_name: dwh
+      database_name: ANALYTICS
+      schema_name: REFINED
+```
+
+A flow of `refined` reading `shared.customers` renders
+`FROM SHARED_RAW.LANDING.customers`. The target engine is the target
+structure's `connector_type`, or the type of the target namespace's
+`default_connection_name` connection when the structure declares none; the
+engines able to read across databases are listed by
+`supports_cross_database_read` (Snowflake only). The Snowflake role needs
+`USAGE` on the other database and schema and `SELECT` on the input tables.
+
+`DEDUPLICATED_SELECT` builds its source path from the source structure's
+`schema` / `table` properties and ignores the namespace mapping, so it does
+not qualify a cross-database input.
 
 ---
 
