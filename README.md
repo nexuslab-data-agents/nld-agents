@@ -24,24 +24,37 @@ Then ask Claude *"how do I make this flow incremental?"* and it routes to the ri
 |---|---|
 | `guide-base-model` | Core Pydantic layer — NldBaseModel hierarchy, namespaces, entity references, serialization |
 | `guide-entity-registry` | Entity definitions, providers, NldEntityRegistry accessors, same-name entities across namespaces, filesystem, namespace-folder & selective loading |
-| `guide-project` | Project container, execution context, TaskRequest, StandardTask, task→entity access |
+| `guide-project` | Project container, execution context, TaskRequest, StandardTask, what every command logs, task→entity access |
 | `guide-project-catalog` | `NldProjectCatalog` — multi-project catalogue and cross-project predecessor DAG |
+| `guide-project-docs` | `nld docs` — the project's own back + front UI: repository snapshot, documentation coverage, live state |
 | `guide-business-dictionary` | Namespaced business vocabulary for naming tables/fields |
 | `guide-connections` | Connector engine architecture (PostgreSQL, BigQuery, Snowflake, DuckDB, SQLite) |
 | `guide-flows` | SQLFlowTask/DataFlowTask lifecycle, write strategies, dependency graph |
-| `guide-incremental` | `by_key` / `by_source_tst` / `no_increment` strategies, state management |
+| `guide-incremental` | `by_key` / `by_source_tst` / `by_target_period` / `no_increment` strategies, state management |
+| `guide-data-quality` | Post-write quality checks — the `quality_checks` block, the built-in rules, severities, result persistence |
 | `guide-structures` | Structure definitions, field characterisations, deployment, view structures generated from their flow, Pydantic model export |
+| `guide-structure-model` | StructureModel entity — same-layer join links, field mappings, cardinality |
 | `guide-structure-audit` | StructureAudit entity — per-structure coverage and value-distribution audits |
+| `guide-deployment` | The deploy system — structure and flow deploy paths, drift gate, change files, namespace deploys and the deploy lock |
 | `guide-governance` | Ownership entities — `structure_owner` (data) / `flow_owner` (technical), lineage resolution, `nld ownership` CLI |
 | `guide-scheduling` | Environment-aware `FlowTask` scheduling — triggers, predecessors, environments, `nld scheduling` CLI |
 | `how-to-set-up-a-project` | Initialize a project or audit an existing one: every `nld_project.yml` key and namespace facet, connections, environments, entity layout, deployment/alerting, guardrails, then verify |
+| `how-to-check-connections` | Discover and verify project connections with `nld connection list` / `debug` / `export-env-var` |
+| `how-to-document-a-structure` | Create or refresh a Structure YAML from a real table, nested JSON columns included, then validate it |
 | `how-to-profile-a-structure` | Profile (or hand-author), validate, and render a StructureAudit with `nld structure audit` |
 | `how-to-characterize-fields` | Propose field characterisations for one structure from the rules + its audit, report, and confirm before updating |
+| `how-to-model-structure-layers` | Record a structure's same-layer join links as a StructureModel, then validate them |
 | `how-to-trace-flow-lineage` | Trace upstream/downstream structure and flow lineage with `nld flow deps` |
+| `how-to-execute-a-flow` | Run a flow with `nld flow execute` — the runtime options each incremental type accepts |
+| `how-to-determine-incremental-strategy` | Decision walkthrough for picking `by_key` vs `by_source_tst` vs `by_target_period` vs `no_increment` |
 | `how-to-get-execution-info` | Retrieving flow execution metadata from state backends |
-| `how-to-get-incremental-info` | Retrieving incremental state from state backends |
+| `how-to-get-incremental-info` | Retrieving incremental state from state backends, and excluding `by_key` keys |
 | `how-to-use-business-dictionary` | `nld business dict find` / `list` CLI usage |
-| `how-to-determine-incremental-strategy` | Decision walkthrough for picking `by_key` vs `by_source_tst` vs `no_increment` |
+| `how-to-check-deploy-impact` | Compute a change's deployment blast radius with `nld deploy impact --git-base` (no database) |
+| `how-to-deploy-a-project` | Deploy flows and structures with `nld flow deploy` — preview, scoping, drift reconciliation |
+| `how-to-bootstrap-deployment-backend` | Stand up the deployment metadata backend of a database that already exists |
+| `how-to-create-a-new-incremental-type` | Author and register an external incremental type |
+| `how-to-create-a-new-data-quality-check` | Author and register an external data quality rule |
 
 ### `nld-data-conventions`
 
