@@ -12,8 +12,9 @@ Refined (acquisition)  →  Business (Gold)  →  Consumer (Platinum)
 ```
 
 Consumer products in this repository live under `<domain>/consumer/<product>/`
-and follow the layout described in
-[Data Product Structures §4](../general-design/product-structures.md#4-data-consumer-product-structure).
+and follow the layout the platform describes under "Data Consumer Product"
+(the `platform-guide-architecture` skill of the private `nld-data-platform`
+plugin; the layout itself is platform-specific and lives there, not here).
 
 ## Position in the Pipeline
 
