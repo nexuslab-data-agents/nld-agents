@@ -90,13 +90,13 @@ Backend modules live under `core/nld/flow/incremental/impl/by_key/backend/`.
 
 The two backends storing the key state as a parquet file — `local` /
 `duckdb` and `s3_blob_storage` / `duckdb` — opt in to a **key state merge**
-(`supports_key_state_merge()` on `ByKeyDuckDBKeyStateMixin`). They used to
-load every stored key into `ByKeySingleKeyState` objects at the start of a
-run and write the whole state back through a list of dicts, a pandas
-DataFrame and a DuckDB table: memory grew with every key ever recorded
-(about 4 KiB per key), so a flow with 400k stored keys was OOM-killed at a
-2 GiB limit while committing a 100k-key run. A run's footprint now follows
-the keys it processes, not the size of the state.
+(`supports_key_state_merge()` on `ByKeyDuckDBKeyStateMixin`): a run's
+footprint follows the keys it processes, not the size of the state. Loading
+every stored key into `ByKeySingleKeyState` objects at the start of a run and
+writing the whole state back through a list of dicts, a pandas DataFrame and
+a DuckDB table costs about 4 KiB per key ever recorded — enough to OOM-kill a
+flow with 400k stored keys at a 2 GiB limit while committing a 100k-key
+run.
 
 What changes on those backends:
 

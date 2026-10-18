@@ -39,13 +39,14 @@ failed**.
 
 A per-structure or per-flow DDL failure inside a run is still caught and
 recorded, so every independent change lands and the run is recorded
-`partial` or `failed` — but the command no longer returns normally over it.
+`partial` or `failed` — but the command does not return normally over it.
 Once the executor has recorded the run, `FlowDeployTask` raises
 `FlowDeployFailedException` (code 42005), carrying the deployment id, the
-run status and the error of each failed structure and flow. Without it a
-deploy that left a structure undeployed logged "succeeded" and exited `0`,
-and a scheduler read a half-applied release as a successful one. The
-executor still returns its result to the callers that inspect it.
+run status and the error of each failed structure and flow. That is what
+keeps a scheduler from reading a half-applied release as a successful one:
+without it, a deploy that left a structure undeployed would log
+"succeeded" and exit `0`. The executor still returns its result to the
+callers that inspect it.
 
 Companion commands: `nld deploy impact --git-base <ref>` (repository-only
 blast-radius analysis), `nld structure deploy` (structure-only path) and

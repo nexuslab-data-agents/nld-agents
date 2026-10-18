@@ -285,11 +285,11 @@ both normalize to `(0, 0)` and `NUMBER(18,2)` stays as declared.
 
 This is what the Snowflake reader needs: it reads
 `CHARACTER_MAXIMUM_LENGTH`, `NUMERIC_PRECISION`/`NUMERIC_SCALE` and the
-datetime precision per catalog type. Dropping them made every bounded column
-read back unsized, so a deploy planned a size-only ALTER on every run — it
-rendered the TEXT fallback (`TEXT(18, 2)` on a NUMBER column) or lost the
-scale (`NUMBER(20)`). ADD COLUMN is rendered with the declared length and
-precision.
+datetime precision per catalog type. Dropping any of them makes every bounded
+column read back unsized, and a deploy then plans a size-only ALTER on every
+run — rendering the TEXT fallback (`TEXT(18, 2)` on a NUMBER column) or
+losing the scale (`NUMBER(20)`). ADD COLUMN is rendered with the declared
+length and precision.
 
 SQLite has a single always-attached namespace: a declared schema resolves to
 `main` and a `schema.table` path to `table`, so a structure written for a

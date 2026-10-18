@@ -137,10 +137,10 @@ any strategy but OVERWRITE (an unset `write_strategy` counts as OVERWRITE).
 
 **Unknown keys are rejected**
 
-`DataFlowDefinition` forbids extra top-level keys. A misspelled key used to be
-dropped silently and its field left at the default — a misspelled
-`write_strategy` ran as OVERWRITE — so the flow YAML now fails to load with the
-offending key named.
+`DataFlowDefinition` forbids extra top-level keys: the flow YAML fails to load
+with the offending key named. Without that, a misspelled key is dropped
+silently and its field left at the default — a misspelled `write_strategy`
+would run as OVERWRITE.
 
 **`predecessors` field**
 

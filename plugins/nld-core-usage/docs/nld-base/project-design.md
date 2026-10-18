@@ -331,9 +331,9 @@ Parameters:
 
 **On failure — the full exception chain.** The error events render
 `traceback.format_exception`, so the log carries the original exception, each
-`raise … from` cause and every stack frame — previously only `str()` of the
-latest exception was printed and the chained causes and frames were lost. Two
-helpers in `core/nld/utils/exception_utils.py` serve the two needs:
+`raise … from` cause and every stack frame — not just `str()` of the latest
+exception, which loses the chained causes and every frame. Two helpers in
+`core/nld/utils/exception_utils.py` serve the two needs:
 
 | Helper | Output | Used by |
 |---|---|---|

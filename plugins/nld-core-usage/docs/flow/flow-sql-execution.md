@@ -455,10 +455,10 @@ compatibility only.
 
 A seed flow always reloads the whole CSV file, so it rejects at
 initialisation any `incremental` type but `no_increment` — an explicit
-`no_increment` stays accepted, as it is what seed flows run. Without that
-check the base task resolved the incremental logic from the flow config
-first, so a seed flow declaring `by_source_tst` ran as a DELTA execution
-tracking incremental state while still loading every row.
+`no_increment` stays accepted, as it is what seed flows run. The check is
+needed because the base task resolves the incremental logic from the flow
+config first: without it, a seed flow declaring `by_source_tst` runs as a
+DELTA execution tracking incremental state while still loading every row.
 
 Requires: `target_structure` with a primary key defined.
 
