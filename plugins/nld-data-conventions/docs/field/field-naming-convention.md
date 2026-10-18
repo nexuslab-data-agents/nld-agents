@@ -51,7 +51,7 @@ These prefixes are reserved for technical tracking columns provided by structure
 ### Refined Layer
 - All business columns use the **semantic prefix convention**
 - All field names are in **English** — this is the translation boundary
-- Primary key matches the functional key of the raw source
+- Primary key matches the business key of the raw source
 - Data types are properly cast (no raw strings for dates, booleans, numbers)
 - Template provides 6 tracking timestamps
 - Example: `raison_sociale` → `ds_legal_name`, `effectif` → `nb_employees`, `secteur_activite` → `cd_sector` (a categorical code), `id_secteur_ref` → `id_sector` (a numeric foreign key)

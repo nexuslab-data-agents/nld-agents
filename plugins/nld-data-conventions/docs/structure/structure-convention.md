@@ -11,9 +11,9 @@ They do **not** apply to externally-managed structures where the schema is deter
 
 ## Field Ordering
 
-### Rule: Functional key first
+### Rule: Business key first
 
-The functional key (primary key / business identifier) must always be the **first field** in the `fields:` section of the structure YAML.
+The business key (primary key / business identifier) must always be the **first field** in the `fields:` section of the structure YAML.
 
 This ensures:
 - Consistent field ordering across all structures
@@ -24,7 +24,7 @@ This ensures:
 
 ```yaml
 fields:
-  job_reference:                    # Functional key — always first
+  job_reference:                    # Business key — always first
     data_type: CHARACTER VARYING
     description: Job reference code
   job_name:                         # Other fields follow
@@ -50,25 +50,25 @@ The `fields:` section only contains entity-specific business fields.
 | Constraint | Suffix | Example |
 |---|---|---|
 | Primary key | `pk_<structure_name>` | `pk_refined_web_hr_wttj_job` |
-| Functional key | `<structure_name>__functional_key` | `raw_web_hr_wttj_jobs__functional_key` |
+| Business key | `<structure_name>__business_key` | `raw_web_hr_wttj_jobs__business_key` |
 | Unique | `<structure_name>__<field>_key` | `raw_web_hr_wttj_jobs__dlt_id_key` |
 
-### Functional Key vs Primary Key
+### Business Key vs Primary Key
 
-- **Functional key**: The business identifier of the entity. Used by `DEDUPLICATED_SELECT` for deduplication.
+- **Business key**: The business identifier of the entity. Used by `DEDUPLICATED_SELECT` for deduplication.
 - **Primary key**: The technical unique constraint on the table. Used by `UPSERT` for conflict resolution.
 
-On `raw_*` tables the primary key is always the **functional key fields +
+On `raw_*` tables the primary key is always the **business key fields +
 `ts_src_extracted_at`**: the raw layer keeps one record per source extraction,
-so the functional key alone is not unique. `ts_src_extracted_at` carries
+so the business key alone is not unique. `ts_src_extracted_at` carries
 `exclude_from_upsert_match`, so UPSERT conflict matching still happens on the
-functional key alone. On `refined_*` and downstream tables (one record per
-entity), the functional key and primary key point to the **same field(s)**.
+business key alone. On `refined_*` and downstream tables (one record per
+entity), the business key and primary key point to the **same field(s)**.
 
-### Choosing the Functional Key
+### Choosing the Business Key
 
 1. **Prefer the source system's business identifier** over the extraction slug. Look for fields like `reference`, `id`, `code` in the source JSON.
-2. **Verify uniqueness and non-null coverage**: the functional key must be 100% non-null and unique across the dataset.
+2. **Verify uniqueness and non-null coverage**: the business key must be 100% non-null and unique across the dataset.
 3. **Fall back to the extraction slug** (`key` column) if no suitable business key exists or if the business key has NULLs.
 
 ## Templates by Layer

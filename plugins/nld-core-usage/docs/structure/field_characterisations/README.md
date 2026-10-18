@@ -56,7 +56,7 @@ allowed_attributes:
 | DATA_ENTRY | `free_text` |
 | MEASURE | `uom`, `amount_in_uom`, `quantity`, `duration`, `percentage` |
 | CURRENCY | `currency`, `amount_in_cur` |
-| DATETIME | `functional_timestamp`, `snapshot_date`, `validity_start_timestamp`, `validity_end_timestamp`, `validity_start_date`, `validity_end_date`, `functional_date`, `functional_time`, `functional_year`, `time_period` |
+| DATETIME | `business_timestamp`, `snapshot_date`, `validity_start_timestamp`, `validity_end_timestamp`, `validity_start_date`, `validity_end_date`, `business_date`, `business_time`, `business_year`, `time_period` |
 | FUNCTIONAL | `priority`, `source_identifier` |
 | HIERARCHY | `hierarchy_parent_info`, `hierarchy_child_info` |
 | REPORTING_USAGE | `reporting_technical_info`, `reporting_ordering` |

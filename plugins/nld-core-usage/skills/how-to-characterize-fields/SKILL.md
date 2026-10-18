@@ -90,7 +90,7 @@ For each field, walk these in order:
    template fields from the structure templates it includes — see
    `guide-field-conventions` "Distribution by Structure Template".)
 
-2. **Skip keys.** A primary / functional key field needs no functional
+2. **Skip keys.** A primary / business key field needs no business
    characterisation; leave it untouched.
 
 3. **Decide per own-field by state:**
@@ -124,16 +124,16 @@ For each field, walk these in order:
    - language code → `language` (`standard: iso_639`); country code → `country`
      (`standard: iso_3166`).
    - `dt_` / `ts_` business time not already a `rec_*` technical timestamp →
-     `functional_timestamp`, `snapshot_date`, `validity_start/end_*`.
+     `business_timestamp`, `snapshot_date`, `validity_start/end_*`.
    - user column recording **who** created or last changed the row at this layer
      (`ds_inserted_by`, `ds_updated_by`, an application's `cd_created_by` …) →
-     the built-in `rec_insert_by` / `rec_last_update_by`, not a functional
+     the built-in `rec_insert_by` / `rec_last_update_by`, not a business
      characterisation. One field each per structure; the deletion counterpart is
      `rec_deletion_by`.
-   - string/int encoded date or time (`YYYYMMDD`, `HHMMSS`, …) → `functional_date`
-     / `functional_time` with a `format` attribute (e.g. `yyyymmdd`, `ddmmyyyy`,
+   - string/int encoded date or time (`YYYYMMDD`, `HHMMSS`, …) → `business_date`
+     / `business_time` with a `format` attribute (e.g. `yyyymmdd`, `ddmmyyyy`,
      `hhmmss`, `hhmm`).
-   - integer year on its own (e.g. `yr_`, a creation year) → `functional_year`.
+   - integer year on its own (e.g. `yr_`, a creation year) → `business_year`.
    - period / granularity of time (e.g. `monthly`, `yearly`) → `time_period`.
    - geographic coordinate column → `latitude` / `longitude`; postal / ZIP code →
      `zip_code` (GEO category).
@@ -151,7 +151,7 @@ For each field, walk these in order:
      with a `distribution` block) supports a coded role; high distinct + long
      values support `free_text`.
    - **Format characterisations** — `min`/`max` and sample values confirm an
-     encoded date/time (`functional_date` / `functional_time` with the matching
+     encoded date/time (`business_date` / `business_time` with the matching
      `format` attribute, e.g. `yyyymmdd`, `hhmmss`) or `epoch_ms`.
    - **Amount vs. quantity vs. currency** — numeric range plus a sibling
      unit/currency column decides `amount_in_uom` vs `amount_in_cur` vs
@@ -216,7 +216,7 @@ Audit: <audit name> (audited_at <ts>, row_count <n>)   |   or: NO AUDIT — rule
 | contract_type    | CHARACTER VARYING | —          | propose | references (referential: contract_type) | CODE | high | distinct=8, has distribution → value from a controlled list, not free text |
 | ds_salary        | NUMERIC           | —          | propose | amount_in_cur | CURRENCY | medium | numeric, 17% coverage; no currency sibling and no known fixed currency → flag |
 | revenue          | BIGINT            | —          | propose | amount_in_cur (currency: EUR) | CURRENCY | high | monetary, always euros, no per-row currency field → fixed literal, not a flag |
-| dt_published     | CHARACTER VARYING | —          | propose | functional_date (format: yyyymmdd) | DATETIME | high | values like 20251019, min/max are 8-digit ints |
+| dt_published     | CHARACTER VARYING | —          | propose | business_date (format: yyyymmdd) | DATETIME | high | values like 20251019, min/max are 8-digit ints |
 | ds_comment       | CHARACTER VARYING | free_text  | challenge | (keep / coded?) | DATA_ENTRY | medium | tagged free_text but distinct=5 → evidence contradicts |
 
 ## Summary
