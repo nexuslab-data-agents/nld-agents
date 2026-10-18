@@ -1,6 +1,6 @@
 ---
 name: determine-incremental-strategy
-description: Determine the correct incremental type (no_increment, by_source_tst, by_key) for a data flow, whether SQL-based or not. Walks through source characteristics, retry semantics, and deletion handling to recommend an incremental type, loading strategy, and IncrementalConfig.
+description: Determine the correct incremental type (no_increment, by_source_tst, by_key, by_target_period) for a data flow, whether SQL-based or not. Walks through source characteristics, retry semantics, and deletion handling to recommend an incremental type, loading strategy, and IncrementalConfig.
 user-invocable: true
 ---
 
@@ -8,8 +8,8 @@ user-invocable: true
 
 Recommend the correct incremental type for a data flow.
 
-The repository supports three incremental types (`no_increment`,
-`by_source_tst`, `by_key`) and four loading strategies (`FULL`, `DELTA`,
+The repository supports four incremental types (`no_increment`,
+`by_source_tst`, `by_key`, `by_target_period`) and four loading strategies (`FULL`, `DELTA`,
 `BACKFILL`, `BACKFILL_DELTA`). Choosing the wrong combination leads to
 either reprocessing the whole dataset on every run or silently missing
 records. This skill walks the analysis end-to-end and produces a concrete
@@ -91,6 +91,7 @@ surrounding code, ask the user in **one** consolidated question:
 | Approximate volume per run and total dataset size | Decides whether full reload is acceptable. |
 | Does the source ever logically delete records, and must deletions propagate downstream? | Only `by_key` tracks logical deletion (`tracks_logical_deletion`). |
 | Are per-item retries needed (one bad key should not block the others)? | Argues for `by_key`. |
+| Is the target organised by calendar period (a date column), and must a run replace whole days / weeks / months — including rows deleted at the source? | Argues for `by_target_period`. |
 | Does the user need backfill semantics (re-run a specific date / key range)? | Both stateful types support all four loading strategies, with **different rules**: `by_key` backfills a key selection (`--keys` / `--limit`) and records each outcome in state; `by_source_tst` backfills an explicit `[--pull-from, --pull-to]` window and deliberately leaves the watermark untouched. See Step 4. |
 | Backend in use (s3_blob_storage, postgresql, local) and engine (pydantic, duckdb) | Not all incremental + backend + engine combinations exist. See `guide-incremental` section 2.7. |
 
@@ -120,7 +121,22 @@ Walk the following decision tree in order. Stop at the first matching rule.
    Verify the chosen `(backend, engine)` combination is supported in the
    support matrix (see `guide-incremental` section 2.7).
 
-3. **Pick `by_source_tst` if all of:**
+3. **Pick `by_target_period` if all of:**
+   - The target has a DATE / TIMESTAMP column defining calendar periods
+     (day, ISO week, month, year), and the same column exists on the
+     MASTER predecessors (or a `source_period_field` maps it).
+   - A run must **replace whole periods** of the target — e.g. reload
+     yesterday, rebuild a month, propagate rows deleted at the source
+     inside a period (`DELETE_INSERT_SCOPED`).
+   - The period of a row never changes (otherwise its old copy stays in
+     the former period).
+
+   Then pick the `perimeter` option: `rolling` for a scheduled "reload
+   the last N periods" job (yesterday by default), `discovered` when late
+   or corrected rows must be caught through a modification timestamp,
+   `declared` when the scheduler / operator always passes the periods.
+
+4. **Pick `by_source_tst` if all of:**
    - The source has a single, monotonic, reliable timestamp column.
    - The flow can filter source rows by `[pull_from, pull_to)` — for SQL
      flows this means the query template accepts the timestamp params;
@@ -132,7 +148,7 @@ Walk the following decision tree in order. Stop at the first matching rule.
    does **not** move the watermark; `BACKFILL_DELTA` (`--pull-from`
    alone) does.
 
-4. **Otherwise, escalate to the user.** Do not pick a strategy if the
+5. **Otherwise, escalate to the user.** Do not pick a strategy if the
    facts in Step 2 are inconsistent (e.g. a SQL flow over a source with
    no timestamp and no enumerable keys). Explain the contradiction and
    ask which constraint they prefer to relax.
@@ -147,6 +163,7 @@ the chosen incremental type:
 | `no_increment`   | `FULL`           | Only strategy that makes sense; no params are declared. |
 | `by_source_tst`  | `DELTA`          | Use `FULL` only for the very first run or full refresh. `BACKFILL` (`--pull-from` + `--pull-to`) replays a window **without** moving the watermark; `BACKFILL_DELTA` (`--pull-from` alone) moves it. `--with-delta` is declared but never read. |
 | `by_key`         | `DELTA`          | `BACKFILL` (`--keys` / `--limit`) and `BACKFILL_DELTA` (same + `--with-delta`) are operator-triggered replays; **all four** strategies advance the per-key state. `--full` + `--with-delta` raises. |
+| `by_target_period` | `DELTA` (`BACKFILL` for `declared`) | `DELTA` follows the `perimeter` option and retries failed / pending periods; a `declared` flow must always pass `--periods` or `--period-from [--period-to]`. `FULL` replaces every period present in the source. `BACKFILL_DELTA` (`--with-delta`) skips succeeded periods. `--limit` caps any strategy, oldest periods first. |
 
 **The rules above are per type, not global.** Never carry a rule from one
 incremental type to another when advising the user — check the type's own
@@ -155,7 +172,8 @@ page under `docs/flow/incremental/`, or §2.4.1 of
 
 If the user already mentioned needing backfills, also call out the
 relevant CLI flags (`--full`, `--keys`, `--limit`, `--pull-from`,
-`--pull-to`) — and which of them exist for the chosen type.
+`--pull-to`, `--periods`, `--period-from`, `--period-to`) — and which of
+them exist for the chosen type.
 
 ### Step 5: Recommend `IncrementalConfig` settings
 
@@ -165,6 +183,7 @@ defaults are usually right; only diverge when there is a clear reason.
 | Property | Default | Recommend changing when |
 |----------|---------|--------------------------|
 | `type` | (required) | Must match the type chosen in Step 3. |
+| `options` | none | Required for `by_target_period`: `perimeter`, `granularity`, `period_field` (plus optional `source_period_field`, `scan_field`, `period_timezone`, `lookback_periods`, `include_current_period`, `max_periods_per_run`); pair it with `write_strategy: DELETE_INSERT_SCOPED`. Other types reject options. |
 | `persist_initial_processing_state` | `True` | Disable only for very small / very fast flows where the extra write is wasteful. |
 | `immediate_step_persistence` | `True` | Disable when the flow has many short steps and the per-step write cost dominates; accept that intermediate progress is lost on crash. |
 | `source_availability` | unset (the type's `full`) | Set `partial` when one read of the source does not present its complete extent (a rotating listing, a windowed API). Declarative: it records the fact for readers and tooling; the execution does not branch on it. |
@@ -186,7 +205,7 @@ Produce a short report with these sections, in this order:
 1. **Flow under analysis** — path / name, SQL or non-SQL.
 2. **Key facts collected** — bulleted list of the answers from Step 2.
 3. **Recommended incremental type** — one of `no_increment`,
-   `by_source_tst`, `by_key`, with a one-sentence justification tied to
+   `by_source_tst`, `by_key`, `by_target_period`, with a one-sentence justification tied to
    the facts.
 4. **Recommended loading strategy** — default + any backfill flags the
    operator should know about.

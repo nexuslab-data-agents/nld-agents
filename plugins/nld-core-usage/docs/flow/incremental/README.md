@@ -15,6 +15,7 @@ factory, planned-state slot), see
 |----------|---------|--------|
 | `by_key` | Per-key state and processing decisions. | [by_key.md](./by_key.md) |
 | `by_source_tst` | Timestamp-window watermark state. | [by_source_tst.md](./by_source_tst.md) |
+| `by_target_period` | Replaces whole calendar periods of the target; per-period state. | [by_target_period.md](./by_target_period.md) |
 | `no_increment` | Pass-through; persists no incremental state. | [no_increment.md](./no_increment.md) |
 
 ## Loading-strategy rules are per type
@@ -25,13 +26,13 @@ each strategy selects, and which strategies advance the persisted state.
 The shared names (`FULL`, `DELTA`, `BACKFILL`, `BACKFILL_DELTA`) do not
 imply shared behaviour.
 
-| Rule | `by_key` | `by_source_tst` | `no_increment` |
-|------|----------|-----------------|----------------|
-| Params | `--full`, `--keys`, `--limit`, `--with-delta` | `--full`, `--pull-from`, `--pull-to` (`--with-delta` declared but never read) | none |
-| `BACKFILL` from | `--keys` / `--limit` | `--pull-from` **and** `--pull-to` | — |
-| `BACKFILL_DELTA` from | `--keys`/`--limit` + `--with-delta` | `--pull-from` alone | — |
-| `--full` + `--with-delta` | raises | accepted, no effect | n/a |
-| State advanced by | all four strategies | `FULL`, `DELTA`, `BACKFILL_DELTA` (**not** `BACKFILL`) | no state |
+| Rule | `by_key` | `by_source_tst` | `by_target_period` | `no_increment` |
+|------|----------|-----------------|--------------------|----------------|
+| Params | `--full`, `--keys`, `--limit`, `--with-delta` | `--full`, `--pull-from`, `--pull-to` (`--with-delta` declared but never read) | `--full`, `--periods`, `--period-from`, `--period-to`, `--limit`, `--with-delta` | none |
+| `BACKFILL` from | `--keys` / `--limit` | `--pull-from` **and** `--pull-to` | `--periods` / `--period-from` | — |
+| `BACKFILL_DELTA` from | `--keys`/`--limit` + `--with-delta` | `--pull-from` alone | period params + `--with-delta` | — |
+| `--full` + `--with-delta` | raises | accepted, no effect | raises | n/a |
+| State advanced by | all four strategies | `FULL`, `DELTA`, `BACKFILL_DELTA` (**not** `BACKFILL`) | periods: all four; scan watermark: scan-based `DELTA` and `FULL` only | no state |
 
 Full rules and the axis model behind them:
 [`../execution-and-incremental-design.md`](../execution-and-incremental-design.md)
@@ -71,6 +72,7 @@ Each strategy page reports availability against four axes:
 |----------|---------------------------|-------------|---------------------|
 | `by_key` | postgresql, bigquery, snowflake, duckdb, local, s3_blob_storage | postgresql, snowflake, s3_blob_storage | postgresql, snowflake, s3_blob_storage |
 | `by_source_tst` | postgresql, bigquery, snowflake, duckdb, local, sqlite | postgresql, snowflake, sqlite | postgresql, snowflake, sqlite |
+| `by_target_period` | postgresql, snowflake, sqlite, bigquery, duckdb, s3_blob_storage, local | all | postgresql, snowflake, sqlite, s3_blob_storage |
 | `no_increment` | any (pass-through) | — | — |
 
 `read_processing_state` / `read_post_processing_state` back `get-state`.

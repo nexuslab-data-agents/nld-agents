@@ -461,11 +461,11 @@ tracking) and `OVERWRITE` are safe.
 `FlowIncrementalDefinition` declares the source selection axis and the
 source availability alongside the target granularity:
 `source_selection` (`FlowSourceSelection`: `NO_SELECTION` for
-`no_increment`, `BY_KEY`, `BY_SOURCE_TST`), `source_availability`
+`no_increment`, `BY_KEY`, `BY_SOURCE_TST`, `BY_PERIOD`), `source_availability`
 (`SourceAvailability`: `full` | `partial`, default `full`; a flow overrides
 it with `incremental.source_availability` in its YAML) and
 `target_update_granularity` (`FlowTargetUpdateGranularity`: `GENERIC`,
-`BY_KEY`, `BY_DAY`). They are declarative metadata: the execution
+`BY_KEY`, `BY_DAY`, `BY_PERIOD`). They are declarative metadata: the execution
 lifecycle does not branch on them.
 
 #### 2.5.1 by_key
@@ -584,6 +584,53 @@ the task's init params via `DataFlowDefinition.get_init_params_keys()`. A flag
 not listed in `param_definitions` will not reach `BySourceTstFlowIncrementalParams`
 and `resolve_strategy()` will fall back to `DELTA`.
 
+#### 2.5.2.1 by_target_period
+
+Replaces whole **calendar periods** of the target (DAY, ISO WEEK, MONTH,
+YEAR) and tracks one state entry per period (`ByTargetPeriodState.periods`,
+plus the calendar and the scan watermark `last_scan_at`). Configured by the
+typed `incremental.options` block (`ByTargetPeriodOptions`: `perimeter`,
+`granularity`, `period_field`, optional `source_period_field`,
+`scan_field`, `period_timezone`, `lookback_periods`,
+`include_current_period`, `max_periods_per_run`).
+
+**Axes:** perimeter authority = declared (`declared`), source scan
+(`discovered`) or run date (`rolling`) · source selection = partial, by
+period · dimension = calendar period · change detection = none, or the
+scan field for `discovered`.
+
+**Type rules** (see §2.4.1 and `incremental/by_target_period.md`): no params
+selects `DELTA` — the perimeter's periods plus the pending ones (failed,
+or discovered but excluded by `--limit`), refused for `declared`; `--full`
+selects `FULL` — every period the source scan reports, for any perimeter
+(a deploy reload works on every flow); `--periods` / `--period-from
+[--period-to]` select `BACKFILL`, plus `--with-delta` `BACKFILL_DELTA`
+(succeeded periods skipped); `--full` + `--with-delta` raises; `--limit`
+caps any strategy to its oldest periods. FULL also replaces the periods
+already recorded in the state, so a period that vanished from the source
+is emptied.
+
+Specific rules:
+
+- **Whole-run processing.** One filtered query covers every period of the
+  run (`auto_processing_state_transition=True`); a failure marks every
+  period of the run `FAILED`, even a previously succeeded one, and the
+  next `DELTA` retries it.
+- **The scan watermark advances** only after a successful run whose
+  periods came from a scan (`DELTA` of `discovered`, `FULL`); period
+  outcomes are recorded by all four strategies.
+- **Target-scoped.** `target_scoped=True` and
+  `allowed_write_strategies` = `DELETE_INSERT_SCOPED`, `DELETE_INSERT`,
+  `INSERT`, `UPSERT`. `SQLFlowTask` hands
+  `get_target_scope_condition()` to `DELETE_INSERT_SCOPED` and executes no
+  statement when the run selects no period.
+- **Narrowed source retrieval.** The definition declares
+  `requires_source_state_retrieval=True`; the manager narrows it to `FULL`
+  and the `discovered` `DELTA`, and scans the MASTER predecessors in
+  `retrieve_source_state_from_sql`.
+- **Calendar guard.** The state persists its granularity and timezone; a
+  run, or the adoption of a plan, with another calendar is refused.
+
 #### 2.5.3 no_increment
 
 Minimal implementation for full-load scenarios. Does not track historical state.
@@ -603,12 +650,12 @@ When a flag is `False`, the corresponding step methods are **not called** and
 no `@track_flow_step` entries are recorded, preventing dummy log entries for
 steps that have no meaningful work for a given incremental type.
 
-| Flag | Description | Default | no_increment | by_source_tst | by_key |
-|------|-------------|:-------:|:------------:|:-------------:|:------:|
-| `tracks_state` | All state steps: retrieve incremental state, determine/save processing state, post-processing for state | `True` | `False` | `True` | `True` |
-| `tracks_logical_deletion` | Determine logically deleted entries (only evaluated when `tracks_state` is `True`) | `True` | `False` | `False` | `True` |
-| `requires_source_state_retrieval` | Call `retrieve_source_state()` (only evaluated when `tracks_state` is `True`) | `False` | `False` | `False` | `True` |
-| `supports_planned_state` | Strategy can produce a `PLANNED` precomputed plan-time detailed state (consumed by `--planned-state-policy` on `nld flow execute`, written by `nld flow state incremental compute --persist`) | `False` | `False` | `True` | `True` |
+| Flag | Description | Default | no_increment | by_source_tst | by_key | by_target_period |
+|------|-------------|:-------:|:------------:|:-------------:|:------:|:----------------:|
+| `tracks_state` | All state steps: retrieve incremental state, determine/save processing state, post-processing for state | `True` | `False` | `True` | `True` | `True` |
+| `tracks_logical_deletion` | Determine logically deleted entries (only evaluated when `tracks_state` is `True`) | `True` | `False` | `False` | `True` | `False` |
+| `requires_source_state_retrieval` | Call `retrieve_source_state()` (only evaluated when `tracks_state` is `True`); the state manager may narrow it per run | `False` | `False` | `False` | `True` | `True` (narrowed) |
+| `supports_planned_state` | Strategy can produce a `PLANNED` precomputed plan-time detailed state (consumed by `--planned-state-policy` on `nld flow execute`, written by `nld flow state incremental compute --persist`) | `False` | `False` | `True` | `True` | `True` |
 
 Each incremental definition overrides only the flags whose default does
 not match. `tracks_state` and `tracks_logical_deletion` default to

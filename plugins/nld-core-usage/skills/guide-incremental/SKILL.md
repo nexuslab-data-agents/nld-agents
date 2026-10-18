@@ -2,7 +2,8 @@
 name: guide-incremental
 description: >
   Architectural guide for the nld-core incremental processing system — built-in
-  by_key, by_source_tst, and no_increment types under `impl/`, the
+  by_key, by_source_tst, by_target_period, and no_increment types under `impl/`,
+  the typed per-type `incremental.options`, the
   FlowIncrementalTypeRegistry plugin point, the `flow.additional_incremental_types`
   project YAML hook, state management, execution logging, processing lifecycle,
   and backend implementations.
@@ -19,7 +20,8 @@ lifecycle.
 
 Activate this guide when the agent is working on:
 - Incremental processing code in `nld/flow/incremental/` — including the
-  built-in types under `nld/flow/incremental/impl/{by_key,by_source_tst,no_increment}/`
+  built-in types under
+  `nld/flow/incremental/impl/{by_key,by_source_tst,by_target_period,no_increment}/`
 - Execution logging in `nld/flow/execution/`
 - State management in `nld/flow/state/`
 - IncrementalConfig, ProcessingState, or ExecutionLog classes
@@ -69,12 +71,12 @@ grammar (`resolve_strategy()`), what each strategy selects, and which
 strategies advance the persisted state — and the built-ins deliberately
 differ:
 
-| Rule | `by_key` | `by_source_tst` |
-|------|----------|-----------------|
-| `BACKFILL` from | `--keys` / `--limit` | `--pull-from` **and** `--pull-to` |
-| `BACKFILL_DELTA` from | `--keys`/`--limit` + `--with-delta` | `--pull-from` alone |
-| `--full` + `--with-delta` | raises `ValueError` | accepted, no effect (`--with-delta` is declared but never read) |
-| State advanced by | all four strategies | `FULL`, `DELTA`, `BACKFILL_DELTA` — **not** `BACKFILL` |
+| Rule | `by_key` | `by_source_tst` | `by_target_period` |
+|------|----------|-----------------|--------------------|
+| `BACKFILL` from | `--keys` / `--limit` | `--pull-from` **and** `--pull-to` | `--periods` / `--period-from [--period-to]` |
+| `BACKFILL_DELTA` from | `--keys`/`--limit` + `--with-delta` | `--pull-from` alone | period params + `--with-delta` |
+| `--full` + `--with-delta` | raises `ValueError` | accepted, no effect (`--with-delta` is declared but never read) | raises `ValueError` |
+| State advanced by | all four strategies | `FULL`, `DELTA`, `BACKFILL_DELTA` — **not** `BACKFILL` | period outcomes: all four; scan watermark: scan-based `DELTA` and `FULL` only |
 
 Never "fix" one type to match another, and never state one of these rules
 as a general rule in code comments, error messages, or docs. When adding
@@ -114,9 +116,47 @@ sits entirely on the definition. A flag missing from `param_definitions`
 is silently dropped, and `resolve_strategy()` then falls back to the default
 (typically `DELTA`) — even if the user passed `--full`.
 
-When adding a new incremental flag, update **both** the strategy's
-`param_definitions` and the Click option / command decorator in
+`nld flow execute` accepts unknown options: type-specific flags
+(`--keys`, `--pull-from`, `--periods`, `--period-from`, …) are parsed by an
+argparser built from the resolved type's `param_definitions`
+(`period_from` → `--period-from`), so they need no Click option. Only
+flags shared by every type (`--full`, `--with-delta`) are also declared in
 `nld/cli/flow/params_flow.py` and `nld/cli/flow/main_flow.py`.
+
+### Type settings live in a typed `incremental.options` block
+
+A type that needs per-flow settings (e.g. `by_target_period`'s
+`granularity` and `period_field`) declares an `options_model` (a
+`FlowIncrementalOptions` subclass, unknown keys forbidden) on its
+`FlowIncrementalDefinition`. The flow YAML carries the raw mapping in
+`IncrementalConfig.options`; `DataFlowDefinition.check_coherence`
+validates it (and runs the model's `check_flow_coherence`, e.g. "the
+column exists on the target"), and the factory hands the validated model
+to the parameter class as `options`. Types without `options_model`
+reject any option. `options` defaults to `None`, so existing flows keep
+their deploy hash.
+
+### Target-scoped types and write strategies
+
+A definition may declare `allowed_write_strategies` (checked at flow load
+and before every SQL write) and `target_scoped=True` (each run owns a
+scope of the target). For a target-scoped type `SQLFlowTask` always
+applies the type's SQL filter (even without predecessors, so it can
+refuse), skips the whole write when `has_nothing_to_process()` is True,
+and hands `get_target_scope_condition()` to the write strategy —
+`DELETE_INSERT_SCOPED` deletes that scope before inserting.
+`by_target_period` is the built-in target-scoped type.
+
+### Source-state retrieval for SQL flows
+
+`requires_source_state_retrieval` on the definition is the envelope of the
+type; `IncrementalStateManager.requires_source_state_retrieval()` narrows
+it to the resolved run (a declared `by_target_period` replay never scans).
+`SQLFlowTask.retrieve_source_state` calls the manager's
+`retrieve_source_state_from_sql(sql_query, predecessors, connector)` when
+the narrowed flag holds; the base implementation is a no-op, and
+`by_target_period` scans its MASTER predecessors there. The `compute`
+source-request prompt follows the narrowed flag too.
 
 ### Planned-state support is a two-layer opt-in
 
@@ -125,7 +165,7 @@ and the backend. `FlowIncrementalDefinition.supports_planned_state`
 (default `False`) declares strategy-side capability;
 `IncrementalBackendStateManager.supports_planned_state` (`ClassVar`,
 default `False`) declares backend-side capability. The built-ins set
-strategy support on `by_key` and `by_source_tst`; the
+strategy support on `by_key`, `by_source_tst` and `by_target_period`; the
 `PostgreSQLIncrementalBackendMixin`, `SnowflakeIncrementalBackendMixin`,
 `SQLiteIncrementalBackendMixin` and `S3IncrementalBackendMixin` set
 backend support so every backend built on them inherits it. A
@@ -166,9 +206,10 @@ core/nld/flow/incremental/
 │   ├── factory.py                       # resolves a name to its logic/manager/backend via the registry
 │   └── registry.py                      # FlowIncrementalTypeRegistry + get_flow_incremental_type_registry()
 └── impl/                                # built-in incremental types
-    ├── __init__.py                      # registers by_key, by_source_tst, no_increment manifests
+    ├── __init__.py                      # registers by_key, by_source_tst, by_target_period, no_increment manifests
     ├── by_key/{logic,manager,sql_filter_manager,state,schema}.py + backend/
     ├── by_source_tst/   (same shape)
+    ├── by_target_period/{logic,manager,period,sql_builder,sql_filter_manager,state}.py + backend/
     └── no_increment/    (same shape)
 ```
 
@@ -181,7 +222,8 @@ block of `nld_project.yml`.
 
 Runtime code refers to an incremental type via the parameter name
 `incremental_type` (factory kwargs, event constructors, local variables).
-The registry key — `by_key`, `by_source_tst`, `no_increment`, or the
+The registry key — `by_key`, `by_source_tst`, `by_target_period`,
+`no_increment`, or the
 `name` of an external type — is the value bound to `incremental_type`
 at the registry boundary (`incremental_type = manifest.name`). The
 `FlowIncrementalTypeManifest.name` field and the
