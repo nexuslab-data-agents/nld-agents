@@ -7,7 +7,8 @@ description: >
   `--processing-only`, the transient state the most recent run left
   behind), and `compute` resolves the processing state the next run
   would build — optionally persisting it as a PLANNED plan, which
-  `get-planned` then lists. Use when the user asks "where did the last
+  `get-planned` then lists. `exclude-keys` sets `by_key` keys to
+  PERMANENTLY_EXCLUDED. Use when the user asks "where did the last
   delta stop?", "which keys still need processing?", "what watermark
   will the next run resume from?", or "what would the next run actually
   decide to do?". Stdout renders a concise text
@@ -35,6 +36,9 @@ user-invocable: true
     PLANNED plan in the planned-state slot.
   - `get-planned` — list the flow's PLANNED plans (lifecycle metadata,
     newest first).
+  - `exclude-keys` — set keys of a `by_key` flow to PERMANENTLY_EXCLUDED
+    so DELTA runs never select them again (the one subcommand that
+    edits the key state).
 - **When**: The user asks where the next delta will resume, which keys
   are pending or failed for a `by_key` flow, what the `by_source_tst`
   watermark holds, or what the next run *would* process if launched
@@ -369,6 +373,63 @@ identifies it in the planned-state slot.
 
 ---
 
+## Excluding `by_key` keys (`exclude-keys`)
+
+A `by_key` key the flow code cannot classify stays `FAILED` (or
+`NOT_PROCESSED`), so every DELTA and BACKFILL_DELTA run selects it
+again. Only the flow code sets PERMANENTLY_EXCLUDED during a run, when
+the source answers that the key does not exist. `exclude-keys` lets an
+operator set it for keys the code cannot decide on, e.g. an API answer
+that may be temporary in general but is known to be permanent for a
+given key:
+
+```
+nld flow state incremental exclude-keys --name <flow> [--namespace <ns>]
+                                        --keys <k1>,<k2> [--keys <k3>]
+                                        [--profile-name <profile>]
+                                        [--format text|json]
+                                        [--output] [--override-output-folder-path <dir>]
+```
+
+- **`by_key` only.** Any other incremental type fails with a clear
+  error.
+- **Only the status changes.** A stored key keeps its timestamps,
+  parameters and `last_process_*` fields. A key absent from the state is
+  added as PERMANENTLY_EXCLUDED with a warning, so a key can be excluded
+  before its first run (and a typo stands out). A key already excluded
+  is reported unchanged; when every key given is already excluded,
+  nothing is written at all.
+- **Primary backend only, other keys untouched.** Backends merging the
+  key state (local and S3 DuckDB) read and merge back only the given
+  keys; the others read the whole state and write it back.
+- **The state does not record that the exclusion was manual.** The
+  command logs and prints each change (key, previous status).
+- **Run it while the flow is not running.** A run already started keeps
+  its own copy of the state and may overwrite the change when it saves.
+  A PLANNED plan computed before still selects the key: recompute it
+  with `compute --persist`.
+- **Undo** by re-attempting the key: a BACKFILL
+  (`nld flow execute --name <flow> --keys=<k1>`, without `--with-delta`)
+  or a FULL run processes PERMANENTLY_EXCLUDED keys again.
+
+Text output, for a FAILED key and a key not in the state yet:
+
+```
+Keys set to PERMANENTLY_EXCLUDED: 2 of 2
+
+  key       | previous_status
+  ---------------------------
+  660       | FAILED
+  999999999 | not in state
+```
+
+`--format json` prints `{"status": "PERMANENTLY_EXCLUDED", "keys":
+[{"name": ..., "previous_status": ...}]}`, with `previous_status: null`
+for an added key. The fixed file name is
+`flow_state_incremental_exclude_keys.json`.
+
+---
+
 ## Backend-specific access
 
 The CLI is the canonical reader. Knowing the underlying tables helps
@@ -496,6 +557,10 @@ read/write semantics table.
 - **Default `compute` to read-only.** Add `--persist` only when you
   intend to record a `PLANNED` plan; it cancels any prior `PLANNED`
   plan for the flow.
+- **Run `exclude-keys` only on the user's explicit decision.** It
+  changes what every later DELTA run selects. Show the keys and their
+  current status (`get-state --format json`) first, and name the
+  profile (`--profile-name`) when the state is not the default one.
 
 ---
 
