@@ -114,6 +114,11 @@ Walk the following decision tree in order. Stop at the first matching rule.
      cheaply (date partitions, file names, S3 prefixes, tenant IDs).
    - You need per-key retry semantics (failed keys retry next run while
      succeeded ones are skipped).
+   - Keys change at the source and the source reports a per-key update
+     timestamp (filled as `last_updated_at` in the source state): a
+     succeeded key is re-processed when it moves on, once the flow opts
+     in (`incremental.options.reprocess_updated_keys: true`, off by
+     default).
    - The source has logical deletions that must be detected and
      propagated (`tracks_logical_deletion=True`).
    - The user needs to backfill specific keys via `--keys` or a `--limit`.
