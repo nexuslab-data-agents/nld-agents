@@ -32,6 +32,8 @@ Activate this guide when the agent is working on:
 - Entity roots shipped outside the project (`additional_entity_paths`, `pkg://`)
 - `NldExecutionContext`, `TaskRequest`, or `contextvars`-based context access
 - `StandardTask` and how tasks pick up the active context
+- What a command logs when it starts (execution name, uuid, parameter values,
+  secret masking) or fails (the full exception chain)
 - `load_entities()` / `init_project()` / connector loading from the context
 - The task → registry → entity access chain
 
@@ -51,6 +53,7 @@ The full architectural reference is at
 | `flow` and `namespaces` blocks, namespace resolution | "4. Project" → "The `namespaces` block" |
 | Retry budget and alerting (`scheduling` facet) | "4. Project" → "The `scheduling` facet: retries and alerting" |
 | Standard task base class | "5. StandardTask" |
+| What a command logs at start and on failure (parameters, masking, exception chain) | "5b. What every command logs" |
 | End-to-end worked example | "6. Complete Entity Access Chain" |
 
 ## Cross-References
