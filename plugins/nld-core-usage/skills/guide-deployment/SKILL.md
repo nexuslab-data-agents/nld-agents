@@ -108,7 +108,11 @@ Production has no runtime destructive gate and no destructive-confirmation
 flag: destructive changes are caught at review time in the PR preview, and a
 DDL error at apply time fails that structure loudly — its metadata is not
 written, its dependents are skipped, and the run ends `partial`/`failed` with
-the failure recorded.
+the failure recorded. `nld flow deploy` then raises
+`FlowDeployFailedException` and exits non-zero, after alerting through the
+project's transports with one item per failed structure or flow, so a
+half-applied release is never read as a green one (see
+`docs/flow/flow-deployment.md` §1b).
 
 ## Per-connector capabilities
 
@@ -122,6 +126,7 @@ Deployment behavior is parameterized by `ConnectorDeployCapabilities`
 | `enforce_field_order_default` | yes | no | yes | no | no |
 | Declared renames in place (`rename_field` / `rename_structure`) | yes | no — refused | yes | yes | yes |
 | Comparable characterisations | INDEX, PRIMARY_KEY, UNIQUE | PRIMARY_KEY | PRIMARY_KEY, UNIQUE | INDEX, PRIMARY_KEY, UNIQUE | INDEX, PRIMARY_KEY, UNIQUE |
+| Default type sizes folded in the diff (`default_data_type_sizes`) | — | — | CHAR (1), NUMERIC (38,0), TIME/TIMESTAMP_* (9), VARCHAR (16777216) | — | — |
 | Dependent-view detection | yes | yes | yes | yes | yes |
 | Atomic rebuild swap (single transaction) | yes | no | no | no | no |
 
