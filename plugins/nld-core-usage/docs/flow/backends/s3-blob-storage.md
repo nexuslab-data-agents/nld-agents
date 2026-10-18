@@ -32,6 +32,11 @@ under `core/nld/flow/execution/backend/` (shared base
 Backend modules: `impl/by_key/backend/s3_blob_storage_base.py`,
 `s3_blob_storage_with_pydantic.py`, `s3_blob_storage_with_duckdb.py`.
 
+- **`by_key` / `duckdb` merges the key state on disk** — the parquet key
+  state is read and written through DuckDB queries, so a run's memory
+  follows the keys it processes instead of every key ever recorded. See
+  [`../incremental/by_key.md`](../incremental/by_key.md), "Key state merged
+  on disk".
 - **`by_source_tst`** — no S3 backend is registered for this strategy.
 - **Flow execution** (`by_key`) — `retrieve_current_state`,
   `write_processing_state`, `write_post_processing_state` are

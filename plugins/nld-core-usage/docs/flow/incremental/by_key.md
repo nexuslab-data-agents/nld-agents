@@ -86,6 +86,45 @@ again by the next `DELTA`.
 
 Backend modules live under `core/nld/flow/incremental/impl/by_key/backend/`.
 
+## Key state merged on disk (DuckDB engines)
+
+The two backends storing the key state as a parquet file — `local` /
+`duckdb` and `s3_blob_storage` / `duckdb` — opt in to a **key state merge**
+(`supports_key_state_merge()` on `ByKeyDuckDBKeyStateMixin`). They used to
+load every stored key into `ByKeySingleKeyState` objects at the start of a
+run and write the whole state back through a list of dicts, a pandas
+DataFrame and a DuckDB table: memory grew with every key ever recorded
+(about 4 KiB per key), so a flow with 400k stored keys was OOM-killed at a
+2 GiB limit while committing a 100k-key run. A run's footprint now follows
+the keys it processes, not the size of the state.
+
+What changes on those backends:
+
+- `get_latest_incremental_state` only **prepares** the stored state;
+  `latest_incremental_state` loads it on first access, so a flow that
+  genuinely reads the whole state still gets it (at today's memory cost)
+  and one that does not never pays for it.
+- DELTA / BACKFILL_DELTA select keys against the terminal key names, read
+  with one DuckDB query (`read_terminal_key_names`) instead of the loaded
+  state.
+- Post-processing reads only the keys the run processed
+  (`read_current_key_states`), applies the unchanged per-key rules, and
+  merges them back with an anti-join `COPY` — every stored key absent from
+  the merge is kept unchanged.
+- The whole-state writer builds one Arrow table instead of going through
+  pandas.
+- `exclude-keys` uses the same path: it reads and merges back only the
+  keys named (see the `how-to-get-incremental-info` skill).
+
+Every query casts the stored columns to the `ByKeySingleKeyState` parquet
+schema, so **legacy files merge cleanly**: all-NULL columns typed INTEGER by
+an earlier version, and columns added since and therefore missing, read as
+NULL.
+
+The other backends (`pydantic` engines, and the SQL ones) keep the
+read-whole-state / write-whole-state path: `supports_key_state_merge()`
+returns `False` and nothing about their behaviour changes.
+
 ## Notes
 
 - **Flow execution** — implemented on every registered backend

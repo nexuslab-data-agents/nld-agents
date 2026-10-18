@@ -32,6 +32,11 @@ Backend modules: `impl/by_key/backend/local_with_pydantic.py`,
 `impl/by_key/backend/local_with_duckdb.py`,
 `impl/by_source_tst/backend/local_with_pydantic.py`.
 
+- **`by_key` / `duckdb` merges the key state on disk** — the parquet key
+  state is read and written through DuckDB queries, so a run's memory
+  follows the keys it processes instead of every key ever recorded. See
+  [`../incremental/by_key.md`](../incremental/by_key.md), "Key state merged
+  on disk".
 - **`by_source_tst` / `duckdb`** — no backend is registered; only the
   `pydantic` engine is available for `by_source_tst` on local.
 - **Flow execution** — `retrieve_current_state`, `write_processing_state`,

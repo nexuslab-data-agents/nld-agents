@@ -213,6 +213,14 @@ core/nld/flow/incremental/
     └── no_increment/    (same shape)
 ```
 
+A `by_key` backend may declare `supports_key_state_merge()`, which the
+DuckDB-engine backends (`local` and `s3_blob_storage`, through
+`ByKeyDuckDBKeyStateMixin`) do: their parquet key state is read and merged
+on disk through DuckDB queries, so a run holds only the keys it processes
+rather than every key ever recorded. `IncrementalStateManager` then defers
+loading `latest_incremental_state` until something actually reads it. See
+`docs/flow/incremental/by_key.md`, "Key state merged on disk".
+
 Built-in incremental types are seeded into the registry the first time
 `nld.flow.incremental.impl` is imported. External types are added through
 `Project.flow_config.additional_incremental_types`, declared in the `flow`
