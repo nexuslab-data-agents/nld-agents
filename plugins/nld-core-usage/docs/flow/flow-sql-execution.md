@@ -295,7 +295,7 @@ of the `SQLWriteStrategy` abstract class.
 
 | Strategy | SQL Pattern | Requires target_structure | Requires PK |
 |----------|-------------|--------------------------|-------------|
-| `OVERWRITE` (default) | TRUNCATE + INSERT INTO ... SELECT | Yes | No |
+| `OVERWRITE` (default) | TRUNCATE + INSERT INTO ... SELECT, or an atomic table replace with `overwrite_mode: replace` | Yes | No |
 | `VIEW` | CREATE OR REPLACE VIEW AS | No | No |
 | `INSERT` | INSERT INTO ... SELECT | Yes | No |
 | `UPSERT` | INSERT ... ON CONFLICT DO UPDATE | Yes | Yes |
@@ -314,6 +314,55 @@ INSERT INTO schema.table (col1, col2, ...) SELECT ...;
 ```
 
 Requires: `target_structure` on the flow definition.
+
+The two statements are auto-committed separately: a reader can see an empty table
+between them, and a failed INSERT leaves the table empty until the next run.
+
+#### Overwrite modes
+
+`write_strategy_options.overwrite_mode` chooses how OVERWRITE replaces the content:
+
+```yaml
+write_strategy: OVERWRITE
+write_strategy_options:
+  overwrite_mode: replace   # truncate_insert (default) | replace
+```
+
+| Mode | Behaviour |
+|------|-----------|
+| `truncate_insert` (default, also when unset) | TRUNCATE + INSERT as above |
+| `replace` | The content is replaced atomically: readers keep the previous content until the new one is committed, and a failed load leaves it in place |
+
+The option is set per flow. It is rejected at flow load with any write strategy other
+than OVERWRITE, and seed flows reject `replace` at run time. An undeclared option is
+left out of the flow definition hash, so existing flows keep their deploy hash.
+
+`get_write_strategy(name, write_strategy_options)` turns `replace` into
+`ReplaceOverwriteStrategy`, which keeps the OVERWRITE name (step names, incremental
+checks) and delegates to the connector's `replace_table_from_query`:
+
+| Engine | Replace mechanism |
+|--------|-------------------|
+| Snowflake | `CREATE OR REPLACE TABLE <structure columns> COPY GRANTS AS <query>`, then the UNIQUE statements structure deploy runs after its CREATE TABLE |
+| BigQuery | `CREATE OR REPLACE TABLE <structure columns> AS <query>` (no COPY GRANTS: IAM bindings set on the table itself are lost) |
+| DuckDB, SQLite | DROP + the structure deploy CREATE statements + INSERT in one transaction |
+| PostgreSQL | TRUNCATE + INSERT in one transaction: there is no `CREATE OR REPLACE TABLE`, and a dependent view forbids the DROP. Readers wait on the TRUNCATE lock until the commit |
+
+Contracts of the `replace` mode:
+
+- **The structure is the definition**: the table is rebuilt from the declared fields
+  (types, NOT NULL, defaults, primary key, then UNIQUE and index statements). The query
+  columns map to the structure fields by position, as for INSERT, and the declared
+  types win over the query's.
+- **No pre-check**: a missing table is created, so a YAML change not yet deployed is
+  applied by the flow itself.
+- **Structure hooks re-run on rebuild**: when the connector recreated the table
+  (`replace_table_recreates_table`, every engine but PostgreSQL), the structure's
+  pre/post deployment hooks run around the write, as they do for VIEW targets, since
+  whatever they set up on the previous table is gone.
+- **Row counts**: a `CREATE OR REPLACE TABLE ... AS` reports no row count, so the
+  loaded rows are counted after the swap and recorded as inserted rows of the
+  `OVERWRITE - CREATE_TABLE` step.
 
 ### 3.3 VIEW
 
@@ -493,7 +542,8 @@ the `rec_deletion_flag` characterisation.
 The strategy selection is handled by the `get_write_strategy()` factory function in
 `nld/flow/sql/sql_write_strategy.py`. The `SQLFlowTask.run_flow()` method:
 
-1. Resolves the write strategy from the flow definition's `write_strategy` via `get_write_strategy()`
+1. Resolves the write strategy from the flow definition's `write_strategy` and
+   `write_strategy_options` via `get_write_strategy()`
 2. Resolves the `target_structure` from the flow definition if the strategy requires it
 3. Delegates execution to `write_strategy.execute(connector, table_path, sql_query, target_structure)`
 
@@ -508,6 +558,8 @@ The connector methods used by the strategies are defined on `SQLDataConnector`:
 | `delete_from_query` | DELETE_INSERT | Delete matching keys from subquery |
 | `delete_where` | DELETE_INSERT_SCOPED | Delete the rows matching a sqlglot condition |
 | `mark_absent_rows_deleted` | UPSERT_LOGICAL_DELETE | Flag target rows absent from the query as logically deleted |
+| `replace_table_from_query` | OVERWRITE (`replace` mode) | Replace the table content atomically (engine mechanism in 3.2) |
+| `transaction` | `replace_table_from_query` (PostgreSQL, DuckDB, SQLite) | Context manager running the enclosed statements as one transaction: commit on exit, rollback on error |
 
 ---
 
@@ -919,6 +971,7 @@ Dots in the namespace are converted to directory separators. The root namespace
 | `state_backend_connector` | `str` or `StateBackendConnector` | No | Connector(s) for persisting execution/incremental state. Accepts a bare connection-name string (shorthand, coerced to `primary`) or a mapping with `primary` (required) and optional `secondary`. Each side may itself be a bare string or the typed `StateBackendConnectorConfig` (`connector` + free-form `params` dict — e.g. `file_format` for S3). The primary backend is authoritative for all reads and for the consolidated execution history; the secondary receives a dual-write copy of per-run execution info, step info and incremental processing state, with failures logged and swallowed (post-processing incremental state stays primary-only). |
 | `target_structure` | `NldEntityReference[Structure]` | No | Dot-separated reference to a target structure entity (e.g. `staging.my_table`). Required for OVERWRITE, INSERT, UPSERT, DELETE_INSERT, and UPSERT_LOGICAL_DELETE strategies. |
 | `write_strategy` | `str` | No | Write strategy: OVERWRITE, VIEW, INSERT, UPSERT, DELETE_INSERT, DELETE_INSERT_SCOPED, or UPSERT_LOGICAL_DELETE (default: OVERWRITE) |
+| `write_strategy_options.overwrite_mode` | `str` | No | OVERWRITE only: `truncate_insert` (default) or `replace` (atomic table replace, see 3.2) |
 | `params` | `list` or `dict` | No | Flow parameters |
 | `params.target_schema` | `str` | No | Database schema for the target table |
 

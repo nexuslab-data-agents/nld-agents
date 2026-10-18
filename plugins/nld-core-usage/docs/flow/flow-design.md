@@ -121,7 +121,10 @@ structure definition by name, using the generic entity reference system.
 
 `DataFlowDefinition` has an optional `write_strategy` field (string). This
 specifies which SQL write strategy `SQLFlowTask` uses to materialize the query
-result. Defaults to `OVERWRITE` when not specified.
+result. Defaults to `OVERWRITE` when not specified. The optional
+`write_strategy_options` block tunes the strategy: `overwrite_mode: replace` makes
+OVERWRITE replace the table atomically instead of TRUNCATE + INSERT (see
+`flow-sql-execution.md` section 3.2).
 
 **`predecessors` field**
 
@@ -157,7 +160,7 @@ available:
 
 | Strategy | DDL/DML | Requires Structure | Requires PK |
 |----------|---------|-------------------|-------------|
-| `OVERWRITE` | TRUNCATE + INSERT INTO ... SELECT | Yes | No |
+| `OVERWRITE` | TRUNCATE + INSERT INTO ... SELECT, or an atomic table replace with `overwrite_mode: replace` | Yes | No |
 | `VIEW` | CREATE OR REPLACE VIEW | No | No |
 | `INSERT` | INSERT INTO ... SELECT (append) | Yes | No |
 | `UPSERT` | INSERT ... ON CONFLICT DO UPDATE | Yes | Yes |
